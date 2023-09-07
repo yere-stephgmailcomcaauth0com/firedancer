@@ -6,7 +6,7 @@
  * certain unimplemented feature. The parser will error gracefully when such
  * features are used accidentally. The following are the current deviations from
  * the spec:
- * 
+ *
  * - No UTF-8 document validation: We do not validate the whole document as 
  *   being a valid UTF-8 document before parsing.
  * - No date, time, or date-time types: We do not support these types yet.
@@ -14,6 +14,9 @@
  * - Newlines are LF only: Only LF can be used for delimiting new lines. CRLF 
  *   will not be recognized.
  * - No whitespace in keys: Dotted keys cannot contain whitespace before or 
+ *   after a dot.
+ * - No whitespace in table names: Table names cannot have spaces between the square
+ *   brakets and the name. Dotted table names cannot contain whitespace before or 
  *   after a dot.
  * - No inline tables: We do not support this type yet.
  */
@@ -33,7 +36,13 @@
 #define FD_TOML_PARSE_ERR_EXPECTED_NEWLINE    (-6)
 #define FD_TOML_PARSE_ERR_EXPECTED_KV_PAIR    (-7)
 #define FD_TOML_PARSE_ERR_EXPECTED_KEY        (-8)
+#define FD_TOML_PARSE_ERR_EXPECTED_COMMENT    (-9)
+#define FD_TOML_PARSE_ERR_EXPECTED_TABLE      (-10)
+#define FD_TOML_PARSE_ERR_EXPECTED_BOOLEAN    (-11)
 
+#define FD_TOML_LOOKUP_SUCCESS          (0)
+#define FD_TOML_LOOKUP_ERR_NOT_FOUND    (-1)
+#define FD_TOML_LOOKUP_ERR_NOT_
 
 FD_PROTOTYPES_BEGIN
 
@@ -50,7 +59,7 @@ union fd_toml_value_content {
   char *            string_value;
   long              integer_value;
   double            float_value;
-  ulong             boolean_value;
+  uint              boolean_value;
   void *            offset_date_time_value;
   void *            local_date_time_value;
   void *            local_date_value;
@@ -87,20 +96,31 @@ struct fd_toml_key_value_pair {
 typedef struct fd_toml_key_value_pair fd_toml_key_value_pair_t;
 
 struct fd_toml_table {
-  fd_toml_key_value_pair_t key_value_pair;
-  fd_toml_table_t * next;
+  fd_toml_key_value_pair_t  key_value_pair;
+  fd_toml_table_t *         next;
 };
 typedef struct fd_toml_table fd_toml_table_t;
 
-int fd_toml_parse( char * content, fd_toml_table_t * table );
+int
+fd_toml_parse_document_from_string( const char * content, 
+                                        ulong content_len, 
+                                        fd_toml_table_t * table );
 
-int poop( ) {
-  const char * path[4] = { "fruits", "apple", "color", 0} 
-  int x;
+int
+fd_toml_lookup_integer( fd_toml_table_t const * table, 
+                        char const * * path,
+                            long * integer );
+int
+fd_toml_lookup_boolean( fd_toml_table_t const * table, 
+                            char const * * path,
+                            uint * boolean );
+int
+fd_toml_lookup_array( fd_toml_table_t const * table, 
+                      char const * * path,
+                      uint * boolean );
 
-}
-
-int fd_toml_lookup_integer(  );
+char *
+fd_toml_to_json( fd_toml_table_t const * table, char * buf );
 
 FD_PROTOTYPES_END
 
