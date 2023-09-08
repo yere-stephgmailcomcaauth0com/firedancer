@@ -417,10 +417,10 @@ fd_toml_add_key_value_pair( fd_toml_parser_context_t * ctx, fd_toml_value_t * va
   FD_LOG_WARNING(( "ADD KVP2 "));
 
   prev_table_entry->next = new_table_entry;
-  new_table_entry->key_value_pair.key = ctx->current_key_parts[i];
+  new_table_entry->key_value_pair.key = ctx->current_key_parts[0];
   new_table_entry->key_value_pair.value.value_type = value->value_type;
   new_table_entry->key_value_pair.value.value_content = value->value_content;
-
+  new_table_entry->next = NULL;
   ctx->last_table_entry = new_table_entry;
 
   new_table_entry = new_table_entry->key_value_pair.value.value_content.table_value;
@@ -524,21 +524,24 @@ fd_toml_parse_table_key_tail( fd_toml_parser_context_t * ctx ) {
 
 int
 fd_toml_set_current_table( fd_toml_parser_context_t * ctx ) {
+  FD_LOG_WARNING(( "SCT1" ));
   fd_toml_table_t * prev_table = ctx->root_table_tail;
   // FD_TEST( prev_table->next == NULL );
-
-  fd_toml_table_t * table = (fd_toml_table_t *)malloc( sizeof( fd_toml_table_t ) );
+  fd_toml_table_t * table = (fd_toml_table_t *)calloc( sizeof( fd_toml_table_t ), 1 );
   
   for( ulong i = 0; i < ctx->current_key_parts_len; i++ ) {
+
     FD_LOG_WARNING(( "SCT: %s", ctx->current_key_parts[i]));
     table->key_value_pair.key = ctx->current_key_parts[i];
     table->key_value_pair.value.value_type = fd_toml_value_type_table;
-    fd_toml_table_t * next_table = (fd_toml_table_t *)malloc( sizeof( fd_toml_table_t ) );
+    fd_toml_table_t * next_table = (fd_toml_table_t *)calloc( sizeof( fd_toml_table_t ), 1 );
     table->key_value_pair.value.value_content.table_value = next_table;
     prev_table->next = table;
     table->next = NULL;
     prev_table = table;
   }
+
+  ctx->last_table_entry = table;
 
   return FD_TOML_PARSE_SUCCESS;
 }
@@ -565,7 +568,7 @@ fd_toml_parse_table_key( fd_toml_parser_context_t * ctx ) {
     return FD_TOML_PARSE_ERR_EXPECTED_KEY;
   }
 
-  if ( !fd_toml_set_current_table( ctx ) ) {
+  if ( fd_toml_set_current_table( ctx ) != FD_TOML_PARSE_SUCCESS ) {
     return FD_TOML_PARSE_ERR_EXPECTED_KEY;
   }
 
@@ -666,7 +669,7 @@ fd_toml_to_json_float_value( double float_value, char * buf ) {
 
 char *
 fd_toml_to_json_string_value( char * string_value, char * buf ) {
-  return fd_cstr_append_printf(buf, "{\"type\":\"float\",\"value\":\"%s\"}", string_value);
+  return fd_cstr_append_printf(buf, "{\"type\":\"string\",\"value\":\"%s\"}", string_value);
 }
 
 char *
@@ -679,6 +682,9 @@ fd_toml_to_json_boolean_value( uint boolean_value, char * buf ) {
 }
 
 char *
+fd_toml_to_json_table( fd_toml_table_t const * table, char * buf );
+
+char *
 fd_toml_to_json_value( fd_toml_value_t const * value, char * buf ) {
   switch( value->value_type ) {
     case fd_toml_value_type_boolean:
@@ -687,6 +693,8 @@ fd_toml_to_json_value( fd_toml_value_t const * value, char * buf ) {
       return fd_toml_to_json_integer_value( value->value_content.integer_value, buf );
     case fd_toml_value_type_string:
       return fd_toml_to_json_string_value( value->value_content.string_value, buf );
+    case fd_toml_value_type_table:
+      return fd_toml_to_json_table( value->value_content.table_value, buf );
     default:
       return fd_cstr_append_printf( buf, "unknown value type" );
   }
