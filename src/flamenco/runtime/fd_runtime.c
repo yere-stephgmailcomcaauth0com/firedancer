@@ -42,7 +42,7 @@
 #include "../types/fd_solana_block.pb.h"
 
 #include "fd_system_ids.h"
-#include "../vm/fd_vm_context.h"
+#include "../vm/fd_vm.h"
 #include "fd_blockstore.h"
 #include "../../ballet/pack/fd_pack.h"
 
@@ -2595,7 +2595,7 @@ ulong fd_runtime_calculate_fee(fd_exec_txn_ctx_t *txn_ctx, fd_txn_t const *txn_d
   //                    .unwrap_or_default()
   //            });
 
-  double MEMORY_USAGE_COST = ((((double)txn_ctx->loaded_accounts_data_size_limit + (ACCOUNT_DATA_COST_PAGE_SIZE - 1)) / ACCOUNT_DATA_COST_PAGE_SIZE) * (double)vm_compute_budget.heap_cost);
+  double MEMORY_USAGE_COST = ((((double)txn_ctx->loaded_accounts_data_size_limit + (ACCOUNT_DATA_COST_PAGE_SIZE - 1)) / ACCOUNT_DATA_COST_PAGE_SIZE) * (double)FD_VM_HEAP_COST);
   double loaded_accounts_data_size_cost = FD_FEATURE_ACTIVE(txn_ctx->slot_ctx, include_loaded_accounts_data_size_in_fee_calculation) ? MEMORY_USAGE_COST : 0.0;
   double total_compute_units = loaded_accounts_data_size_cost + (double)txn_ctx->compute_unit_limit;
   /* unused */
