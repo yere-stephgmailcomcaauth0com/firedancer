@@ -6,6 +6,8 @@
 
 #include "fd_exec_test.pb.h"
 #include "../../../funk/fd_funk.h"
+#include "../../vm/fd_vm.h"
+#include "../../../ballet/murmur3/fd_murmur3.h"
 
 /* fd_exec_instr_test_runner_t provides fake fd_exec_instr_ctx_t to
    test processing of individual instructions. */

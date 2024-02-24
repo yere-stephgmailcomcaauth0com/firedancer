@@ -5,9 +5,14 @@ ifdef FD_HAS_INT128
 ifdef FD_HAS_SECP256K1
 $(call add-hdrs,fd_exec_instr_test.h)
 $(call add-objs,fd_exec_instr_test,fd_flamenco)
+$(call add-objs,fd_exec_sol_compat,fd_flamenco)
 
 $(call make-unit-test,test_exec_instr,test_exec_instr,fd_flamenco fd_funk fd_ballet fd_util,$(SECP256K1_LIBS))
+<<<<<<< HEAD
 $(call make-unit-test,test_elf_loader,test_elf_loader,fd_flamenco fd_funk fd_ballet fd_util,$(SECP256K1_LIBS))
+=======
+$(call make-unit-test,test_exec_sol_compat,test_exec_sol_compat,fd_flamenco fd_funk fd_ballet fd_util,$(SECP256K1_LIBS))
+>>>>>>> 68ccf881 (Belt sanded fd_vm_mem_map_{read,write}_*)
 $(call make-shared,libfd_exec_sol_compat.so,fd_exec_sol_compat,fd_flamenco fd_funk fd_ballet fd_util,$(SECP256K1_LIBS))
 endif
 endif
