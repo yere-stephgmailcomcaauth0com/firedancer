@@ -1445,6 +1445,7 @@ fd_tvu_parse_args( fd_runtime_args_t * args, int argc, char ** argv ) {
   args->dump_instructions_to_protobuf = fd_env_strip_cmdline_int( &argc, &argv, "--dump-instructions-to-protobuf", NULL, 0 );
   args->instruction_dump_signature_filter = fd_env_strip_cmdline_cstr( &argc, &argv, "--instruction-dump-signature-filter", NULL, NULL );
   args->dump_instruction_output_dir = fd_env_strip_cmdline_cstr( &argc, &argv, "--dump-instruction-output-dir", NULL, "protobuf_tests_from_executed_instr" );
+  args->rocksdb_file = fd_env_strip_cmdline_cstr( &argc, &argv, "--rocksdb-file", NULL, NULL );
 
   /* These argument(s) should never be modified via the command line */
   args->pruned_funk = NULL;

@@ -119,6 +119,7 @@ struct fd_runtime_args {
   int          dump_instructions_to_protobuf;
   char const * instruction_dump_signature_filter;
   char const * dump_instruction_output_dir;
+  char const * rocksdb_file;
 };
 typedef struct fd_runtime_args fd_runtime_args_t;
 

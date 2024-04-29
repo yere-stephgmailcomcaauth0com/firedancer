@@ -38,6 +38,7 @@
 
 #include "../nanopb/pb_decode.h"
 #include "../types/fd_solana_block.pb.h"
+#include "fd_rocksdb.h"
 
 #include "fd_system_ids.h"
 #include "../vm/fd_vm_context.h"
@@ -3682,14 +3683,39 @@ fd_runtime_replay( fd_runtime_ctx_t * state, fd_runtime_args_t * args ) {
     fd_funk_set_num_partitions( pruned_funk, partvec->num_part );
   }
 
-  for( ulong slot = state->slot_ctx->slot_bank.slot + 1; slot <= args->end_slot; ++slot ) {
+  ulong start_slot = state->slot_ctx->slot_bank.slot + 1;
+
+  /* On demand rocksdb ingest */
+  fd_rocksdb_t rocks_db = {0};
+  fd_rocksdb_root_iter_t iter = {0};
+  fd_slot_meta_t slot_meta = {0};
+  int on_demand_block_ingest = args->rocksdb_file != NULL;
+  if( on_demand_block_ingest ) {
+    fd_rocksdb_init( &rocks_db, args->rocksdb_file );
+    fd_rocksdb_root_iter_new( &iter );
+    if ( fd_rocksdb_root_iter_seek( &iter, &rocks_db, start_slot, &slot_meta, state->slot_ctx->valloc ) ) {
+      FD_LOG_ERR(( "unable to seek to first slot" ));
+    }
+  }
+
+  /* TODO: read in block from rocksdb as you go, remove any old blocks. Should make
+     checkpoints significantly smaller */
+
+  for( ulong slot = start_slot; slot <= args->end_slot; ++slot ) {
     state->slot_ctx->slot_bank.prev_slot = prev_slot;
     state->slot_ctx->slot_bank.slot      = slot;
 
-    FD_LOG_DEBUG( ( "reading slot %ld", slot ) );
+    FD_LOG_DEBUG(( "reading slot %ld", slot ));
 
     if ( state->capture_ctx && state->capture_ctx->pruned_funk != NULL ) {
       fd_runtime_collect_rent_accounts_prune( slot, state->slot_ctx, state->capture_ctx );
+    }
+
+    if ( on_demand_block_ingest ) {
+      int err = fd_rocksdb_import_block_blockstore(&rocks_db, &slot_meta, blockstore, false, NULL);
+      if( FD_UNLIKELY( err ) ) {
+        FD_LOG_ERR(("Failed to import block %lu", start_slot));
+      }
     }
 
     fd_blockstore_start_read( blockstore );
@@ -3761,6 +3787,16 @@ fd_runtime_replay( fd_runtime_ctx_t * state, fd_runtime_args_t * args ) {
 #endif
 
     prev_slot = slot;
+
+    if ( on_demand_block_ingest ) {
+      int ret = fd_rocksdb_root_iter_next( &iter, &slot_meta, state->slot_ctx->valloc );
+      if (ret < 0) {
+        ret = fd_rocksdb_get_meta( &rocks_db, slot + 1, &slot_meta, state->slot_ctx->valloc );
+        if (ret < 0) {
+          FD_LOG_ERR(( "Failed to get meta for slot %lu", slot + 1 ));
+        }
+      }
+    }
   }
 
   replay_time += fd_log_wallclock();
