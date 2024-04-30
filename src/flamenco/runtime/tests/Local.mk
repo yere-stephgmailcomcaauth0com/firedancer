@@ -12,7 +12,7 @@ endif
 run-runtime-test: run-runtime-test-1 run-runtime-test-2 run-runtime-test-3
 
 run-runtime-test-small: $(OBJDIR)/unit-test/test_runtime $(OBJDIR)/bin/fd_frank_ledger
-#	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l v20-ledger
+	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l v20-ledger
 #	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l test-ledger-alt-bn128-1.18.2
 #	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l test-ledger-alt-bn128-1.18.7
 
@@ -46,4 +46,4 @@ run-runtime-test-3: $(OBJDIR)/unit-test/test_runtime $(OBJDIR)/bin/fd_frank_ledg
 	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l mainnet-257058865 -s snapshot-257058865-6SFEm7u5pLAhkm4vfiHiN3vMNkmZuyL2ACuaHznU52fi.tar.zst -p 16 -m 5000000 -e 257058870 --zst
 	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l mainnet-257059815 -s snapshot-257059815-AmWkVebTmg6ih2VTEjMmU9WtXhT3RygEoSJBHfDpyAG3.tar.zst -p 16 -m 5000000 -e 257059818 --zst
 	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l mainnet-257061172 -s snapshot-257061172-8e6cUSMUx2VZZBDzwXjEY6bGkzPgnUmqrDyr4uErG8BF.tar.zst -p 16 -m 5000000 -e 257061175 --zst
-#	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l v20-ledger
+	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l v20-ledger
