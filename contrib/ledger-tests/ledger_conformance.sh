@@ -161,29 +161,29 @@ usage() {
                 minify                                  : Minimize a recent ledger snapshots and rocksdb
                     --mode edge                         : Minimize around an epoch edge with some offset
                     --mode exact                        : Minimize around a specific [start_slot, end_slot]
-                replay                                  : Replay the minimized ledger to check for bank hash mismatches 
+                replay                                  : Replay the minimized ledger to check for bank hash mismatches
                                                             and upload the minimized one block ledger to the cloud storage
-                solcap                                  : Produce a diff between firedancer and solana labs solcaps                                                            
+                solcap                                  : Produce a diff between firedancer and solana labs solcaps
                 all                                     : Run all commands - fetch-recent, minify, replay in sequence
                                                           In the `all` subcommand, bounds are checked if rooted, if not it searches for a bound that is rooted.
                     --no-fetch                          : Run all the commands excluding fetch-recent. Just pass in the ledger directories.
                     --repetitions once --mode edge|exact: Run the full cycle of commands once
-                    --repetitions multiple --mode exact : Replay the entire ledger in multiple iterations 
+                    --repetitions multiple --mode exact : Replay the entire ledger in multiple iterations
                                                         --start-slot and --end-slot define the absolute bounds to replay the ledger
-                                                        If they are not specified (recommended), the check range is [first_rooted(max(snap, rocksdb_min)), last_rooted(rocksdb_max)] 
-                                                        The replay looks for a mismatch from start_slot toward end_slot, until it encounters a mismatch. 
+                                                        If they are not specified (recommended), the check range is [first_rooted(max(snap, rocksdb_min)), last_rooted(rocksdb_max)]
+                                                        The replay looks for a mismatch from start_slot toward end_slot, until it encounters a mismatch.
                                                         Then, it would start again from mismatch+1, repeating the cycle.
-                                                        Depending on where these bank hash mismatches are encountered, 
+                                                        Depending on where these bank hash mismatches are encountered,
                                                         a possible list of snapshots might look like [rocksdb_min, Abhm, rocksdb_max], (Abhm, Bbhm, rocksdb_max], ... (Ybhm, Zbhm, rocksdb_max]
                                                         which translates into the uploads [Abhm-1, Abhm+1], [Bbhm-1, Bbhm+1], ..., [Zbhm-1, Zbhm+1]
                     --repetitions multiple --mode exact --rep-sz 100: Breaks the ledger up into multiple repetitions of the specified size
-                                                                    This has the same output as running without --rep-sz, but breaks the process up into multiple iterations of some rep size 
+                                                                    This has the same output as running without --rep-sz, but breaks the process up into multiple iterations of some rep size
                                                                     Passing --rep-sz is only recommended if the ledger is too large, since this takes additional time to run
                                                                     (re: solana-ledger-tool possibly has some issues with minimizing larger ledgers?)
-                                                                    For example, running this against a ledger with rocskdb bounds of size S, 
+                                                                    For example, running this against a ledger with rocskdb bounds of size S,
                                                                     will break into chunks [first_rooted(start_slot), last_rooted(start_slot + S/n - 1)], [first_rooted(start_slot + S/n), last_rooted(start_slot + 2S/n - 1)] ...
                                                                     Following, each of these chunks might have their own set of bank hash mismatches
-                                                                    [first_rooted(start_slot), ABhm, Bbhm, Cbhm .... last_rooted(start_slot + S/n - 1)] 
+                                                                    [first_rooted(start_slot), ABhm, Bbhm, Cbhm .... last_rooted(start_slot + S/n - 1)]
 EOF
   fi
   exit 1
@@ -238,7 +238,7 @@ parse_fetch_options() {
     exit 1
   fi
 
-  SOLANA_LEDGER_TOOL="$SOLANA_BUILD_DIR/solana-ledger-tool"
+  SOLANA_LEDGER_TOOL="$SOLANA_BUILD_DIR/agave-ledger-tool"
   if [ ! -f "$SOLANA_LEDGER_TOOL" ]; then
     echo "error $SOLANA_LEDGER_TOOL does not exist"
     exit 1
@@ -467,7 +467,7 @@ parse_replay_options() {
     exit 1
   fi
 
-  SOLANA_LEDGER_TOOL="$SOLANA_BUILD_DIR/solana-ledger-tool"
+  SOLANA_LEDGER_TOOL="$SOLANA_BUILD_DIR/agave-ledger-tool"
   if [ ! -f "$SOLANA_LEDGER_TOOL" ]; then
     echo "error $SOLANA_LEDGER_TOOL does not exist"
     exit 1
@@ -645,9 +645,9 @@ parse_all_options() {
                     --network -n,\n\
                     --mode -m,\n\
                     --ledger -l,\n\
-                    --ledger-min -z,\n\                                        
+                    --ledger-min -z,\n\
                     --solana-build-dir -d,\n\
-                    --firedancer-root-dir -f,\n\                    
+                    --firedancer-root-dir -f,\n\
                     --repetitions -r."
       exit 1
     fi
@@ -664,7 +664,7 @@ parse_all_options() {
                     --ledger-min -z,\n\
                     --edge-offset -o,\n\
                     --solana-build-dir -d,\n\
-                    --firedancer-root-dir -f,\n\                    
+                    --firedancer-root-dir -f,\n\
                     --repetitions -r."
       exit 1
     fi
@@ -694,7 +694,7 @@ parse_all_options() {
     exit 1
   fi
 
-  SOLANA_LEDGER_TOOL="$SOLANA_BUILD_DIR/solana-ledger-tool"
+  SOLANA_LEDGER_TOOL="$SOLANA_BUILD_DIR/agave-ledger-tool"
   if [ ! -f "$SOLANA_LEDGER_TOOL" ]; then
     echo "error $SOLANA_LEDGER_TOOL does not exist"
     exit 1
