@@ -278,11 +278,6 @@ ARGS=" --restore dump/$CHECKPT \
   --allocator wksp \
   --tile-cpus 5-21" \
 
-if [ -e dump/$LEDGER/capitalization.csv ]
-then
-  ARGS="$ARGS --cap dump/$LEDGER/capitalization.csv"
-fi
-
 if [[ $ON_DEMAND = 0 ]]; then
   echo_notice "Starting replay from checkpoint"
   set -x
