@@ -1,0 +1,262 @@
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*  @jumpsiegel @lheeger-jump @mmcgee-jump @kbowers-jump
+
+/.github/ @lheeger-jump @llamb-jump
+
+# /.vscode/
+# /book/
+# /book/.vitepress/
+# /book/guide/
+# /book/public/
+# /book/snippets/
+
+/config/  @ripatel-fd @mmcgee-jump
+
+# /config/extra/
+# /config/machine/
+
+# /contrib/
+# /contrib/codegen/
+# /contrib/docker/
+# /contrib/docker/alpine/
+# /contrib/docker/rocky8/
+# /contrib/docker/rocky9/
+# /contrib/docker/ubi8/
+# /contrib/docker/ubi9/
+# /contrib/docker/ubuntu2004/
+# /contrib/docker/ubuntu2204/
+# /contrib/ed25519/
+# /contrib/ed25519/dalek_target/
+# /contrib/ed25519/dalek_target/src/
+# /contrib/ledger-tests/
+# /contrib/quic/
+# /contrib/quic/quinn_compat/
+# /contrib/quic/quinn_compat/quinn_test/
+# /contrib/quic/quinn_compat/quinn_test/src/
+# /contrib/test/
+# /contrib/tool/
+
+# /corpus/
+# /corpus/fuzz_base64_garbage/
+# /corpus/fuzz_ebpf/
+# /corpus/fuzz_ed25519_sigverify/
+# /corpus/fuzz_picohttpparser/
+# /corpus/fuzz_quic/
+# /corpus/fuzz_quic_wire/
+# /corpus/fuzz_sbpf_loader/
+# /corpus/fuzz_snapshot_http/
+# /corpus/fuzz_x509_cert_parser/
+# /doc/
+# /doc/rant/
+# /src/
+# /src/app/
+
+/src/app/fdctl/  @mmcgee-jump
+
+# /src/app/fdctl/config/
+# /src/app/fdctl/configure/
+# /src/app/fdctl/monitor/
+# /src/app/fdctl/monitor/generated/
+# /src/app/fdctl/run/
+# /src/app/fdctl/run/generated/
+
+/src/app/fdctl/run/tiles/  @mmcgee-jump @lheeger-jump @arjain4
+
+# /src/app/fdctl/run/tiles/generated/
+# /src/app/fdctl/run/topos/
+/src/app/fddbg/  @mmcgee-jump
+/src/app/fddev/  @mmcgee-jump
+
+# /src/app/fddev/configure/
+# /src/app/fddev/rpc_client/
+# /src/app/fddev/tests/
+# /src/app/fddev/tiles/
+
+/src/app/ledger/  @asiegel-jt @ibhatt-jumptrading @llamb-jump
+
+# /src/app/shredcap/
+
+/src/ballet/  @jumpsiegel @kbowers-jump @0x0ece @ptaffet-jump
+
+# /src/ballet/aes/
+# /src/ballet/aes/fixtures/
+# /src/ballet/base58/
+# /src/ballet/base64/
+# /src/ballet/blake3/
+# /src/ballet/block/
+# /src/ballet/bmtree/
+# /src/ballet/bn254/
+# /src/ballet/chacha20/
+# /src/ballet/ed25519/
+# /src/ballet/ed25519/avx512/
+# /src/ballet/ed25519/ref/
+# /src/ballet/ed25519/table/
+# /src/ballet/elf/
+# /src/ballet/fiat-crypto/
+# /src/ballet/hex/
+# /src/ballet/hmac/
+# /src/ballet/http/
+# /src/ballet/json/
+# /src/ballet/keccak256/
+# /src/ballet/lthash/
+# /src/ballet/murmur3/
+# /src/ballet/pack/
+# /src/ballet/poh/
+# /src/ballet/reedsol/
+# /src/ballet/reedsol/constants/
+# /src/ballet/reedsol/wrapped_impl/
+# /src/ballet/sbpf/
+# /src/ballet/secp256k1/
+# /src/ballet/sha256/
+# /src/ballet/sha256/cavp/
+# /src/ballet/sha512/
+# /src/ballet/sha512/cavp/
+# /src/ballet/shred/
+# /src/ballet/shred/fixtures/
+# /src/ballet/siphash13/
+# /src/ballet/txn/
+# /src/ballet/txn/fixtures/
+# /src/ballet/utf8/
+# /src/ballet/wsample/
+# /src/ballet/x509/
+# /src/ballet/zstd/
+
+/src/choreo/   @lidatong
+
+# /src/choreo/bft/
+# /src/choreo/commitment/
+# /src/choreo/forks/
+# /src/choreo/ghost/
+# /src/choreo/tower/
+
+/src/disco/  @mmcgee-jump @ptaffet-jump
+
+# /src/disco/bank/
+# /src/disco/dedup/
+# /src/disco/keyguard/
+# /src/disco/metrics/
+# /src/disco/metrics/generated/
+# /src/disco/mux/
+# /src/disco/quic/
+# /src/disco/replay/
+# /src/disco/shred/
+# /src/disco/shred/fixtures/
+# /src/disco/topo/
+# /src/disco/tvu/
+# /src/disco/verify/
+
+# I am sure I have missed people..
+/src/flamenco/   @jumpsiegel @lheeger-jump @ripatel-fd @llamb-jump @asiegel-jt @ibhatt-jumptrading @arjain4 @topointon-jump @0x0ece @lidatong
+
+# /src/flamenco/capture/
+# /src/flamenco/features/
+# /src/flamenco/genesis/
+/src/flamenco/gossip/ @asiegel-jt
+# /src/flamenco/leaders/
+# /src/flamenco/leaders/fixtures/
+# /src/flamenco/nanopb/
+/src/flamenco/repair/ @asiegel-jt
+# /src/flamenco/rewards/
+# /src/flamenco/runtime/
+# /src/flamenco/runtime/context/
+# /src/flamenco/runtime/info/
+# /src/flamenco/runtime/program/
+# /src/flamenco/runtime/sysvar/
+# /src/flamenco/runtime/tests/
+# /src/flamenco/shredcap/
+# /src/flamenco/snapshot/
+# /src/flamenco/stakes/
+# /src/flamenco/types/
+# /src/flamenco/types/fixtures/
+# /src/flamenco/vm/
+# /src/flamenco/vm/syscall/
+
+/src/funk/  @asiegel-jt  @kbowers-jump
+
+/src/runtime-tests/   @jumpsiegel  @topointon-jump
+
+# /src/runtime-tests/1/
+# /src/runtime-tests/1/2/
+# /src/runtime-tests/1/2/generated/
+# /src/runtime-tests/1/elfs/
+
+/src/tango/   @mmcgee-jump @kbowers-jump @ptaffet-jump
+
+# /src/tango/cnc/
+# /src/tango/dcache/
+# /src/tango/fctl/
+# /src/tango/fseq/
+# /src/tango/lru/
+# /src/tango/mcache/
+# /src/tango/tcache/
+# /src/tango/tempo/
+
+/src/util/  @mmcgee-jump @kbowers-jump @ptaffet-jump
+/src/waltz/  @mmcgee-jump @kbowers-jump @ptaffet-jump @nbridge-jump
+
+# /src/waltz/aio/
+# /src/waltz/ebpf/
+# /src/waltz/ip/
+# /src/waltz/quic/
+# /src/waltz/quic/crypto/
+# /src/waltz/quic/fixtures/
+# /src/waltz/quic/templ/
+# /src/waltz/quic/tests/
+# /src/waltz/quic/tests/arp/
+# /src/waltz/quic/tests/txn/
+# /src/waltz/quic/tls/
+# /src/waltz/tls/
+# /src/waltz/tls/fixtures/
+# /src/waltz/udpsock/
+# /src/waltz/xdp/
+# /src/waltz/xdp/fixtures/
+
+/src/wiredancer/   @kaasaraai-jump @jvarela-jump
+
+# /src/wiredancer/c/
+# /src/wiredancer/platform/
+# /src/wiredancer/platform/f1/
+# /src/wiredancer/platform/f1/constraints/
+# /src/wiredancer/platform/f1/design/
+# /src/wiredancer/platform/f1/scripts/
+# /src/wiredancer/py/
+# /src/wiredancer/rtl/
+# /src/wiredancer/sim/
+# /src/wiredancer/sim/ed25519_point_add/
+# /src/wiredancer/sim/ed25519_point_dbl/
+# /src/wiredancer/sim/ed25519_sigverify_0/
+# /src/wiredancer/sim/ed25519_sigverify_1/
+# /src/wiredancer/sim/mul_wide/
+# /src/wiredancer/sim/schl_cpu/
+# /src/wiredancer/sim/sha512_modq_meta/
+# /src/wiredancer/sim/sha512_pre/
+# /src/wiredancer/sim/top_f1/
+# /src/wiredancer/sim/top_f1_models/
+# /src/wiredancer/test/
+
+# /verification/
+# /verification/include/
+# /verification/proofs/
+# /verification/proofs/keyguard/
+# /verification/proofs/keyguard/ambiguity/
+# /verification/proofs/keyguard/match_txn/
+# /verification/proofs/lib/
+# /verification/proofs/quic/
+# /verification/proofs/quic/decode_initial/
+# /verification/proofs/quic/decrypt/
+# /verification/proofs/quic/handle_v1_one_rtt/
+# /verification/proofs/quic/parse_transport_params/
+# /verification/proofs/tango/
+# /verification/proofs/tango/dcache_compact/
+# /verification/proofs/tango/mcache_bounds/
+# /verification/proofs/tls/
+# /verification/proofs/tls/client_hs/
+# /verification/proofs/tls/server_hs/
+# /verification/proofs/txn/
+# /verification/proofs/txn/ambiguity_gossip/
+# /verification/proofs/txn/minsz/
+# /verification/proofs/util/
+# /verification/proofs/util/bits_svw/
+# /verification/sources/
+# /verification/stubs/
