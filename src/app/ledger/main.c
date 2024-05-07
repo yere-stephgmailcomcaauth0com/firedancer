@@ -510,13 +510,7 @@ restore( fd_ledger_args_t * args ) {
     fd_wksp_restore( args->funk_wksp, args->restore_funk, args->hashseed );
   }
   if( args->restore != NULL ) {
-    /* Remove the blockstore from the workspace if specified. This doesn't clean
-       up the memory allocated by the blockstore */
     fd_wksp_restore( args->wksp, args->restore, args->hashseed );
-    if( args->funk_only ) {
-      ulong blockstore_tag = FD_BLOCKSTORE_MAGIC;
-      fd_wksp_tag_free( args->wksp, &blockstore_tag, 1 );
-    }
   }
 }
 
@@ -587,11 +581,9 @@ ingest( fd_ledger_args_t * args ) {
   }
   fd_wksp_t * wksp = args->wksp;
   fd_funk_t * funk = args->funk;
-  FD_LOG_NOTICE(("funk %lx", funk));
 
   fd_alloc_t * alloc = fd_alloc_join( fd_wksp_laddr_fast( wksp, funk->alloc_gaddr ), 0UL );
   if( FD_UNLIKELY( !alloc ) ) FD_LOG_ERR(( "fd_alloc_join(gaddr=%#lx) failed", funk->alloc_gaddr ));
-  FD_LOG_NOTICE(("HELLO"));
 
   uchar * epoch_ctx_mem = fd_wksp_alloc_laddr( wksp, fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( args->vote_acct_max ), FD_EXEC_EPOCH_CTX_MAGIC );
   fd_exec_epoch_ctx_t * epoch_ctx = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, args->vote_acct_max ) );
@@ -651,7 +643,7 @@ ingest( fd_ledger_args_t * args ) {
     fd_funk_start_write( funk );
 
     /* If we are loading from a snapshot, do not overwrite from genesis */
-    if ( !args->snapshot ) {
+    if( !args->snapshot ) {
       fd_runtime_init_bank_from_genesis( slot_ctx, &genesis_block, &genesis_hash );
 
       fd_runtime_init_program( slot_ctx );
@@ -1303,7 +1295,6 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   char const * wksp_name               = fd_env_strip_cmdline_cstr ( &argc, &argv, "--wksp-name",               NULL, NULL      );
   char const * wksp_name_funk          = fd_env_strip_cmdline_cstr ( &argc, &argv, "--wksp-name-funk",          NULL, NULL      );
   ulong        funk_page_cnt           = fd_env_strip_cmdline_ulong( &argc, &argv, "--funk-page-cnt",           NULL, 5         );
-  int          seperate_funk_wksp      = fd_env_strip_cmdline_int  ( &argc, &argv, "--seperate-funk-wksp",      NULL, 1         );
   ulong        page_cnt                = fd_env_strip_cmdline_ulong( &argc, &argv, "--page-cnt",                NULL, 5         );
   int          reset                   = fd_env_strip_cmdline_int  ( &argc, &argv, "--reset",                   NULL, 0         );
   char const * cmd                     = fd_env_strip_cmdline_cstr ( &argc, &argv, "--cmd",                     NULL, NULL      );
@@ -1380,16 +1371,17 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
 
   /* Setup funk workspace if specified. This is enabled by default */
   fd_wksp_t * funk_wksp = NULL;
-  if( seperate_funk_wksp ) {
-    if( wksp_name_funk == NULL ) {
-      FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local workspace" ));
-      funk_wksp = fd_wksp_new_anonymous( FD_SHMEM_GIGANTIC_PAGE_SZ, funk_page_cnt, 0, "funk_wksp", 0UL );
-    } else {
-      fd_shmem_info_t shmem_info[1];
-      if ( FD_UNLIKELY( fd_shmem_info( wksp_name_funk, 0UL, shmem_info ) ) )
-        FD_LOG_ERR(( "unable to query region \"%s\"\n\tprobably does not exist or bad permissions", wksp_name_funk ));
-      funk_wksp = fd_wksp_attach( wksp_name_funk );
-    }
+  if( wksp_name_funk == NULL ) {
+    FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local workspace" ));
+    funk_wksp = fd_wksp_new_anonymous( FD_SHMEM_GIGANTIC_PAGE_SZ, funk_page_cnt, 0, "funk_wksp", 0UL );
+  } else {
+    fd_shmem_info_t shmem_info[1];
+    if ( FD_UNLIKELY( fd_shmem_info( wksp_name_funk, 0UL, shmem_info ) ) )
+      FD_LOG_ERR(( "unable to query region \"%s\"\n\tprobably does not exist or bad permissions", wksp_name_funk ));
+    funk_wksp = fd_wksp_attach( wksp_name_funk );
+  }
+  if( reset ) {
+    fd_wksp_reset( funk_wksp, args->hashseed );
   }
   args->funk_wksp = funk_wksp;
 
@@ -1442,8 +1434,6 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   args->dump_insn_sig_filter    = dump_insn_sig_filter;
   args->dump_insn_output_dir    = dump_insn_output_dir;
   args->vote_acct_max           = vote_acct_max;
-
-  /* TODO: add argument validation */
 
   #ifdef _ENABLE_LTHASH
   args->lthash           = lthash;
