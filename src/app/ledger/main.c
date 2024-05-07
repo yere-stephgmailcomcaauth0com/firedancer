@@ -77,6 +77,7 @@ static void usage( char const * progname ) {
 
 struct fd_ledger_args {
   fd_wksp_t *       wksp;
+  fd_wksp_t *       funk_wksp;
   fd_blockstore_t * blockstore;
   fd_funk_t *       funk;
   fd_alloc_t *      alloc;
@@ -87,6 +88,7 @@ struct fd_ledger_args {
   char const *      rocksdb_dir;
   char const *      checkpt;
   char const *      restore;
+  char const *      restore_funk;
   char const *      allocator;
   ulong             shred_max;
   ulong             slot_history_max;
@@ -414,7 +416,7 @@ cleanup_scratch( void ) {
 
 void
 init_funk( fd_ledger_args_t * args ) {
-  fd_wksp_t * wksp = args->wksp;
+  fd_wksp_t * wksp = args->funk_wksp == NULL ? args->wksp : args->funk_wksp;
   void * shmem;
   fd_wksp_tag_query_info_t info;
   ulong tag = FD_FUNK_MAGIC;
@@ -503,6 +505,22 @@ checkpt( fd_ledger_args_t * args, fd_exec_slot_ctx_t * slot_ctx ) {
 }
 
 void
+restore( fd_ledger_args_t * args ) {
+  if( args->restore_funk != NULL ) {
+    fd_wksp_restore( args->funk_wksp, args->restore_funk, args->hashseed );
+  }
+  if( args->restore != NULL ) {
+    /* Remove the blockstore from the workspace if specified. This doesn't clean
+       up the memory allocated by the blockstore */
+    fd_wksp_restore( args->wksp, args->restore, args->hashseed );
+    if( args->funk_only ) {
+      ulong blockstore_tag = FD_BLOCKSTORE_MAGIC;
+      fd_wksp_tag_free( args->wksp, &blockstore_tag, 1 );
+    }
+  }
+}
+
+void
 minify( fd_ledger_args_t * args ) {
     /* Example commmand:
     fd_ledger --cmd minify --rocksdb <LARGE_ROCKSDB> --minified-rocksdb <MINI_ROCKSDB>
@@ -564,12 +582,16 @@ void
 ingest( fd_ledger_args_t * args ) {
   /* Setup funk, blockstore, epoch_ctx, and slot_ctx */
   init_funk( args );
-  init_blockstore( args );
+  if( !args->funk_only ) {
+    init_blockstore( args );
+  }
   fd_wksp_t * wksp = args->wksp;
   fd_funk_t * funk = args->funk;
+  FD_LOG_NOTICE(("funk %lx", funk));
 
   fd_alloc_t * alloc = fd_alloc_join( fd_wksp_laddr_fast( wksp, funk->alloc_gaddr ), 0UL );
   if( FD_UNLIKELY( !alloc ) ) FD_LOG_ERR(( "fd_alloc_join(gaddr=%#lx) failed", funk->alloc_gaddr ));
+  FD_LOG_NOTICE(("HELLO"));
 
   uchar * epoch_ctx_mem = fd_wksp_alloc_laddr( wksp, fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( args->vote_acct_max ), FD_EXEC_EPOCH_CTX_MAGIC );
   fd_exec_epoch_ctx_t * epoch_ctx = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, args->vote_acct_max ) );
@@ -1091,41 +1113,29 @@ replay( fd_ledger_args_t * args ) {
 
     Example command loading in from on demand checkpoint and replaying with on demand block ingest.
     It creates a checkpoint every 1000 slots.
-    fd_ledger --restore <CHECKPOINT_TO_LOAD_IN> --cmd replay --page-cnt 400
+    fd_ledger --restore-funk <CHECKPOINT_TO_LOAD_IN> --cmd replay --page-cnt 400
               --abort-on-mismatch 1 --tile-cpus 5-21 --allocator wksp
               --rocksdb dump/rocksdb --checkpt-path dump/checkpoint_new
-              --checkpt-freq 1000 --funk-only 1 --on-demand-block-ingest 1
-    Note: remove --on-demand-block-ingest 1 and --funk-only 1 if you want to replay from a full checkpoint
+              --checkpt-freq 1000 
 
     Example command directly loading in a rocksdb and snapshot and replaying.
     fd_ledger --reset 1 --cmd replay --rocksdb dump/mainnet-257068890/rocksdb --index-max 5000000
               --end-slot 257068895 --txn-max 100 --page-cnt 16 --verify-acc-hash 1
               --snapshot dump/mainnet-257068890/snapshot-257068890-uRVtagPzKhYorycp4CRtKdWrYPij6iBxCYYXmqRvdSp.tar.zst
-              --slot-history 5000 --copy-txn-status 0 --allocator wksp --tile-cpus 5-21
-              --on-demand-block-ingest 1 --on-demand-block-history 100
-
+              --slot-history 5000 --allocator wksp --tile-cpus 5-21
   */
 
-  if( args->restore != NULL ) {
-    fd_wksp_restore( args->wksp, args->restore, args->hashseed );
-  }
+  restore( args ); /* Restores checkpointed workspace(s) */
 
   init_funk( args ); /* Joins or creates funk based on if one exists in the workspace */
-
-  /* Remove the blockstore from the workspace if specified */
-  if( args->funk_only ) {
-    ulong blockstore_tag = FD_BLOCKSTORE_MAGIC;
-    fd_wksp_tag_free( args->wksp, &blockstore_tag, 1 );
-  }
 
   fd_funk_t * funk = args->funk;
   fd_wksp_t * wksp = args->wksp;
 
   /* Check number of records in funk. If rec_cnt == 0, then it can be assumed
-     that you need to load in snapshot(s)  */
-  ulong rec_cnt = fd_funk_rec_cnt( fd_funk_rec_map( funk, wksp ) );
+     that you need to load in snapshot(s). */
+  ulong rec_cnt = fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) );
   if ( rec_cnt == 0 ) {
-
     uchar * epoch_ctx_mem = fd_wksp_alloc_laddr( wksp, fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( args->vote_acct_max ), FD_EXEC_EPOCH_CTX_MAGIC );
     fd_exec_epoch_ctx_t * epoch_ctx = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, args->vote_acct_max ) );
 
@@ -1140,13 +1150,14 @@ replay( fd_ledger_args_t * args ) {
     /* Load in snapshot(s) */
     if( args->snapshot ) {
       fd_snapshot_load( args->snapshot, slot_ctx, args->verify_acc_hash, args->check_acc_hash, FD_SNAPSHOT_TYPE_FULL );
-      FD_LOG_NOTICE(( "imported %lu records from snapshot", fd_funk_rec_cnt( fd_funk_rec_map( funk, wksp ) ) ));
+      FD_LOG_NOTICE(( "imported %lu records from snapshot", fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) ) ));
     }
     if( args->incremental ) {
       fd_snapshot_load( args->incremental, slot_ctx, args->verify_acc_hash, args->check_acc_hash, FD_SNAPSHOT_TYPE_INCREMENTAL );
-      FD_LOG_NOTICE(( "imported %lu records from snapshot", fd_funk_rec_cnt( fd_funk_rec_map( funk, wksp ) ) ));
+      FD_LOG_NOTICE(( "imported %lu records from snapshot", fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) ) ));
     }
-    if( args->genesis ) {
+    if( args->genesis ) { 
+      /* TODO: factor out into its own function */
       struct stat sbuf;
       if( FD_UNLIKELY( stat( args->genesis, &sbuf ) < 0 ) ) {
         FD_LOG_ERR(( "cannot open %s : %s", args->genesis, strerror(errno) ));
@@ -1183,7 +1194,7 @@ replay( fd_ledger_args_t * args ) {
       fd_funk_start_write( funk );
 
       /* If we are loading from a snapshot, do not overwrite from genesis */
-      if ( !args->snapshot ) {
+      if( !args->snapshot ) {
         fd_runtime_init_bank_from_genesis( slot_ctx, &genesis_block, &genesis_hash );
 
         fd_runtime_init_program( slot_ctx );
@@ -1266,6 +1277,7 @@ replay( fd_ledger_args_t * args ) {
   runtime_args.dump_insn_sig_filter    = args->dump_insn_sig_filter;
   runtime_args.dump_insn_output_dir    = args->dump_insn_output_dir;
   runtime_args.trash_hash              = args->trash_hash;
+  runtime_args.funk_wksp               = args->funk_wksp;
 
   fd_replay_t * replay = NULL;
   fd_tvu_main_setup( &state, &replay, NULL, NULL, 0, wksp, &runtime_args, NULL );
@@ -1289,6 +1301,9 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   fd_flamenco_boot( &argc, &argv );
 
   char const * wksp_name               = fd_env_strip_cmdline_cstr ( &argc, &argv, "--wksp-name",               NULL, NULL      );
+  char const * wksp_name_funk          = fd_env_strip_cmdline_cstr ( &argc, &argv, "--wksp-name-funk",          NULL, NULL      );
+  ulong        funk_page_cnt           = fd_env_strip_cmdline_ulong( &argc, &argv, "--funk-page-cnt",           NULL, 5         );
+  int          seperate_funk_wksp      = fd_env_strip_cmdline_int  ( &argc, &argv, "--seperate-funk-wksp",      NULL, 1         );
   ulong        page_cnt                = fd_env_strip_cmdline_ulong( &argc, &argv, "--page-cnt",                NULL, 5         );
   int          reset                   = fd_env_strip_cmdline_int  ( &argc, &argv, "--reset",                   NULL, 0         );
   char const * cmd                     = fd_env_strip_cmdline_cstr ( &argc, &argv, "--cmd",                     NULL, NULL      );
@@ -1308,12 +1323,13 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   uint         verify_acc_hash         = fd_env_strip_cmdline_uint ( &argc, &argv, "--verify-acc-hash",         NULL, 0         );
   uint         check_acc_hash          = fd_env_strip_cmdline_uint ( &argc, &argv, "--check-acc-hash",          NULL, 0         );
   char const * restore                 = fd_env_strip_cmdline_cstr ( &argc, &argv, "--restore",                 NULL, NULL      );
+  char const * restore_funk            = fd_env_strip_cmdline_cstr ( &argc, &argv, "--restore-funk",            NULL, NULL      );
   char const * shredcap                = fd_env_strip_cmdline_cstr ( &argc, &argv, "--shred-cap",               NULL, NULL      );
   ulong        trash_hash              = fd_env_strip_cmdline_ulong( &argc, &argv, "--trash-hash",              NULL, ULONG_MAX );
   char const * mini_db_dir             = fd_env_strip_cmdline_cstr ( &argc, &argv, "--minified-rocksdb",        NULL, NULL      );
   ulong        index_max_pruned        = fd_env_strip_cmdline_ulong( &argc, &argv, "--index-max-pruned",        NULL, 450000000 );
   ulong        pages_pruned            = fd_env_strip_cmdline_ulong( &argc, &argv, "--page-cnt-pruned",         NULL, ULONG_MAX );
-  int          funk_only               = fd_env_strip_cmdline_int  ( &argc, &argv, "--funk-only",               NULL, 0         );
+  int          funk_only               = fd_env_strip_cmdline_int  ( &argc, &argv, "--funk-only",               NULL, 1         );
   char const * checkpt                 = fd_env_strip_cmdline_cstr ( &argc, &argv, "--checkpt",                 NULL, NULL      );
   char const * capture_fpath           = fd_env_strip_cmdline_cstr ( &argc, &argv, "--capture-solcap",          NULL, NULL      );
   int          capture_txns            = fd_env_strip_cmdline_int  ( &argc, &argv, "--capture-txns",            NULL, 1         );
@@ -1322,12 +1338,12 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   ulong        checkpt_freq            = fd_env_strip_cmdline_ulong( &argc, &argv, "--checkpt-freq",            NULL, ULONG_MAX );
   char const * allocator               = fd_env_strip_cmdline_cstr ( &argc, &argv, "--allocator",               NULL, "wksp"    );
   int          abort_on_mismatch       = fd_env_strip_cmdline_int  ( &argc, &argv, "--abort-on-mismatch",       NULL, 1         );
-  int          on_demand_block_ingest  = fd_env_strip_cmdline_int  ( &argc, &argv, "--on-demand-block-ingest",  NULL, 0         );
+  int          on_demand_block_ingest  = fd_env_strip_cmdline_int  ( &argc, &argv, "--on-demand-block-ingest",  NULL, 1         );
   ulong        on_demand_block_history = fd_env_strip_cmdline_ulong( &argc, &argv, "--on-demand-block-history", NULL, 100       );
   int          dump_insn_to_pb         = fd_env_strip_cmdline_int  ( &argc, &argv, "--dump-insn-to-pb",         NULL, 0         );
   char const * dump_insn_sig_filter    = fd_env_strip_cmdline_cstr ( &argc, &argv, "--dump-insn-sig-filter",    NULL, NULL      );
   char const * dump_insn_output_dir    = fd_env_strip_cmdline_cstr ( &argc, &argv, "--dump-insn-output-dir",    NULL, NULL      );
-  ulong        vote_acct_max           = fd_env_strip_cmdline_ulong( &argc, &argv, "--vote_acct_max",           NULL, 2000000UL  );
+  ulong        vote_acct_max           = fd_env_strip_cmdline_ulong( &argc, &argv, "--vote_acct_max",           NULL, 2000000UL );
 
   #ifdef _ENABLE_LTHASH
   char const * lthash             = fd_env_strip_cmdline_cstr ( &argc, &argv, "--lthash",           NULL, "false"   );
@@ -1362,6 +1378,21 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
 
   init_scratch( wksp );
 
+  /* Setup funk workspace if specified. This is enabled by default */
+  fd_wksp_t * funk_wksp = NULL;
+  if( seperate_funk_wksp ) {
+    if( wksp_name_funk == NULL ) {
+      FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local workspace" ));
+      funk_wksp = fd_wksp_new_anonymous( FD_SHMEM_GIGANTIC_PAGE_SZ, funk_page_cnt, 0, "funk_wksp", 0UL );
+    } else {
+      fd_shmem_info_t shmem_info[1];
+      if ( FD_UNLIKELY( fd_shmem_info( wksp_name_funk, 0UL, shmem_info ) ) )
+        FD_LOG_ERR(( "unable to query region \"%s\"\n\tprobably does not exist or bad permissions", wksp_name_funk ));
+      funk_wksp = fd_wksp_attach( wksp_name_funk );
+    }
+  }
+  args->funk_wksp = funk_wksp;
+
   /* Setup alloc and valloc */
   #define FD_ALLOC_TAG (422UL)
   void * alloc_shmem = fd_wksp_alloc_laddr( wksp, fd_alloc_align(), fd_alloc_footprint(), FD_ALLOC_TAG );
@@ -1383,6 +1414,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   args->txns_max                = txns_max;
   args->index_max               = index_max;
   args->restore                 = restore;
+  args->restore_funk            = restore_funk;
   args->mini_db_dir             = mini_db_dir;
   args->funk_only               = funk_only;
   args->copy_txn_status         = copy_txn_status;
