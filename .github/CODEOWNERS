@@ -146,7 +146,9 @@
 # /src/disco/shred/
 # /src/disco/shred/fixtures/
 # /src/disco/topo/
-# /src/disco/tvu/
+
+/src/disco/tvu/  @jumpsiegel @lheeger-jump @ripatel-fd @llamb-jump @asiegel-jt @ibhatt-jumptrading @arjain4 @topointon-jump @0x0ece @lidatong
+
 # /src/disco/verify/
 
 # I am sure I have missed people..
