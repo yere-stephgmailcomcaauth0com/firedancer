@@ -190,6 +190,10 @@ fd_runtime_block_collect_txns( fd_block_info_t const * block_info,
                                fd_txn_p_t * out_txns );
 
 int
+fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
+                             fd_capture_ctx_t * capture_ctx );
+
+int
 fd_runtime_block_eval_tpool( fd_exec_slot_ctx_t * slot_ctx,
                              fd_capture_ctx_t * capture_ctx,
                              const void * block,
@@ -328,6 +332,10 @@ fd_runtime_collect_rent_accounts_prune( ulong slot,
                                         fd_exec_slot_ctx_t * slot_ctx, 
                                         fd_capture_ctx_t * capture_ctx );
 
+void
+fd_runtime_read_genesis( fd_exec_slot_ctx_t * slot_ctx,
+                         char const * genesis_filepath,
+                         uchar is_snapshot );
 
 FD_PROTOTYPES_END
 
