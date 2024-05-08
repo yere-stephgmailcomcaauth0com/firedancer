@@ -87,6 +87,7 @@ struct fd_ledger_args {
   uint              hashseed;
   char const *      rocksdb_dir;
   char const *      checkpt;
+  char const *      funk_checkpt;
   char const *      restore;
   char const *      restore_funk;
   char const *      allocator;
@@ -481,26 +482,30 @@ checkpt( fd_ledger_args_t * args, fd_exec_slot_ctx_t * slot_ctx ) {
   if( !args->checkpt ) {
     FD_LOG_WARNING(( "No backup argument specified" ));
   }
-  if( args->funk ) {
-    /* Copy the entire workspace into a file in the most naive way */
-    fd_funk_start_write( args->funk );
-    FD_TEST( FD_RUNTIME_EXECUTE_SUCCESS == fd_runtime_save_epoch_bank( slot_ctx ) );
-    FD_TEST( FD_RUNTIME_EXECUTE_SUCCESS == fd_runtime_save_slot_bank( slot_ctx ) );
-    fd_funk_end_write( args->funk );
-  }
 
-  /* Remove the blockstore from the workspace if no blockstore was ingested */
-  if( args->funk_only ) {
-    ulong blockstore_tag = FD_BLOCKSTORE_MAGIC;
-    fd_wksp_tag_free( args->wksp, &blockstore_tag, 1 );
-    FD_LOG_NOTICE(( "removing existing blockstore" ));
-  }
+  fd_funk_start_write( args->funk );
+  FD_TEST( FD_RUNTIME_EXECUTE_SUCCESS == fd_runtime_save_epoch_bank( slot_ctx ) );
+  FD_TEST( FD_RUNTIME_EXECUTE_SUCCESS == fd_runtime_save_slot_bank( slot_ctx ) );
+  fd_funk_end_write( args->funk );
 
-  FD_LOG_NOTICE(( "writing %s", args->checkpt ));
-  unlink( args->checkpt );
-  int err = fd_wksp_checkpt( args->wksp, args->checkpt, 0666, 0, NULL );
-  if( err ) {
-    FD_LOG_ERR(( "backup failed: error %d", err ));
+  if( args->funk_checkpt ) {
+    if( args->funk_wksp == NULL ) {
+      FD_LOG_ERR(( "funk_wksp is NULL" ));
+    }
+    FD_LOG_NOTICE(( "writing funk checkpt %s", args->funk_checkpt ));
+    unlink( args->funk_checkpt );
+    int err = fd_wksp_checkpt( args->funk_wksp, args->funk_checkpt, 0666, 0, NULL );
+    if( err ) {
+      FD_LOG_ERR(( "funk checkpt failed: error %d", err ));
+    }
+  }
+  if( args->checkpt ) {
+    FD_LOG_NOTICE(( "writing %s", args->checkpt ));
+    unlink( args->checkpt );
+    int err = fd_wksp_checkpt( args->wksp, args->checkpt, 0666, 0, NULL );
+    if( err ) {
+      FD_LOG_ERR(( "checkpt failed: error %d", err ));
+    }
   }
 }
 
@@ -569,7 +574,7 @@ minify( fd_ledger_args_t * args ) {
   }
 
   /* TODO: Currently, the address signatures column family isn't copied as it
-            is indexed on the pubkey */
+           is indexed on the pubkey. */
 }
 
 void
@@ -1033,7 +1038,7 @@ replay( fd_ledger_args_t * args ) {
   /* Check number of records in funk. If rec_cnt == 0, then it can be assumed
      that you need to load in snapshot(s). */
   ulong rec_cnt = fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) );
-  if( rec_cnt == 0 ) {
+  if( rec_cnt == 0 ) { /* If funk is empty set up epoch and slot ctxs */
     uchar * epoch_ctx_mem = fd_wksp_alloc_laddr( wksp, fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( args->vote_acct_max ), FD_EXEC_EPOCH_CTX_MAGIC );
     fd_exec_epoch_ctx_t * epoch_ctx = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, args->vote_acct_max ) );
 
@@ -1133,6 +1138,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   ulong        pages_pruned            = fd_env_strip_cmdline_ulong( &argc, &argv, "--page-cnt-pruned",         NULL, ULONG_MAX );
   int          funk_only               = fd_env_strip_cmdline_int  ( &argc, &argv, "--funk-only",               NULL, 0         );
   char const * checkpt                 = fd_env_strip_cmdline_cstr ( &argc, &argv, "--checkpt",                 NULL, NULL      );
+  char const * funk_checkpt            = fd_env_strip_cmdline_cstr ( &argc, &argv, "--funk-checkpt",            NULL, NULL      );
   char const * capture_fpath           = fd_env_strip_cmdline_cstr ( &argc, &argv, "--capture-solcap",          NULL, NULL      );
   int          capture_txns            = fd_env_strip_cmdline_int  ( &argc, &argv, "--capture-txns",            NULL, 1         );
   char const * checkpt_path            = fd_env_strip_cmdline_cstr ( &argc, &argv, "--checkpt-path",            NULL, NULL      );
@@ -1185,7 +1191,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   if ( use_funk_wksp ) {
     fd_wksp_t * funk_wksp = NULL;
     if( wksp_name_funk == NULL ) {
-      FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local workspace" ));
+      FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local funk workspace" ));
       funk_wksp = fd_wksp_new_anonymous( FD_SHMEM_GIGANTIC_PAGE_SZ, funk_page_cnt, 0, "funk_wksp", 0UL );
     } else {
       fd_shmem_info_t shmem_info[1];
@@ -1215,6 +1221,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   args->end_slot                = end_slot;
   args->rocksdb_dir             = rocksdb_dir;
   args->checkpt                 = checkpt;
+  args->funk_checkpt            = funk_checkpt;
   args->shred_max               = shred_max;
   args->slot_history_max        = slot_history_max;
   args->txns_max                = txns_max;
