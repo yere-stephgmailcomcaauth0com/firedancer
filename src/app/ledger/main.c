@@ -1014,7 +1014,7 @@ replay( fd_ledger_args_t * args ) {
     fd_ledger --restore-funk <CHECKPOINT_TO_LOAD_IN> --cmd replay --page-cnt 400
               --abort-on-mismatch 1 --tile-cpus 5-21 --allocator wksp
               --rocksdb dump/rocksdb --checkpt-path dump/checkpoint_new
-              --checkpt-freq 1000 
+              --checkpt-freq 1000 --funk-only 1 --on-demand-block-ingest 1
 
     Example command directly loading in a rocksdb and snapshot and replaying.
     fd_ledger --reset 1 --cmd replay --rocksdb dump/mainnet-257068890/rocksdb --index-max 5000000
@@ -1033,7 +1033,7 @@ replay( fd_ledger_args_t * args ) {
   /* Check number of records in funk. If rec_cnt == 0, then it can be assumed
      that you need to load in snapshot(s). */
   ulong rec_cnt = fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) );
-  if ( rec_cnt == 0 ) {
+  if( rec_cnt == 0 ) {
     uchar * epoch_ctx_mem = fd_wksp_alloc_laddr( wksp, fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( args->vote_acct_max ), FD_EXEC_EPOCH_CTX_MAGIC );
     fd_exec_epoch_ctx_t * epoch_ctx = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, args->vote_acct_max ) );
 
@@ -1131,7 +1131,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   char const * mini_db_dir             = fd_env_strip_cmdline_cstr ( &argc, &argv, "--minified-rocksdb",        NULL, NULL      );
   ulong        index_max_pruned        = fd_env_strip_cmdline_ulong( &argc, &argv, "--index-max-pruned",        NULL, 450000000 );
   ulong        pages_pruned            = fd_env_strip_cmdline_ulong( &argc, &argv, "--page-cnt-pruned",         NULL, ULONG_MAX );
-  int          funk_only               = fd_env_strip_cmdline_int  ( &argc, &argv, "--funk-only",               NULL, 1         );
+  int          funk_only               = fd_env_strip_cmdline_int  ( &argc, &argv, "--funk-only",               NULL, 0         );
   char const * checkpt                 = fd_env_strip_cmdline_cstr ( &argc, &argv, "--checkpt",                 NULL, NULL      );
   char const * capture_fpath           = fd_env_strip_cmdline_cstr ( &argc, &argv, "--capture-solcap",          NULL, NULL      );
   int          capture_txns            = fd_env_strip_cmdline_int  ( &argc, &argv, "--capture-txns",            NULL, 1         );
@@ -1140,12 +1140,13 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   ulong        checkpt_freq            = fd_env_strip_cmdline_ulong( &argc, &argv, "--checkpt-freq",            NULL, ULONG_MAX );
   char const * allocator               = fd_env_strip_cmdline_cstr ( &argc, &argv, "--allocator",               NULL, "wksp"    );
   int          abort_on_mismatch       = fd_env_strip_cmdline_int  ( &argc, &argv, "--abort-on-mismatch",       NULL, 1         );
-  int          on_demand_block_ingest  = fd_env_strip_cmdline_int  ( &argc, &argv, "--on-demand-block-ingest",  NULL, 1         );
+  int          on_demand_block_ingest  = fd_env_strip_cmdline_int  ( &argc, &argv, "--on-demand-block-ingest",  NULL, 0         );
   ulong        on_demand_block_history = fd_env_strip_cmdline_ulong( &argc, &argv, "--on-demand-block-history", NULL, 100       );
   int          dump_insn_to_pb         = fd_env_strip_cmdline_int  ( &argc, &argv, "--dump-insn-to-pb",         NULL, 0         );
   char const * dump_insn_sig_filter    = fd_env_strip_cmdline_cstr ( &argc, &argv, "--dump-insn-sig-filter",    NULL, NULL      );
   char const * dump_insn_output_dir    = fd_env_strip_cmdline_cstr ( &argc, &argv, "--dump-insn-output-dir",    NULL, NULL      );
   ulong        vote_acct_max           = fd_env_strip_cmdline_ulong( &argc, &argv, "--vote_acct_max",           NULL, 2000000UL );
+  int          use_funk_wksp           = fd_env_strip_cmdline_int  ( &argc, &argv, "--use-funk-wksp",           NULL, 1         );
 
   #ifdef _ENABLE_LTHASH
   char const * lthash             = fd_env_strip_cmdline_cstr ( &argc, &argv, "--lthash",           NULL, "false"   );
@@ -1180,21 +1181,23 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
 
   init_scratch( wksp );
 
-  /* Setup funk workspace if specified. This is enabled by default */
-  fd_wksp_t * funk_wksp = NULL;
-  if( wksp_name_funk == NULL ) {
-    FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local workspace" ));
-    funk_wksp = fd_wksp_new_anonymous( FD_SHMEM_GIGANTIC_PAGE_SZ, funk_page_cnt, 0, "funk_wksp", 0UL );
-  } else {
-    fd_shmem_info_t shmem_info[1];
-    if ( FD_UNLIKELY( fd_shmem_info( wksp_name_funk, 0UL, shmem_info ) ) )
-      FD_LOG_ERR(( "unable to query region \"%s\"\n\tprobably does not exist or bad permissions", wksp_name_funk ));
-    funk_wksp = fd_wksp_attach( wksp_name_funk );
+  /* Setup funk workspace if specified. */
+  if ( use_funk_wksp ) {
+    fd_wksp_t * funk_wksp = NULL;
+    if( wksp_name_funk == NULL ) {
+      FD_LOG_NOTICE(( "--wksp-name-funk not specified, using an anonymous local workspace" ));
+      funk_wksp = fd_wksp_new_anonymous( FD_SHMEM_GIGANTIC_PAGE_SZ, funk_page_cnt, 0, "funk_wksp", 0UL );
+    } else {
+      fd_shmem_info_t shmem_info[1];
+      if ( FD_UNLIKELY( fd_shmem_info( wksp_name_funk, 0UL, shmem_info ) ) )
+        FD_LOG_ERR(( "unable to query region \"%s\"\n\tprobably does not exist or bad permissions", wksp_name_funk ));
+      funk_wksp = fd_wksp_attach( wksp_name_funk );
+    }
+    if( reset ) {
+      fd_wksp_reset( funk_wksp, args->hashseed );
+    }
+    args->funk_wksp = funk_wksp;
   }
-  if( reset ) {
-    fd_wksp_reset( funk_wksp, args->hashseed );
-  }
-  args->funk_wksp = funk_wksp;
 
   /* Setup alloc and valloc */
   #define FD_ALLOC_TAG (422UL)

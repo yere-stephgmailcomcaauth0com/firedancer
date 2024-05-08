@@ -46,4 +46,4 @@ run-runtime-test-3: $(OBJDIR)/bin/fd_ledger
 #	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l v20-ledger
 
 run-runtime-test-nightly: $(OBJDIR)/bin/fd_ledger
-	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l mainnet-257033306 -s snapshot-257033306-EE3WdRoE4J1LTjegJMK3ZzxKZbSMQhLMaTM5Jp4SygMU.tar.zst -p 100 -y 300 -m 500000000 -e 257163306 --zst
+	OBJDIR=$(OBJDIR) src/flamenco/runtime/tests/run_ledger_tests.sh -l mainnet-257033306 -s snapshot-257033306-EE3WdRoE4J1LTjegJMK3ZzxKZbSMQhLMaTM5Jp4SygMU.tar.zst -p 50 -y 350 -m 500000000 -e 257163306 --zst
