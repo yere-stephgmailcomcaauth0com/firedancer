@@ -965,15 +965,12 @@ fd_load_nonce_account( fd_exec_txn_ctx_t const *   txn_ctx,
 int
 fd_has_nonce_account( fd_exec_txn_ctx_t const * txn_ctx, int * perr ) {
   ushort recent_blockhash_off = txn_ctx->txn_descriptor->recent_blockhash_off;
-  fd_hash_t * recent_blockhash = (fd_hash_t *)((uchar *)txn_ctx->_txn_raw->raw + recent_blockhash_off);
-
-  fd_block_block_hash_entry_t * hashes_deque   = txn_ctx->slot_ctx->slot_bank.recent_block_hashes.hashes;
-  fd_block_block_hash_entry_t * last_blockhash = deq_fd_block_block_hash_entry_t_peek_tail( hashes_deque );
-  fd_hash_t * last_blockhash_hash = &last_blockhash->blockhash;
-  
+  fd_hash_t * recent_block_hash = (fd_hash_t *)((uchar *)txn_ctx->_txn_raw->raw + recent_blockhash_off);
+  fd_block_hash_queue_t block_hash_queue = txn_ctx->slot_ctx->slot_bank.block_hash_queue;
+  fd_hash_t * last_block_hash = block_hash_queue.last_hash;
 
   /* https://github.com/firedancer-io/solana/blob/4b31032e68f85848b02fcc4c9e580d57f32ec04b/runtime/src/bank.rs#L4755 */
-  if( memcmp( last_blockhash_hash, recent_blockhash, sizeof(fd_hash_t) ) == 0 ) { /* Is advanceable check */
+  if( memcmp( last_block_hash, recent_block_hash, sizeof(fd_hash_t) ) == 0 ) { /* Is advanceable check */
     return 0;
   }
 
@@ -1040,7 +1037,7 @@ fd_has_nonce_account( fd_exec_txn_ctx_t const * txn_ctx, int * perr ) {
     return 0;
   }
 
-  if( memcmp( &nonce_state.inner.initialized.durable_nonce, recent_blockhash, sizeof( fd_hash_t ) ) ) {
+  if( memcmp( &nonce_state.inner.initialized.durable_nonce, recent_block_hash, sizeof( fd_hash_t ) ) ) {
     return 0;
   }
 
