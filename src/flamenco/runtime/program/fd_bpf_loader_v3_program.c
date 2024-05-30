@@ -194,7 +194,7 @@ fd_bpf_loader_v3_user_execute( fd_exec_instr_ctx_t ctx ) {
 #ifdef FD_DEBUG_SBPF_TRACES
 uchar * signature = (uchar*)vm->instr_ctx->txn_ctx->_txn_raw->raw + vm->instr_ctx->txn_ctx->txn_descriptor->signature_off;
 uchar   sig[64];
-fd_base58_decode_64( "LKBxtETTpyVDbW1kT5fFucSpmdPoXfKW8QUxdzE8ggwCaXayByPbceQA6KwqGy2WNh89aAG3r2Qjm9VNY9FPtw9", sig );
+fd_base58_decode_64( "5h1aJ53DzuHKPddGLAFWUYSALTbgyzXNtaDDFps6VqGzyjam9wVBcVrYx4i9XLKno1fPAmgidZqVaAB2Jib6UNM9", sig );
 if( FD_UNLIKELY( !memcmp( signature, sig, 64UL ) ) ) {
   ulong event_max      = 1UL<<30;
   ulong event_data_max = 2048UL;
