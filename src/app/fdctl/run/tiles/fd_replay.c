@@ -50,6 +50,8 @@
 #define VOTE_ACC_MAX ( 2000000UL )
 #define FORKS_MAX    ( fd_ulong_pow2_up( FD_DEFAULT_SLOTS_PER_EPOCH ) )
 
+#define BANK_HASH_CMP_LG_MAX 16
+
 struct fd_replay_tile_ctx {
   fd_wksp_t * wksp;
 
@@ -147,7 +149,7 @@ scratch_footprint( fd_topo_tile_t const * tile FD_PARAM_UNUSED ) {
   l = FD_LAYOUT_APPEND( l, fd_latest_vote_deque_align(), fd_latest_vote_deque_footprint() );
   l = FD_LAYOUT_APPEND( l, FD_CAPTURE_CTX_ALIGN, FD_CAPTURE_CTX_FOOTPRINT );
 
-  l = FD_LAYOUT_APPEND( l, fd_bank_hash_cmp_align(), fd_bank_hash_cmp_footprint( 10 ) );
+  l = FD_LAYOUT_APPEND( l, fd_bank_hash_cmp_align(), fd_bank_hash_cmp_footprint( BANK_HASH_CMP_LG_MAX ) );
 
   l = FD_LAYOUT_APPEND( l, fd_bft_align(), fd_bft_footprint() );
   l = FD_LAYOUT_APPEND(
@@ -904,7 +906,7 @@ unprivileged_init( fd_topo_t * topo, fd_topo_tile_t * tile, void * scratch ) {
       FD_SCRATCH_ALLOC_APPEND( l, FD_CAPTURE_CTX_ALIGN, FD_CAPTURE_CTX_FOOTPRINT );
 
   void * bank_hash_cmp_mem =
-      FD_SCRATCH_ALLOC_APPEND( l, fd_bank_hash_cmp_align(), fd_bank_hash_cmp_footprint( 10 ) );
+      FD_SCRATCH_ALLOC_APPEND( l, fd_bank_hash_cmp_align(), fd_bank_hash_cmp_footprint( BANK_HASH_CMP_LG_MAX ) );
 
   void * bft_mem   = FD_SCRATCH_ALLOC_APPEND( l, fd_bft_align(), fd_bft_footprint() );
   void * ghost_mem = FD_SCRATCH_ALLOC_APPEND(
@@ -1056,7 +1058,7 @@ unprivileged_init( fd_topo_t * topo, fd_topo_tile_t * tile, void * scratch ) {
   }
 
   ctx->epoch_ctx->bank_hash_cmp =
-      fd_bank_hash_cmp_join( fd_bank_hash_cmp_new( bank_hash_cmp_mem, 10 ) );
+      fd_bank_hash_cmp_join( fd_bank_hash_cmp_new( bank_hash_cmp_mem, BANK_HASH_CMP_LG_MAX ) );
 
   ctx->bft   = fd_bft_join( fd_bft_new( bft_mem ) );
   ctx->ghost = fd_ghost_join(
