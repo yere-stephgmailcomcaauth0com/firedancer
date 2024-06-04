@@ -121,7 +121,8 @@ fd_bank_hash_cmp_insert( fd_bank_hash_cmp_t * bank_hash_cmp,
       FD_LOG_WARNING( ( "Bank matches unexpectedly full. Clearing. " ) );
       for( ulong i = 0; i < fd_bank_hash_cmp_map_key_max( bank_hash_cmp->map ); i++ ) {
         fd_bank_hash_cmp_entry_t * entry = &bank_hash_cmp->map[i];
-        if( FD_LIKELY( entry->slot < bank_hash_cmp->slot ) ) {
+        if( FD_LIKELY( !fd_bank_hash_cmp_map_key_inval( entry->slot ) &&
+                       entry->slot < bank_hash_cmp->slot ) ) {
           fd_bank_hash_cmp_map_remove( bank_hash_cmp->map, entry );
         }
       }
