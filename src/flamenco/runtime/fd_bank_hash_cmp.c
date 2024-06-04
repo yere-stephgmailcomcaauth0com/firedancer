@@ -119,6 +119,12 @@ fd_bank_hash_cmp_insert( fd_bank_hash_cmp_t * bank_hash_cmp,
     if( FD_UNLIKELY( fd_bank_hash_cmp_map_key_cnt( bank_hash_cmp->map ) ==
                      fd_bank_hash_cmp_map_key_max( bank_hash_cmp->map ) ) ) {
       FD_LOG_WARNING( ( "Bank matches unexpectedly full. Clearing. " ) );
+      for( ulong i = 0; i < fd_bank_hash_cmp_map_key_max( bank_hash_cmp->map ); i++ ) {
+        fd_bank_hash_cmp_entry_t * entry = &bank_hash_cmp->map[i];
+        if( FD_LIKELY( entry->slot < bank_hash_cmp->slot ) ) {
+          fd_bank_hash_cmp_map_remove( bank_hash_cmp->map, entry );
+        }
+      }
       fd_bank_hash_cmp_map_clear( bank_hash_cmp->map );
     }
 
@@ -211,15 +217,15 @@ fd_bank_hash_cmp_check( fd_bank_hash_cmp_t * bank_hash_cmp, ulong slot ) {
       FD_LOG_ERR( ( "bank hash mismatch on %lu, shutting down!", cmp->slot ) );
     } else {
       FD_LOG_NOTICE( ( "\n\n[Bank Hash Comparison]\n"
-                        "slot:   %lu\n"
-                        "ours:   %32J\n"
-                        "theirs: %32J\n"
-                        "stake:  %.0lf%%\n"
-                        "result: match!\n",
-                        cmp->slot,
-                        cmp->ours.hash,
-                        theirs->hash,
-                        pct * 100 ) );
+                       "slot:   %lu\n"
+                       "ours:   %32J\n"
+                       "theirs: %32J\n"
+                       "stake:  %.0lf%%\n"
+                       "result: match!\n",
+                       cmp->slot,
+                       cmp->ours.hash,
+                       theirs->hash,
+                       pct * 100 ) );
     }
     fd_bank_hash_cmp_map_remove( bank_hash_cmp->map, cmp );
     return 1;
