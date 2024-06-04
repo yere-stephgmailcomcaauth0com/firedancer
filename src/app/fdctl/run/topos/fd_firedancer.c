@@ -1,5 +1,5 @@
 /* Firedancer topology used for testing the full validator.
-   Associated test script: test-firedancer.sh */
+   Associated test script: test_firedancer.sh */
 #include "topos.h"
 #include "../tiles/tiles.h"
 #include "../../config.h"
@@ -62,6 +62,7 @@ fd_topo_firedancer( config_t * _config ) {
   fd_topob_wksp( topo, "bhole"      );
   fd_topob_wksp( topo, "bstore"     );
   fd_topob_wksp( topo, "funk"       );
+  fd_topob_wksp( topo, "fturb"      );
 
   #define FOR(cnt) for( ulong i=0UL; i<cnt; i++ )
 
@@ -152,6 +153,11 @@ fd_topo_firedancer( config_t * _config ) {
                      "individual tile counts in the [layout] section of the configuration file.",
                      topo->tile_cnt, affinity_tile_cnt ));
   }
+
+  fd_topo_obj_t * busy_obj = fd_topob_obj( topo, "fseq", "fturb" );
+  fd_topob_tile_uses( topo, store_tile, busy_obj, FD_SHMEM_JOIN_MODE_READ_WRITE );
+  fd_topob_tile_uses( topo, replay_tile, busy_obj, FD_SHMEM_JOIN_MODE_READ_ONLY );
+  FD_TEST( fd_pod_insertf_ulong( topo->props, busy_obj->id, "first_turbine" ) );
 
   /*                                      topo, tile_name, tile_kind_id, fseq_wksp,   link_name,      link_kind_id, reliable,            polled */
   FOR(net_tile_cnt) for( ulong j=0UL; j<shred_tile_cnt; j++ )
@@ -251,6 +257,7 @@ fd_topo_firedancer( config_t * _config ) {
 
     } else if( FD_UNLIKELY( !strcmp( tile->name, "storei" ) ) ) {
       strncpy( tile->store_int.identity_key_path, config->consensus.identity_path, sizeof(tile->store_int.identity_key_path) );
+      strncpy( tile->store_int.blockstore, config->tiles.store_int.blockstore, sizeof(tile->store_int.blockstore) );
     } else if( FD_UNLIKELY( !strcmp( tile->name, "gossip" ) ) ) {
       tile->gossip.ip_addr = config->tiles.net.ip_addr;
       memcpy( tile->gossip.src_mac_addr, config->tiles.net.mac_addr, 6UL );

@@ -674,10 +674,10 @@ is_good_peer( fd_active_elem_t * val ) {
 
 static void
 fd_actives_shuffle( fd_repair_t * repair ) {
-  if( repair->stake_weights_cnt == 0 ) {
-    FD_LOG_WARNING(( "repair does not have stake weights yet, cannot shuffle active set" ));
-    return;
-  }
+  // if( repair->stake_weights_cnt == 0 ) {
+  //   FD_LOG_WARNING(( "repair does not have stake weights yet, cannot shuffle active set" ));
+  //   return;
+  // }
 
   FD_SCRATCH_SCOPE_BEGIN {
     /* Find all the usable stake holders */
@@ -848,7 +848,7 @@ fd_repair_need_orphan( fd_repair_t * glob, ulong slot ) {
     return -1;
   };
   fd_pubkey_t * const id = &peer->key;
-  FD_LOG_NOTICE( ( "[repair] need orphan %lu from %32J", slot, id ) );
+  // FD_LOG_NOTICE( ( "[repair] need orphan %lu from %32J", slot, id ) );
   fd_dupdetect_key_t dupkey = { .type = fd_needed_orphan, .slot = slot, .shred_index = UINT_MAX };
   if( fd_dupdetect_table_query( glob->dupdetect, &dupkey, NULL ) != NULL ) {
     fd_repair_unlock( glob );

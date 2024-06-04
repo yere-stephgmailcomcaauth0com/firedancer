@@ -998,6 +998,9 @@ fd_execute_txn_prepare_phase4( fd_exec_slot_ctx_t * slot_ctx,
     TODO this should probably not run on executable accounts
         Also iterate over LUT accounts */
   if( FD_FEATURE_ACTIVE( slot_ctx, set_exempt_rent_epoch_max ) ) {
+    if ( FD_UNLIKELY( !txn_ctx || !txn_ctx->_txn_raw->raw ) ) {
+      return 1;
+    }
     fd_pubkey_t * tx_accs   = (fd_pubkey_t *)((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->acct_addr_off);
     for( fd_txn_acct_iter_t ctrl = fd_txn_acct_iter_init( txn_ctx->txn_descriptor, FD_TXN_ACCT_CAT_WRITABLE );
          ctrl != fd_txn_acct_iter_end(); ctrl=fd_txn_acct_iter_next( ctrl ) ) {
@@ -1085,7 +1088,9 @@ fd_execute_txn( fd_exec_txn_ctx_t * txn_ctx ) {
     if ( FD_FEATURE_ACTIVE( txn_ctx->slot_ctx, cap_transaction_accounts_data_size ) ) {
       int ret = fd_cap_transaction_accounts_data_size( txn_ctx, instrs, txn_ctx->txn_descriptor->instr_cnt );
       if ( ret != FD_EXECUTOR_INSTR_SUCCESS ) {
+        fd_funk_start_write(txn_ctx->acc_mgr->funk);
         fd_funk_txn_cancel(txn_ctx->acc_mgr->funk, txn_ctx->funk_txn, 0);
+        fd_funk_end_write(txn_ctx->acc_mgr->funk);
         return ret;
       }
     }

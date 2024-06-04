@@ -98,6 +98,60 @@ struct fd_repair_tile_ctx {
 };
 typedef struct fd_repair_tile_ctx fd_repair_tile_ctx_t;
 
+#define MAX_ADDR_STRLEN      128
+static fd_repair_peer_addr_t *
+resolve_hostport( const char * str /* host:port */, fd_repair_peer_addr_t * res ) {
+  fd_memset( res, 0, sizeof( fd_repair_peer_addr_t ) );
+
+  /* Find the : and copy out the host */
+  char buf[MAX_ADDR_STRLEN];
+  uint i;
+  for( i = 0;; ++i ) {
+    if( str[i] == '\0' || i > sizeof( buf ) - 1U ) {
+      FD_LOG_ERR( ( "missing colon" ) );
+      return NULL;
+    }
+    if( str[i] == ':' ) {
+      buf[i] = '\0';
+      break;
+    }
+    buf[i] = str[i];
+  }
+  if( i == 0 || strcmp( buf, "localhost" ) == 0 ||
+      strcmp( buf, "127.0.0.1" ) == 0 ) /* :port means $HOST:port */
+    gethostname( buf, sizeof( buf ) );
+
+  struct hostent * host = gethostbyname( buf );
+  if( host == NULL ) {
+    FD_LOG_WARNING( ( "unable to resolve host %s", buf ) );
+    return NULL;
+  }
+  /* Convert result to repair address */
+  res->l    = 0;
+  res->addr = ( (struct in_addr *)host->h_addr_list[0] )->s_addr;
+  int port  = atoi( str + i + 1 );
+  if( ( port > 0 && port < 1024 ) || port > (int)USHORT_MAX ) {
+    FD_LOG_ERR( ( "invalid port number" ) );
+    return NULL;
+  }
+  res->port = htons( (ushort)port );
+
+  return res;
+}
+
+FD_FN_UNUSED static void
+add_perm( fd_repair_t * repair, const char * repair_peer_id, const char * repair_peer_addr ) {
+  fd_pubkey_t _repair_peer_id;
+  fd_base58_decode_32( repair_peer_id, _repair_peer_id.uc );
+  fd_repair_peer_addr_t _repair_peer_addr = { 0 };
+  if( FD_UNLIKELY( fd_repair_add_active_peer(
+          repair, resolve_hostport( repair_peer_addr, &_repair_peer_addr ), &_repair_peer_id ) ) ) {
+    FD_LOG_ERR( ( "error adding repair active peer" ) );
+  }
+  fd_repair_add_sticky( repair, &_repair_peer_id );
+  fd_repair_set_permanent( repair, &_repair_peer_id );
+}
+
 FD_FN_CONST static inline ulong
 scratch_align( void ) {
   return 128UL;

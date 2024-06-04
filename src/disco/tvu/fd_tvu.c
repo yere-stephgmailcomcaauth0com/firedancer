@@ -459,9 +459,6 @@ fd_tvu_main( fd_runtime_ctx_t *    runtime_ctx,
   if( fd_gossip_update_tvu_addr( runtime_ctx->gossip, tvu_addr, tvu_fwd_addr ) )
     FD_LOG_ERR( ( "error setting gossip tvu" ) );
 
-  if( runtime_args->tcnt < 3 )
-    FD_LOG_ERR(( "tcnt parameter must be >= 3 in live case" ));
-
   /* FIXME: replace with real tile */
   struct fd_turbine_thread_args ttarg =
     { .tvu_fd = tvu_fd, .replay = replay };
@@ -482,18 +479,6 @@ fd_tvu_main( fd_runtime_ctx_t *    runtime_ctx,
   tile = fd_tile_exec_new( 3, fd_gossip_thread, 0, fd_type_pun( &gosarg ) );
   if( tile == NULL )
     FD_LOG_ERR( ( "error creating repair thread" ) );
-
-  fd_tpool_t * tpool = NULL;
-  if( runtime_args->tcnt > 3 ) {
-    tpool = fd_tpool_init( runtime_ctx->tpool_mem, runtime_args->tcnt - 3 );
-    if( tpool == NULL ) FD_LOG_ERR( ( "failed to create thread pool" ) );
-    for( ulong i = 4; i < runtime_args->tcnt; ++i ) {
-      if( fd_tpool_worker_push( tpool, i, NULL, fd_scratch_smem_footprint( 256UL<<20UL ) ) == NULL )
-        FD_LOG_ERR( ( "failed to launch worker" ) );
-    }
-  }
-  replay->tpool       = runtime_ctx->tpool       = tpool;
-  replay->max_workers = runtime_ctx->max_workers = runtime_args->tcnt-3;
 
   if( runtime_ctx->need_incr_snap ) {
     /* Wait for first turbine packet before grabbing the incremental snapshot */
@@ -743,6 +728,7 @@ void funk_setup( fd_wksp_t *  wksp,
   }
 }
 
+static
 fd_valloc_t allocator_setup( fd_wksp_t *  wksp, char const * allocator ) {
   FD_TEST( wksp );
 
@@ -971,7 +957,7 @@ void snapshot_setup( char const * snapshot,
 
     /* Open the command for reading. */
     char   cmd[128];
-    snprintf( cmd, sizeof( cmd ), "./shenanigans.sh %s", snapshot );
+    snprintf( cmd, sizeof( cmd ), "./download_incremental.sh %s", snapshot );
     FD_LOG_NOTICE(("cmd: %s", cmd));
     fp = popen( cmd, "r" );
     if( fp == NULL ) {
@@ -1054,7 +1040,7 @@ snapshot_insert( fd_fork_t *        fork,
   replay->bft->snapshot_slot = snapshot_slot;
 
   /* Add snapshot slot to bash hash cmp. */
-  fd_bank_hash_cmp_t * bank_hash_cmp = fd_exec_epoch_ctx_bank_hash_cmp( replay->epoch_ctx );
+  fd_bank_hash_cmp_t * bank_hash_cmp = replay->epoch_ctx->bank_hash_cmp;
   bank_hash_cmp->slot = snapshot_slot;
 
   /* Set the SMR on replay.*/
@@ -1209,8 +1195,8 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
   /* Thread pool                                                        */
   /**********************************************************************/
 
-  runtime_ctx->tpool       = NULL;
-  runtime_ctx->max_workers = 0;
+  // runtime_ctx->tpool       = NULL;
+  // runtime_ctx->max_workers = 0;
 
   if( runtime_ctx->live ) {
 #ifdef FD_HAS_LIBMICROHTTP
@@ -1370,7 +1356,7 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
     /* bank hash cmp */
 
     int    bank_hash_cmp_lg_slot_cnt = 10; /* max vote lag 512 => fill ratio 0.5 => 1024 */
-    void * bank_hash_cmp_mem = fd_exec_epoch_ctx_bank_hash_cmp( replay_setup_out.replay->epoch_ctx );
+    void * bank_hash_cmp_mem = replay_setup_out.replay->epoch_ctx->bank_hash_cmp;
 
     fd_bank_hash_cmp_join(
         fd_bank_hash_cmp_new( bank_hash_cmp_mem, bank_hash_cmp_lg_slot_cnt ) );
@@ -1403,7 +1389,7 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
   fd_runtime_update_leaders( slot_ctx_setup_out.exec_slot_ctx, slot_ctx_setup_out.exec_slot_ctx->slot_bank.slot );
   fd_calculate_epoch_accounts_hash_values( slot_ctx_setup_out.exec_slot_ctx );
   fd_funk_start_write( funk_setup_out.funk );
-  fd_bpf_scan_and_create_bpf_program_cache_entry( slot_ctx_setup_out.exec_slot_ctx, slot_ctx_setup_out.exec_slot_ctx->funk_txn );
+  fd_bpf_scan_and_create_bpf_program_cache_entry_tpool( slot_ctx_setup_out.exec_slot_ctx, slot_ctx_setup_out.exec_slot_ctx->funk_txn, runtime_ctx->tpool, runtime_ctx->max_workers );
   fd_funk_end_write( funk_setup_out.funk );
 
   if( FD_LIKELY( snapshot_setup_out.snapshot_slot != 0 ) ) {
