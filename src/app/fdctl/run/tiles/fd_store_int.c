@@ -235,7 +235,7 @@ fd_store_tile_slot_prepare( fd_store_tile_ctx_t * ctx,
   fd_repair_request_t * repair_reqs = fd_chunk_to_laddr( ctx->repair_req_out_mem, ctx->repair_req_out_chunk );
   fd_epoch_leaders_t const * lsched = fd_stake_ci_get_lsched_for_slot( ctx->stake_ci, slot );
   if( FD_UNLIKELY( !lsched ) ) {
-    FD_LOG_WARNING(("Get leader schedule for slot %lu failed", slot));
+    FD_LOG_DEBUG(("Get leader schedule for slot %lu failed", slot));
     return;
   }
 
@@ -444,33 +444,33 @@ unprivileged_init( fd_topo_t *      topo,
   }
 
 
-  void * shmem = fd_wksp_alloc_laddr(
-      ctx->blockstore_wksp, fd_blockstore_align(), fd_blockstore_footprint(), FD_BLOCKSTORE_MAGIC );
-  if( shmem == NULL ) FD_LOG_ERR( ( "failed to allocate a blockstore" ) );
+  // void * shmem = fd_wksp_alloc_laddr(
+  //     ctx->blockstore_wksp, fd_blockstore_align(), fd_blockstore_footprint(), FD_BLOCKSTORE_MAGIC );
+  // if( shmem == NULL ) FD_LOG_ERR( ( "failed to allocate a blockstore" ) );
 
   // Sensible defaults for an anon blockstore:
   // - 1mb of shreds
   // - 64 slots of history (~= finalized = 31 slots on top of a confirmed block)
   // - 1mb of txns
-  ulong tmp_shred_max    = 1UL << 24;
-  ulong slot_history_max = FD_BLOCKSTORE_SLOT_HISTORY_MAX;
-  int   lg_txn_max       = 24;
-  ctx->blockstore        = fd_blockstore_join( fd_blockstore_new(
-      shmem, 1, ctx->blockstore_seed, tmp_shred_max, slot_history_max, lg_txn_max ) );
+  // ulong tmp_shred_max    = 1UL << 24;
+  // ulong slot_history_max = FD_BLOCKSTORE_SLOT_HISTORY_MAX;
+  // int   lg_txn_max       = 24;
+  // ctx->blockstore        = fd_blockstore_join( fd_blockstore_new(
+  //     shmem, 1, ctx->blockstore_seed, tmp_shred_max, slot_history_max, lg_txn_max ) );
 
-  // FD_LOG_NOTICE( ( "starting blockstore wksp restore..." ) );
-  // int err = fd_wksp_restore(
-  //     ctx->blockstore_wksp, tile->store_int.blockstore, (uint)FD_BLOCKSTORE_MAGIC );
-  // FD_LOG_NOTICE( ( "finished wksp restore..." ) );
-  // if( err ) { FD_LOG_ERR( ( "failed to restore %s: error %d", tile->store_int.blockstore, err ) ); }
+  FD_LOG_NOTICE( ( "starting blockstore wksp restore..." ) );
+  int err = fd_wksp_restore(
+      ctx->blockstore_wksp, tile->store_int.blockstore, (uint)FD_BLOCKSTORE_MAGIC );
+  FD_LOG_NOTICE( ( "finished wksp restore..." ) );
+  if( err ) { FD_LOG_ERR( ( "failed to restore %s: error %d", tile->store_int.blockstore, err ) ); }
 
-  // fd_wksp_tag_query_info_t info;
-  // ulong tag = FD_BLOCKSTORE_MAGIC;
-  // if( fd_wksp_tag_query( ctx->blockstore_wksp, &tag, 1, &info, 1 ) > 0 ) {
-  //   void * shmem    = fd_wksp_laddr_fast( ctx->blockstore_wksp, info.gaddr_lo );
-  //   ctx->blockstore = fd_blockstore_join( shmem );
-  //   FD_TEST( ctx->blockstore );
-  // }
+  fd_wksp_tag_query_info_t info;
+  ulong tag = FD_BLOCKSTORE_MAGIC;
+  if( fd_wksp_tag_query( ctx->blockstore_wksp, &tag, 1, &info, 1 ) > 0 ) {
+    void * shmem    = fd_wksp_laddr_fast( ctx->blockstore_wksp, info.gaddr_lo );
+    ctx->blockstore = fd_blockstore_join( shmem );
+    FD_TEST( ctx->blockstore );
+  }
 
   ctx->store->blockstore = ctx->blockstore;
 
@@ -535,12 +535,12 @@ unprivileged_init( fd_topo_t *      topo,
     FD_LOG_ERR(( "scratch overflow %lu %lu %lu", scratch_top - (ulong)scratch - scratch_footprint( tile ), scratch_top, (ulong)scratch + scratch_footprint( tile ) ));
   }
 
-  // ulong start = 269129117;
-  // ulong end   = 269280656;
-  // ctx->store->blockstore->smr = 269129117;
-  // for( ulong i = start; i < end; i++ ) {
-  //   fd_store_add_pending( ctx->store, i, i - start );
-  // }
+  ulong start = 270044813;
+  ulong end   = 270044882;
+  ctx->store->blockstore->smr = 270044813;
+  for( ulong i = start; i < end; i++ ) {
+    fd_store_add_pending( ctx->store, i, i - start );
+  }
 }
 
 static ulong

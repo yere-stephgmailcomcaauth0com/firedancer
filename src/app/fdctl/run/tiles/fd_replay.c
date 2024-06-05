@@ -245,8 +245,7 @@ after_frag( void *                 _ctx,
 
   /* do a replay */
   ulong txn_cnt = *opt_sz;
-  // fd_txn_p_t * txns       = (fd_txn_p_t *)fd_chunk_to_laddr( ctx->poh_out_mem, ctx->poh_out_chunk
-  // );
+  fd_txn_p_t * txns       = (fd_txn_p_t *)fd_chunk_to_laddr( ctx->poh_out_mem, ctx->poh_out_chunk);
 
   FD_SCRATCH_SCOPE_BEGIN {
     fd_fork_t * fork = fd_replay_prepare_ctx( ctx->replay, ctx->parent_slot );
@@ -255,88 +254,58 @@ after_frag( void *                 _ctx,
       FD_LOG_NOTICE( (
           "new block execution - slot: %lu, parent_slot: %lu", ctx->curr_slot, ctx->parent_slot ) );
 
-      // fork->slot_ctx.slot_bank.prev_slot = fork->slot_ctx.slot_bank.slot;
-      // fork->slot_ctx.slot_bank.slot      = ctx->curr_slot;
+      fork->slot_ctx.slot_bank.prev_slot = fork->slot_ctx.slot_bank.slot;
+      fork->slot_ctx.slot_bank.slot      = ctx->curr_slot;
 
-      // fork->slot_ctx.latest_votes        = ctx->latest_votes;
-      // fd_latest_vote_deque_remove_all( fork->slot_ctx.latest_votes );
+      fork->slot_ctx.latest_votes        = ctx->latest_votes;
+      fd_latest_vote_deque_remove_all( fork->slot_ctx.latest_votes );
 
-      //      fd_runtime_block_eval_tpool( &fork->slot_ctx,
-      //                              ctx->capture_ctx,
-      //                              fd_blockstore_block_data_laddr( replay->blockstore, fork->head
-      //                              ), fork->head->data_sz, replay->tpool, replay->max_workers, 1,
-      //                              &txn_cnt ) == FD_RUNTIME_EXECUTE_SUCCESS );
+      fd_funk_txn_xid_t xid;
 
-      // fd_funk_txn_xid_t xid;
+      fd_memcpy(xid.uc, ctx->blockhash.uc, sizeof(fd_funk_txn_xid_t));
+      xid.ul[0] = fork->slot_ctx.slot_bank.slot;
+      /* push a new transaction on the stack */
+      fd_funk_start_write( ctx->replay->funk );
+      fork->slot_ctx.funk_txn = fd_funk_txn_prepare(ctx->replay->funk, fork->slot_ctx.funk_txn,
+      &xid, 1); fd_funk_end_write( ctx->replay->funk );
 
-      // fd_memcpy(xid.uc, ctx->blockhash.uc, sizeof(fd_funk_txn_xid_t));
-      // xid.ul[0] = fork->slot_ctx.slot_bank.slot;
-      // /* push a new transaction on the stack */
-      // fd_funk_start_write( ctx->replay->funk );
-      // fork->slot_ctx.funk_txn = fd_funk_txn_prepare(ctx->replay->funk, fork->slot_ctx.funk_txn,
-      // &xid, 1); fd_funk_end_write( ctx->replay->funk );
+      int res = fd_runtime_publish_old_txns( &fork->slot_ctx, ctx->capture_ctx );
+      if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
+        FD_LOG_ERR(( "txn publishing failed" ));
+      }
 
-      // int res = fd_runtime_publish_old_txns( &fork->slot_ctx, ctx->capture_ctx );
-      // if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
-      //   FD_LOG_ERR(( "txn publishing failed" ));
-      // }
-
-      // res = fd_runtime_block_execute_prepare( &fork->slot_ctx );
-      // if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
-      //   FD_LOG_ERR(( "block prep execute failed" ));
-      // }
+      res = fd_runtime_block_execute_prepare( &fork->slot_ctx );
+      if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
+        FD_LOG_ERR(( "block prep execute failed" ));
+      }
     } else if( fork->slot_ctx.slot_bank.slot != ctx->curr_slot ) {
       FD_LOG_ERR( ( "unexpected fork switch mid block execution, cannot continue" ) );
     }
     if( ctx->capture_ctx )
       fd_solcap_writer_set_slot( ctx->capture_ctx->capture, fork->slot_ctx.slot_bank.slot );
     // Exeecute all txns which were succesfully prepared
-    // int res = fd_runtime_execute_txns_in_waves_tpool( &fork->slot_ctx, ctx->capture_ctx,
-    //                                                   txns, txn_cnt,
-    //                                                   ctx->tpool, ctx->max_workers );
-    // if( res != 0 && !( ctx->flags & REPLAY_FLAG_PACKED_MICROBLOCK ) ) {
-    //   FD_LOG_WARNING(( "block invalid - slot: %lu", ctx->curr_slot ));
-    //   *opt_filter = 1;
-    //   return;
-    // }
+    int res = fd_runtime_execute_txns_in_waves_tpool( &fork->slot_ctx, ctx->capture_ctx,
+                                                      txns, txn_cnt,
+                                                      ctx->tpool, ctx->max_workers );
+    if( res != 0 && !( ctx->flags & REPLAY_FLAG_PACKED_MICROBLOCK ) ) {
+      FD_LOG_WARNING(( "block invalid - slot: %lu", ctx->curr_slot ));
+      *opt_filter = 1;
+      return;
+    }
 
     if( ctx->flags & REPLAY_FLAG_FINALIZE_BLOCK ) {
-      if( fork->slot_ctx.slot_bank.slot != ctx->parent_slot ) {
-        __asm__( "int $3" );
-        FD_LOG_ERR( ( "not advancing" ) );
-      }
-
-      fork->slot_ctx.slot_bank.prev_slot = fork->slot_ctx.slot_bank.slot;
-      fork->slot_ctx.slot_bank.slot      = ctx->curr_slot;
-
-      fork->slot_ctx.latest_votes = ctx->latest_votes;
-      fd_latest_vote_deque_remove_all( fork->slot_ctx.latest_votes );
-
-      fd_blockstore_t * blockstore = ctx->replay->blockstore;
-      fd_blockstore_start_read( blockstore );
-      fd_block_t * block = fd_blockstore_block_query( blockstore, ctx->curr_slot );
-      fd_blockstore_end_read( blockstore );
-
-      FD_TEST( fd_runtime_block_eval_tpool( &fork->slot_ctx,
-                                            ctx->capture_ctx,
-                                            fd_blockstore_block_data_laddr( blockstore, block ),
-                                            block->data_sz,
-                                            ctx->replay->tpool,
-                                            ctx->replay->max_workers,
-                                            1,
-                                            &txn_cnt ) == FD_RUNTIME_EXECUTE_SUCCESS );
 
       // Copy over latest blockhash to slot_bank poh for updating the sysvars
       fd_memcpy( fork->slot_ctx.slot_bank.poh.uc, ctx->blockhash.uc, sizeof( fd_hash_t ) );
 
-      // fd_block_info_t block_info[1];
-      // block_info->signature_cnt = fork->slot_ctx.signature_cnt;
-      // int res = fd_runtime_block_execute_finalize_tpool( &fork->slot_ctx, ctx->capture_ctx,
-      // block_info, NULL, 1UL ); if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
-      //   FD_LOG_WARNING(("block finalize failed"));
-      //   *opt_filter = 1;
-      //   return;
-      // }
+      fd_block_info_t block_info[1];
+      block_info->signature_cnt = fork->slot_ctx.signature_cnt;
+      int res = fd_runtime_block_execute_finalize_tpool( &fork->slot_ctx, ctx->capture_ctx,
+      block_info, NULL, 1UL ); if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
+        FD_LOG_WARNING(("block finalize failed"));
+        *opt_filter = 1;
+        return;
+      }
 
       // Notify for all the updated accounts
 #define NOTIFY_START msg = fd_chunk_to_laddr( ctx->notif_out_mem, ctx->notif_out_chunk )
