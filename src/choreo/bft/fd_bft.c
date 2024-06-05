@@ -304,21 +304,15 @@ fd_fork_t *
 fd_bft_fork_choice( fd_bft_t * bft ) {
   // long now = fd_log_wallclock();
   fd_ghost_node_t * head = bft->ghost->root;
+  FD_LOG_NOTICE(("starting at root %lu", head->slot_hash.slot ));
   while( head->child ) {
     fd_ghost_node_t * curr = head;
+    FD_LOG_NOTICE(("curr %lu", curr->slot_hash.slot));
     while( curr ) {
       head     = FD_GHOST_NODE_MAX( curr, head );
       curr     = curr->sibling;
     }
     head = head->child;
-  }
-
-  /* do not pick forks with equivocating blocks along its ancestry. */
-
-  fd_ghost_node_t * ancestor = head;
-  while( ancestor ) {
-    if( FD_UNLIKELY( ancestor->eqv && !ancestor->eqv_safe ) ) return NULL;
-    ancestor = ancestor->parent;
   }
 
   /* search for the fork head in the frontier. */
@@ -331,10 +325,6 @@ fd_bft_fork_choice( fd_bft_t * bft ) {
     FD_LOG_ERR( ( "missing fork head (%lu, %32J)", head->slot_hash.slot, &head->slot_hash.hash ) );
   }
 #endif
-
-  // FD_LOG_NOTICE( ( "picked fork head: slot %lu", fork->slot ) );
-  // FD_LOG_NOTICE( ( "fork selection took %.2lf ms", (double)( fd_log_wallclock() - now ) / 1e6 )
-  // );
 
   return fork;
 }

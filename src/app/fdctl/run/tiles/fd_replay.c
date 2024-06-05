@@ -420,14 +420,25 @@ after_frag( void *                 _ctx,
       fd_fork_t * fork_choice = fd_bft_fork_choice( ctx->replay->bft );
       long        toc         = fd_log_wallclock();
       ulong       vote_cnt    = fd_latest_vote_deque_cnt( ctx->latest_votes );
-      FD_LOG_NOTICE( ( "\n\n[Fork Selection]\n"
-                       "vote count:    %lu \n"
-                       "selected fork: %lu\n"
-                       "took:          %.2lf ms (%ld ns)\n",
-                       vote_cnt,
-                       fork_choice->slot,
-                       (double)( toc - tic ) / 1e6,
-                       toc - tic ) );
+      if( FD_UNLIKELY( fork_choice->slot < fork->slot - 32 ) ) {
+        FD_LOG_WARNING( ( "Fork choice slot is too far behind executed slot. Likely there is a "
+                          "bug in execution that is interfering with our ability to process recent votes." ) );
+
+        /* Don't try to proceed with fork choice and voting as our view of where the stake is probably wrong */
+
+      } else {
+
+        /* TODO add voting and select_vote_and_reset_bank logic here if we have a valid picked fork */
+
+        FD_LOG_NOTICE( ( "\n\n[Fork Selection]\n"
+                         "vote count:    %lu \n"
+                         "selected fork: %lu\n"
+                         "took:          %.2lf ms (%ld ns)\n",
+                         vote_cnt,
+                         fork_choice->slot,
+                         (double)( toc - tic ) / 1e6,
+                         toc - tic ) );
+      }
 
       // ulong cnt = 0;
       // for( fd_fork_frontier_iter_t iter =
