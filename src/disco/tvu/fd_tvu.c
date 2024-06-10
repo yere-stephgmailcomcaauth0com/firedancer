@@ -105,7 +105,7 @@ static int repair_serv_sockfd = -1;
 /* FIXME don't hardcode this */
 #define vote_acct_max (2000000UL)
 
-static void
+static void FD_FN_UNUSED
 repair_deliver_fun( fd_shred_t const *                            shred,
                     FD_PARAM_UNUSED ulong                         shred_sz,
                     FD_PARAM_UNUSED fd_repair_peer_addr_t const * from,
@@ -115,7 +115,7 @@ repair_deliver_fun( fd_shred_t const *                            shred,
   fd_replay_repair_rx( replay, shred );
 }
 
-static void
+static void FD_FN_UNUSED
 gossip_deliver_fun( fd_crds_data_t * data, void * arg ) {
   fd_tvu_gossip_deliver_arg_t * arg_ = (fd_tvu_gossip_deliver_arg_t *)arg;
   if( data->discriminant == fd_crds_data_enum_contact_info_v1 ) {
@@ -129,7 +129,7 @@ gossip_deliver_fun( fd_crds_data_t * data, void * arg ) {
   }
 }
 
-static void
+static void FD_FN_UNUSED
 repair_deliver_fail_fun( fd_pubkey_t const * id,
                          ulong               slot,
                          uint                shred_index,
@@ -144,7 +144,7 @@ repair_deliver_fail_fun( fd_pubkey_t const * id,
 }
 
 /* Convert my style of address to UNIX style */
-static int
+static int FD_FN_UNUSED
 gossip_to_sockaddr( uchar * dst, fd_gossip_peer_addr_t const * src ) {
   fd_memset( dst, 0, sizeof( struct sockaddr_in ) );
   struct sockaddr_in * t = (struct sockaddr_in *)dst;
@@ -155,7 +155,7 @@ gossip_to_sockaddr( uchar * dst, fd_gossip_peer_addr_t const * src ) {
 }
 
 /* Convert my style of address from UNIX style */
-static int
+static int FD_FN_UNUSED
 gossip_from_sockaddr( fd_gossip_peer_addr_t * dst, uchar const * src ) {
   FD_STATIC_ASSERT( sizeof( fd_gossip_peer_addr_t ) == sizeof( ulong ), "messed up size" );
   dst->l                        = 0;
@@ -165,7 +165,7 @@ gossip_from_sockaddr( fd_gossip_peer_addr_t * dst, uchar const * src ) {
   return 0;
 }
 
-static void
+static void FD_FN_UNUSED
 gossip_send_packet( uchar const *                 data,
                     size_t                        sz,
                     fd_gossip_peer_addr_t const * addr,
@@ -185,7 +185,7 @@ gossip_send_packet( uchar const *                 data,
   }
 }
 
-void
+void 
 signer_fun( void *    arg,
             uchar         signature[ static 64 ],
             uchar const * buffer,
@@ -216,7 +216,7 @@ repair_from_sockaddr( fd_repair_peer_addr_t * dst, uchar const * src ) {
   return 0;
 }
 
-static void
+static void  FD_FN_UNUSED
 repair_clnt_send_packet( uchar const * data, size_t sz, fd_repair_peer_addr_t const * addr, void * arg ) {
   // FD_LOG_HEXDUMP_NOTICE( ( "send: ", data, sz ) );
   (void)arg;
@@ -232,7 +232,7 @@ repair_clnt_send_packet( uchar const * data, size_t sz, fd_repair_peer_addr_t co
   }
 }
 
-static void
+static void FD_FN_UNUSED
 repair_serv_send_packet( uchar const * data, size_t sz, fd_repair_peer_addr_t const * addr, void * arg ) {
   // FD_LOG_HEXDUMP_NOTICE( ( "send: ", data, sz ) );
   (void)arg;
@@ -248,7 +248,7 @@ repair_serv_send_packet( uchar const * data, size_t sz, fd_repair_peer_addr_t co
   }
 }
 
-static long
+static long FD_FN_UNUSED
 repair_serv_get_shred( ulong slot, uint shred_idx, void * buf, ulong buf_max, void * arg ) {
   fd_replay_t * replay = (fd_replay_t *)arg;
   fd_blockstore_t * blockstore = replay->blockstore;
@@ -268,7 +268,7 @@ repair_serv_get_shred( ulong slot, uint shred_idx, void * buf, ulong buf_max, vo
   return sz;
 }
 
-static ulong
+static ulong  FD_FN_UNUSED
 repair_serv_get_parent( ulong slot, void * arg ) {
   fd_replay_t * replay = (fd_replay_t *)arg;
   fd_blockstore_t * blockstore = replay->blockstore;
@@ -934,7 +934,7 @@ typedef struct {
 
 void slot_ctx_setup( fd_valloc_t valloc,
                      uchar * epoch_ctx_mem,
-                     fd_fork_t * fork_pool,
+                     uchar * slot_ctx_mem,
                      fd_blockstore_t * blockstore,
                      fd_funk_t * funk,
                      fd_acc_mgr_t * acc_mgr,
@@ -942,8 +942,9 @@ void slot_ctx_setup( fd_valloc_t valloc,
   fd_memset( out, 0, sizeof( slot_ctx_setup_t ) );
 
   out->exec_epoch_ctx   = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, vote_acct_max ) );
-  out->fork             = fd_fork_pool_ele_acquire( fork_pool );
-  out->exec_slot_ctx    = fd_exec_slot_ctx_join( fd_exec_slot_ctx_new( &fork_pool->slot_ctx, valloc ) );
+  out->exec_slot_ctx    = fd_exec_slot_ctx_join( fd_exec_slot_ctx_new( slot_ctx_mem, valloc ) );
+  // out->fork             = fd_fork_pool_ele_acquire( fork_pool );
+  // out->exec_slot_ctx    = fd_exec_slot_ctx_join( fd_exec_slot_ctx_new( &fork_pool->slot_ctx, valloc ) );
 
   FD_TEST( out->exec_slot_ctx );
 
@@ -1099,13 +1100,13 @@ fd_tvu_late_incr_snap( fd_runtime_ctx_t *  runtime_ctx,
 
 void
 fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
-                   fd_replay_t **         replay,
+                   fd_replay_t **         FD_FN_UNUSED replay,
                    fd_exec_slot_ctx_t **  slot_ctx,
-                   fd_keyguard_client_t * keyguard_client,
+                   fd_keyguard_client_t * FD_FN_UNUSED keyguard_client,
                    int                   live,
                    fd_wksp_t *           _wksp,
                    fd_runtime_args_t *   args,
-                   fd_tvu_gossip_deliver_arg_t * gossip_deliver_arg,
+                   fd_tvu_gossip_deliver_arg_t * FD_FN_UNUSED gossip_deliver_arg,
                    fd_capture_ctx_t *    capture_ctx,
                    FILE *                capture_file
  ) {
@@ -1156,42 +1157,16 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
 
   fd_tvu_setup_scratch( valloc );
 
-  turbine_setup_t turbine_setup_out = {0};
-  turbine_setup( wksp, &turbine_setup_out );
-
-  replay_setup_t replay_setup_out = {0};
-  replay_setup( wksp,
-                valloc,
-                turbine_setup_out.data_shreds,
-                turbine_setup_out.parity_shreds,
-                turbine_setup_out.fec_sets,
-                turbine_setup_out.fec_resolver,
-                &replay_setup_out );
-  if( replay != NULL ) *replay = replay_setup_out.replay;
-
-  /* forks */
-
-  ulong        forks_max = fd_ulong_pow2_up( FD_DEFAULT_SLOTS_PER_EPOCH );
-  void *       forks_mem = fd_wksp_alloc_laddr( wksp, fd_forks_align(), fd_forks_footprint( forks_max ), 1UL );
-  fd_forks_t * forks     = fd_forks_join( fd_forks_new( forks_mem, forks_max, 42UL ) );
-  FD_TEST( forks );
-
-  forks->acc_mgr = runtime_ctx->_acc_mgr;
-  forks->blockstore = blockstore_setup_out.blockstore;
-  forks->funk = funk_setup_out.funk;
-  forks->valloc = valloc;
-  replay_setup_out.replay->forks = forks;
   runtime_ctx->epoch_ctx_mem = fd_wksp_alloc_laddr( wksp, fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( vote_acct_max ), FD_EXEC_EPOCH_CTX_MAGIC );
   slot_ctx_setup_t slot_ctx_setup_out = {0};
   slot_ctx_setup( valloc,
                   runtime_ctx->epoch_ctx_mem,
-                  replay_setup_out.replay->forks->pool,
+                  runtime_ctx->slot_ctx_mem,
                   blockstore_setup_out.blockstore,
                   funk_setup_out.funk,
                   runtime_ctx->_acc_mgr,
                   &slot_ctx_setup_out );
 
-  forks->epoch_ctx = slot_ctx_setup_out.exec_epoch_ctx;
 
   if( slot_ctx != NULL ) *slot_ctx = slot_ctx_setup_out.exec_slot_ctx;
   runtime_ctx->epoch_ctx = slot_ctx_setup_out.exec_epoch_ctx;
@@ -1201,213 +1176,11 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
   /**********************************************************************/
   /* snapshots                                                          */
   /**********************************************************************/
-  snapshot_setup_t snapshot_setup_out = {0};
-  if( args->snapshot && args->snapshot[0] != '\0' ) {
-    FD_LOG_NOTICE(("HELLO"));
-    snapshot_setup( args->snapshot,
-                    args->validate_snapshot,
-                    args->check_hash,
-                    slot_ctx_setup_out.exec_slot_ctx,
-                    &snapshot_setup_out );
-  } else {
-    FD_LOG_NOTICE(("HELLO2"));
-    fd_runtime_recover_banks( slot_ctx_setup_out.exec_slot_ctx, 0 );
-  }
-
-  runtime_ctx->need_incr_snap = ( args->incremental_snapshot && args->incremental_snapshot[0] != '\0' );
+  fd_runtime_recover_banks( slot_ctx_setup_out.exec_slot_ctx, 0 );
 
   /**********************************************************************/
   /* Thread pool                                                        */
   /**********************************************************************/
-
-  runtime_ctx->tpool       = NULL;
-  runtime_ctx->max_workers = 0;
-
-  if( runtime_ctx->live ) {
-#ifdef FD_HAS_LIBMICROHTTP
-    /**********************************************************************/
-    /* rpc service                                                        */
-    /**********************************************************************/
-    (*replay)->rpc_ctx =
-        fd_rpc_alloc_ctx( *replay, &runtime_ctx->public_key );
-    fd_rpc_start_service( args->rpc_port, (*replay)->rpc_ctx );
-#endif
-
-    /**********************************************************************/
-    /* Repair                                                             */
-    /**********************************************************************/
-
-    runtime_ctx->repair_config.private_key = runtime_ctx->private_key;
-    runtime_ctx->repair_config.public_key  = &runtime_ctx->public_key;
-
-    FD_TEST( resolve_hostport( args->my_repair_addr, &runtime_ctx->repair_config.intake_addr ) );
-    runtime_ctx->repair_config.service_addr      = runtime_ctx->repair_config.intake_addr;
-    runtime_ctx->repair_config.service_addr.port = 0; /* pick a port */
-
-    runtime_ctx->repair_config.deliver_fun      = repair_deliver_fun;
-    runtime_ctx->repair_config.clnt_send_fun    = repair_clnt_send_packet;
-    runtime_ctx->repair_config.serv_send_fun    = repair_serv_send_packet;
-    runtime_ctx->repair_config.deliver_fail_fun = repair_deliver_fail_fun;
-    runtime_ctx->repair_config.serv_get_shred_fun = repair_serv_get_shred;
-    runtime_ctx->repair_config.serv_get_parent_fun = repair_serv_get_parent;
-    runtime_ctx->repair_config.fun_arg          = replay_setup_out.replay;
-    runtime_ctx->repair_config.sign_fun         = NULL;
-    runtime_ctx->repair_config.sign_arg         = NULL;
-
-    void *        repair_mem = fd_valloc_malloc( valloc, fd_repair_align(), fd_repair_footprint() );
-    fd_repair_t * repair     = fd_repair_join( fd_repair_new( repair_mem, funk_setup_out.hashseed ) );
-    runtime_ctx->repair      = repair;
-
-    if( fd_repair_set_config( repair, &runtime_ctx->repair_config ) ) runtime_ctx->blowup = 1;
-
-    /***********************************************************************/
-    /* ghost                                                               */
-    /***********************************************************************/
-
-    void * ghost_mem =
-        fd_wksp_alloc_laddr( wksp, fd_ghost_align(), fd_ghost_footprint( 1024UL, 1 << 16 ), 42UL );
-    fd_ghost_t * ghost = fd_ghost_join( fd_ghost_new( ghost_mem, 1024UL, 1 << 16, 42UL ) );
-
-    /***********************************************************************/
-    /* latest_votes                                                           */
-    /***********************************************************************/
-
-    void * latest_votes_mem =
-        fd_wksp_alloc_laddr( wksp, fd_latest_vote_deque_align(), fd_latest_vote_deque_footprint(), 42UL );
-    fd_latest_vote_t * latest_votes =
-        fd_latest_vote_deque_join( fd_latest_vote_deque_new( latest_votes_mem ) );
-    FD_TEST( latest_votes );
-
-    /***********************************************************************/
-    /* bft                                                                 */
-    /***********************************************************************/
-
-    void *     bft_mem = fd_wksp_alloc_laddr( wksp, fd_bft_align(), fd_bft_footprint(), 42UL );
-    fd_bft_t * bft     = fd_bft_join( fd_bft_new( bft_mem ) );
-
-    bft->acc_mgr    = forks->acc_mgr;
-    bft->blockstore = forks->blockstore;
-    bft->commitment = NULL;
-    bft->forks      = forks;
-    bft->ghost      = ghost;
-    bft->valloc     = valloc;
-
-    replay_setup_out.replay->bft = bft;
-
-    /**********************************************************************/
-    /* Store                                                              */
-    /**********************************************************************/
-    ulong snapshot_slot = slot_ctx_setup_out.exec_slot_ctx->slot_bank.slot;
-    void *        store_mem = fd_valloc_malloc( valloc, fd_store_align(), fd_store_footprint() );
-    fd_store_t * store     = fd_store_join( fd_store_new( store_mem, snapshot_slot ) );
-    store->blockstore = blockstore_setup_out.blockstore;
-    store->snapshot_slot = snapshot_slot;
-    store->valloc = valloc;
-
-    // repair_ctx->store = store;
-
-    /**********************************************************************/
-    /* Gossip                                                             */
-    /**********************************************************************/
-
-    runtime_ctx->gossip_config.private_key = runtime_ctx->private_key;
-    runtime_ctx->gossip_config.public_key  = &runtime_ctx->public_key;
-
-    FD_TEST( resolve_hostport( args->my_gossip_addr, &runtime_ctx->gossip_config.my_addr ) );
-
-    gossip_deliver_arg->bft = bft;
-    gossip_deliver_arg->repair = repair;
-    gossip_deliver_arg->valloc = valloc;
-
-    runtime_ctx->gossip_config.shred_version = 0;
-    runtime_ctx->gossip_config.deliver_fun   = gossip_deliver_fun;
-    runtime_ctx->gossip_config.deliver_arg   = gossip_deliver_arg;
-    runtime_ctx->gossip_config.send_fun      = gossip_send_packet;
-    runtime_ctx->gossip_config.send_arg      = NULL;
-    runtime_ctx->gossip_config.sign_fun      = signer_fun;
-    runtime_ctx->gossip_config.sign_arg      = keyguard_client;
-
-    ulong seed = fd_hash( 0, funk_setup_out.hostname, strnlen( funk_setup_out.hostname, sizeof( funk_setup_out.hostname ) ) );
-
-    void *        gossip_mem = fd_valloc_malloc( valloc, fd_gossip_align(), fd_gossip_footprint() );
-    fd_gossip_t * gossip     = fd_gossip_join( fd_gossip_new( gossip_mem, seed ) );
-    runtime_ctx->gossip      = gossip;
-
-    if( fd_gossip_set_config( gossip, &runtime_ctx->gossip_config ) )
-      FD_LOG_ERR( ( "error setting gossip config" ) );
-
-    if( fd_gossip_add_active_peer(
-            gossip, resolve_hostport( args->gossip_peer_addr, &runtime_ctx->gossip_peer_addr ) ) )
-      FD_LOG_ERR( ( "error adding gossip active peer" ) );
-
-    /***********************************************************************/
-    /* Prepare                                                             */
-    /***********************************************************************/
-    fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx_setup_out.exec_epoch_ctx );
-    fd_vote_accounts_pair_t_mapnode_t * vote_accounts_pool = epoch_bank->stakes.vote_accounts.vote_accounts_pool;
-    fd_vote_accounts_pair_t_mapnode_t * vote_accounts_root = epoch_bank->stakes.vote_accounts.vote_accounts_root;
-
-    ulong stake_weights_cnt = fd_vote_accounts_pair_t_map_size( vote_accounts_pool, vote_accounts_root );
-    ulong stake_weight_idx = 0;
-
-    FD_SCRATCH_SCOPE_BEGIN {
-      fd_stake_weight_t * stake_weights = fd_scratch_alloc( fd_stake_weight_align(), stake_weights_cnt * fd_stake_weight_footprint() );
-      for( fd_vote_accounts_pair_t_mapnode_t const * n = fd_vote_accounts_pair_t_map_minimum_const( vote_accounts_pool, vote_accounts_root );
-          n;
-          n = fd_vote_accounts_pair_t_map_successor_const( vote_accounts_pool, n ) ) {
-
-        fd_stake_weight_t * stake_weight = &stake_weights[stake_weight_idx];
-        stake_weight->key   = n->elem.value.node_pubkey;
-        stake_weight->stake = n->elem.stake;
-
-        stake_weight_idx++;
-      }
-
-      fd_repair_set_stake_weights( repair, stake_weights, stake_weights_cnt );
-      fd_gossip_set_stake_weights( gossip, stake_weights, stake_weights_cnt );
-    } FD_SCRATCH_SCOPE_END;
-
-    replay_setup_out.replay->blockstore  = blockstore_setup_out.blockstore;
-    replay_setup_out.replay->funk        = funk_setup_out.funk;
-    replay_setup_out.replay->acc_mgr     = runtime_ctx->_acc_mgr;
-    replay_setup_out.replay->epoch_ctx   = slot_ctx_setup_out.exec_epoch_ctx;
-    replay_setup_out.replay->repair      = repair;
-    replay_setup_out.replay->gossip      = gossip;
-
-    /* BFT update epoch stakes */
-
-    fd_bft_epoch_stake_update(bft, slot_ctx_setup_out.exec_epoch_ctx);
-
-    /* bank hash cmp */
-
-    int    bank_hash_cmp_lg_slot_cnt = 10; /* max vote lag 512 => fill ratio 0.5 => 1024 */
-    void * bank_hash_cmp_mem = fd_exec_epoch_ctx_bank_hash_cmp( replay_setup_out.replay->epoch_ctx );
-
-    fd_bank_hash_cmp_join(
-        fd_bank_hash_cmp_new( bank_hash_cmp_mem, bank_hash_cmp_lg_slot_cnt ) );
-
-    /* bootstrap replay with the snapshot slot */
-
-    slot_ctx_setup_out.exec_slot_ctx->latest_votes = latest_votes;
-    if( !runtime_ctx->need_incr_snap ) {
-      snapshot_insert( slot_ctx_setup_out.fork,
-                       slot_ctx_setup_out.exec_slot_ctx->slot_bank.slot,
-                       blockstore_setup_out.blockstore,
-                       replay_setup_out.replay,
-                       latest_votes );
-    }
-
-    /* TODO @yunzhang open files, set the replay pointers, etc. you need here*/
-    if (args->shred_cap == NULL) {
-        replay_setup_out.replay->shred_cap = NULL;
-    } else {
-        replay_setup_out.replay->shred_cap = fopen(args->shred_cap, "w");
-    }
-    replay_setup_out.replay->stable_slot_start = 0;
-    replay_setup_out.replay->stable_slot_end = 0;
-  }
-
-  slot_ctx_setup_out.fork->slot    = slot_ctx_setup_out.exec_slot_ctx->slot_bank.slot;
 
   /* FIXME epoch boundary stuff when replaying */
   fd_features_restore( slot_ctx_setup_out.exec_slot_ctx );
@@ -1416,11 +1189,6 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
   fd_funk_start_write( funk_setup_out.funk );
   fd_bpf_scan_and_create_bpf_program_cache_entry( slot_ctx_setup_out.exec_slot_ctx, slot_ctx_setup_out.exec_slot_ctx->funk_txn );
   fd_funk_end_write( funk_setup_out.funk );
-
-  if( FD_LIKELY( snapshot_setup_out.snapshot_slot != 0 ) ) {
-    blockstore_setup_out.blockstore->root = snapshot_setup_out.snapshot_slot;
-    blockstore_setup_out.blockstore->min  = snapshot_setup_out.snapshot_slot;
-  }
 
   runtime_ctx->abort_on_mismatch = (uchar)args->abort_on_mismatch;
 }

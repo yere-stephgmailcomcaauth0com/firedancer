@@ -272,6 +272,8 @@ fd_ledger_setup( fd_runtime_ctx_t * ctx, fd_ledger_args_t * args ) {
   }
   ctx->slot_ctx = slot_ctx;
 
+  fd_runtime_recover_banks( slot_ctx, 0 );
+
   fd_features_restore( slot_ctx );
   fd_runtime_update_leaders( slot_ctx, slot_ctx->slot_bank.slot );
   fd_calculate_epoch_accounts_hash_values( slot_ctx );
