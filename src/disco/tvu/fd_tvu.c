@@ -1109,7 +1109,7 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
                    fd_capture_ctx_t *    capture_ctx,
                    FILE *                capture_file
  ) {
-  fd_flamenco_boot( NULL, NULL );
+  fd_flamenco_boot( NULL, NULL ); /* NEED THIS */
 
   runtime_ctx->live = live;
 
@@ -1196,18 +1196,21 @@ fd_tvu_main_setup( fd_runtime_ctx_t *    runtime_ctx,
   if( slot_ctx != NULL ) *slot_ctx = slot_ctx_setup_out.exec_slot_ctx;
   runtime_ctx->epoch_ctx = slot_ctx_setup_out.exec_epoch_ctx;
   runtime_ctx->slot_ctx  = slot_ctx_setup_out.exec_slot_ctx;
+  FD_LOG_NOTICE(("%lx", runtime_ctx->slot_ctx));
 
   /**********************************************************************/
   /* snapshots                                                          */
   /**********************************************************************/
   snapshot_setup_t snapshot_setup_out = {0};
   if( args->snapshot && args->snapshot[0] != '\0' ) {
+    FD_LOG_NOTICE(("HELLO"));
     snapshot_setup( args->snapshot,
                     args->validate_snapshot,
                     args->check_hash,
                     slot_ctx_setup_out.exec_slot_ctx,
                     &snapshot_setup_out );
   } else {
+    FD_LOG_NOTICE(("HELLO2"));
     fd_runtime_recover_banks( slot_ctx_setup_out.exec_slot_ctx, 0 );
   }
 
