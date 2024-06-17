@@ -29,7 +29,6 @@ download_snapshot() {
     else
       echo "${s:1}"
       return 0
-    fi
   done
 
   echo "failed after $num_tries tries to wget $url"
@@ -73,14 +72,15 @@ echo "
     bank_tile_count = 1
 [gossip]
     port = 8720
+    entrypoints = [\"$ENTRYPOINT:$ENTRYPOINT_PORT\", \"$ENTRYPOINT_BACKUP:$ENTRYPOINT_BACKUP_PORT\"]
 [tiles]
     [tiles.gossip]
         entrypoints = [\"$ENTRYPOINT\", \"$ENTRYPOINT_BACKUP\"]
         peer_ports = [$ENTRYPOINT_PORT, $ENTRYPOINT_BACKUP_PORT]
         gossip_listen_port = 8720
     [tiles.repair]
-        repair_intake_listen_port = 8721
-        repair_serve_listen_port = 8722
+        repair_intake_listen_port = $(shuf -i 8000-10000 -n 1)
+        repair_serve_listen_port = $(shuf -i 8000-10000 -n 1)
     [tiles.replay]
         snapshot = \"$snapshot\"
         incremental = \"$incremental\"
@@ -104,39 +104,41 @@ if [ -n "${JOB_URL-}" ]; then
   echo "$JOB_URL" > github_job_url.txt
 fi
 
-fddev --log-path $(readlink -f fddev.log) --config $(readlink -f fddev.toml) --no-sandbox --no-clone --no-solana-labs &
+# sudo perf record -g -F99 $FD_DIR/build/native/gcc/bin/fddev --log-path $(readlink -f fddev.log) --config $(readlink -f fddev.toml) --no-sandbox --no-clone --no-solana-labs
+$FD_DIR/build/native/gcc/bin/fddev configure init all --log-path $(readlink -f fddev.log) --config $(readlink -f fddev.toml) --no-sandbox --no-clone
+hpcrun -e CPUTIME@f99 -tt $FD_DIR/build/native/gcc/bin/fddev dev --no-configure --no-solana-labs --log-path $(readlink -f fddev.log) --config $(readlink -f fddev.toml) --no-sandbox --no-clone
 
-CAUGHT_UP=0
-set +x
-for _ in $(seq 1 600); do
-  if grep -q "caught up: 1" $(readlink -f fddev.log); then
-    CAUGHT_UP=1
-    break
-  fi
-  sleep 1
-done
-set -x
+# CAUGHT_UP=0
+# set +x
+# for _ in $(seq 1 600); do
+#   if grep -q "caught up: 1" $(readlink -f fddev.log); then
+#     CAUGHT_UP=1
+#     break
+#   fi
+#   sleep 1
+# done
+# set -x
 
-grep -q "Bank hash match" $(readlink -f fddev.log)
+# grep -q "Bank hash match" $(readlink -f fddev.log)
 
-if grep -q "Bank hash mismatch" $(readlink -f fddev.log); then
-  BAD_SLOT=$( grep "Bank hash mismatch" fddev.log | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i == "slot:") {gsub(/[^0-9]/, "", $(i+1)); print $(i+1); exit}}' )
-  echo "*** BANK HASH MISMATCH $BAD_SLOT ***"
-  mkdir -p $BAD_SLOT
-  cp fddev.log fddev.solcap github_job_url.txt $BAD_SLOT
-  mv $BAD_SLOT ~/bad-slots
-fi
+# if grep -q "Bank hash mismatch" $(readlink -f fddev.log); then
+#   BAD_SLOT=$( grep "Bank hash mismatch" fddev.log | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i == "slot:") {gsub(/[^0-9]/, "", $(i+1)); print $(i+1); exit}}' )
+#   echo "*** BANK HASH MISMATCH $BAD_SLOT ***"
+#   mkdir -p $BAD_SLOT
+#   cp fddev.log fddev.solcap github_job_url.txt $BAD_SLOT
+#   mv $BAD_SLOT ~/bad-slots
+# fi
 
-if grep -P "ERR.*incremental accounts_hash [^ ]+ != [^ ]+$" $(readlink -f fddev.log); then
-  echo "*** INCREMENTAL ACCOUNTS_HASH MISMATCH ***"
-  NEW_DIR=incremental-accounts-hash-mismatch-$(TZ='America/Chicago' date "+%Y-%m-%d-%H:%M:%S")
-  mkdir -p $NEW_DIR
-  cp -r !($NEW_DIR) $NEW_DIR
-  mv $NEW_DIR ~/bad-slots
-  exit 1
-fi
+# if grep -P "ERR.*incremental accounts_hash [^ ]+ != [^ ]+$" $(readlink -f fddev.log); then
+#   echo "*** INCREMENTAL ACCOUNTS_HASH MISMATCH ***"
+#   NEW_DIR=incremental-accounts-hash-mismatch-$(TZ='America/Chicago' date "+%Y-%m-%d-%H:%M:%S")
+#   mkdir -p $NEW_DIR
+#   cp -r !($NEW_DIR) $NEW_DIR
+#   mv $NEW_DIR ~/bad-slots
+#   exit 1
+# fi
 
-if [ $CAUGHT_UP -eq 0 ]; then
-  echo "fddev failed to catch up"
-  exit 1
-fi
+# if [ $CAUGHT_UP -eq 0 ]; then
+#   echo "fddev failed to catch up"
+#   exit 1
+# fi

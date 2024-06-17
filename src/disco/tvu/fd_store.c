@@ -86,6 +86,7 @@ fd_store_slot_prepare( fd_store_t *   store,
 
   ulong re_adds[2];
   uint re_adds_cnt = 0;
+  long re_add_delay = 0;
 
   *repair_slot_out = 0;
   int rc = FD_STORE_SLOT_PREPARE_CONTINUE;
@@ -105,6 +106,7 @@ fd_store_slot_prepare( fd_store_t *   store,
     rc = FD_STORE_SLOT_PREPARE_NEED_REPAIR;
     *repair_slot_out = slot;
     re_adds[re_adds_cnt++] = slot;
+    re_add_delay = FD_REPAIR_BACKOFF_TIME;
     goto end;
   }
 
@@ -119,6 +121,7 @@ fd_store_slot_prepare( fd_store_t *   store,
     *repair_slot_out = slot;
     re_adds[re_adds_cnt++] = slot;
     re_adds[re_adds_cnt++] = parent_slot;
+    re_add_delay = FD_REPAIR_BACKOFF_TIME;
     goto end;
   }
 
@@ -132,6 +135,7 @@ fd_store_slot_prepare( fd_store_t *   store,
     *repair_slot_out = parent_slot;
     re_adds[re_adds_cnt++] = slot;
     re_adds[re_adds_cnt++] = parent_slot;
+    re_add_delay = FD_REPAIR_BACKOFF_TIME;
     goto end;
   }
 
@@ -140,6 +144,7 @@ fd_store_slot_prepare( fd_store_t *   store,
     rc = FD_STORE_SLOT_PREPARE_NEED_PARENT_EXEC;
     re_adds[re_adds_cnt++] = slot;
     re_adds[re_adds_cnt++] = parent_slot;
+    re_add_delay = (long)5e6;
     goto end;
   }
 
@@ -148,6 +153,7 @@ fd_store_slot_prepare( fd_store_t *   store,
     rc = FD_STORE_SLOT_PREPARE_NEED_REPAIR;
     *repair_slot_out = slot;
     re_adds[re_adds_cnt++] = slot;
+    re_add_delay = FD_REPAIR_BACKOFF_TIME;
     goto end;
   }
 
@@ -163,7 +169,7 @@ end:
   fd_blockstore_end_read( store->blockstore );
 
   for (uint i = 0; i < re_adds_cnt; ++i)
-    fd_pending_slots_add( store->pending_slots, re_adds[i], store->now + FD_REPAIR_BACKOFF_TIME / 3 );
+    fd_pending_slots_add( store->pending_slots, re_adds[i], store->now + re_add_delay );
 
   return rc;
 }

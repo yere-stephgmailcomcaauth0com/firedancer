@@ -1481,7 +1481,6 @@ int main( int argc, char ** argv ) {
     minify( &args );
   } else if( strcmp( args.cmd, "prune" ) == 0 ) {
     prune( &args );
-
   } else {
     FD_LOG_ERR(( "unknown command=%s", args.cmd ));
   }

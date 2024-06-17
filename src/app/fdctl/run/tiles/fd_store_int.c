@@ -277,6 +277,9 @@ fd_store_tile_slot_prepare( fd_store_tile_ctx_t * ctx,
     }
     case FD_STORE_SLOT_PREPARE_NEED_REPAIR: {
       repair_req_cnt = fd_store_slot_repair( ctx->store, slot, repair_reqs, MAX_REPAIR_REQS );
+      if( repair_req_cnt>0 ) {
+        FD_LOG_WARNING(("needs repair - slot: %lu %lu", slot, repair_req_cnt));
+      }
       break;
     }
     case FD_STORE_SLOT_PREPARE_NEED_ORPHAN: {
