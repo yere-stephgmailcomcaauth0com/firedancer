@@ -42,7 +42,7 @@ user = ""
 scratch_directory = "/home/{user}/.firedancer/{name}"
 
 # Port range used for various incoming network listeners, in the form
-# `<MIN_PORT>-<MAX_PORT>` inclusive.  The range used incl udes min, but
+# `<MIN_PORT>-<MAX_PORT>` inclusive.  The range used includes min, but
 # not max [min, max).  Ports are used for receiving transactions and
 # votes from clients and other validators.
 #

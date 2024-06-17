@@ -500,7 +500,7 @@ fd_repair_send_requests( fd_repair_t * glob ) {
   }
   glob->current_nonce = n;
   if( k )
-    FD_LOG_NOTICE(("checked %lu nonces, sent %lu packets, total %lu", k, j, fd_needed_table_key_cnt( glob->needed )));
+    FD_LOG_DEBUG(("checked %lu nonces, sent %lu packets, total %lu", k, j, fd_needed_table_key_cnt( glob->needed )));
 }
 
 static void

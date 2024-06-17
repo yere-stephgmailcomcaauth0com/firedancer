@@ -22,7 +22,6 @@ FD_PROTOTYPES_BEGIN
 #define FD_KEYGUARD_ROLE_TLS     (3)  /* TLS peer (certificate verify) */
 #define FD_KEYGUARD_ROLE_X509_CA (4)  /* self-signed cert CA */
 #define FD_KEYGUARD_ROLE_REPAIR  (5)
-#define FD_KEYGUARD_ROLE_VOTE
 
 /* Type confusion/ambiguity checks ************************************/
 

@@ -413,7 +413,7 @@ after_frag( void *             _ctx,
       }
 
       prepare_time_ns += fd_log_wallclock();
-      FD_LOG_WARNING(("TIMING: prepare_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)prepare_time_ns * 1e-6));
+      FD_LOG_DEBUG(("TIMING: prepare_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)prepare_time_ns * 1e-6));
     }
 
     if( ctx->capture_ctx )
@@ -424,7 +424,7 @@ after_frag( void *             _ctx,
                                                       txns, txn_cnt,
                                                       ctx->tpool, ctx->max_workers );
     execute_time_ns += fd_log_wallclock();
-    FD_LOG_WARNING(("TIMING: execute_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)execute_time_ns * 1e-6));
+    FD_LOG_DEBUG(("TIMING: execute_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)execute_time_ns * 1e-6));
 
     if( res != 0 && !( ctx->flags & REPLAY_FLAG_PACKED_MICROBLOCK ) ) {
       FD_LOG_WARNING(( "block invalid - slot: %lu", ctx->curr_slot ));
@@ -494,7 +494,7 @@ after_frag( void *             _ctx,
 #undef NOTIFY_START
 #undef NOTIFY_END
       notify_time_ns += fd_log_wallclock();
-      FD_LOG_WARNING(("TIMING: notify_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)notify_time_ns * 1e-6));
+      FD_LOG_DEBUG(("TIMING: notify_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)notify_time_ns * 1e-6));
 
       fd_blockstore_start_write( ctx->replay->blockstore );
 
