@@ -69,8 +69,9 @@ GOSSIP_PORT=$(shuf -i 8000-10000 -n 1)
 
 echo "
 [layout]
-    affinity = \"1-32\"
+    affinity = \"1-30\"
     bank_tile_count = 1
+    verify_tile_count = 1
 [gossip]
     port = $GOSSIP_PORT
 [tiles]
@@ -85,7 +86,7 @@ echo "
         # capture = \"/data/firedancer/ledger/mainnet.solcap\"
         incremental = \"$incremental\"
         snapshot = \"wksp:/data/firedancer/ledger/mainnet-funk\"
-        tpool_thread_count = 13
+        tpool_thread_count = 8
         funk_sz_gb = 600
         funk_txn_max = 1024
         funk_rec_max = 600000000

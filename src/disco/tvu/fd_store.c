@@ -94,6 +94,11 @@ fd_store_slot_prepare( fd_store_t *   store,
   fd_block_t * block = fd_blockstore_block_query( store->blockstore, slot );
 
   /* We already executed this block */
+  if( FD_UNLIKELY( block && fd_uchar_extract_bit( block->flags, FD_BLOCK_FLAG_PREPARED ) ) ) {
+    rc = FD_STORE_SLOT_PREPARE_ALREADY_EXECUTED;
+    goto end;
+  }
+
   if( FD_UNLIKELY( block && fd_uchar_extract_bit( block->flags, FD_BLOCK_FLAG_PROCESSED ) ) ) {
     rc = FD_STORE_SLOT_PREPARE_ALREADY_EXECUTED;
     goto end;
@@ -142,7 +147,10 @@ fd_store_slot_prepare( fd_store_t *   store,
   /* See if the parent is executed yet */
   if( FD_UNLIKELY( !fd_uchar_extract_bit( parent_block->flags, FD_BLOCK_FLAG_PROCESSED ) ) ) {
     rc = FD_STORE_SLOT_PREPARE_NEED_PARENT_EXEC;
-    re_adds[re_adds_cnt++] = slot;
+    if( FD_UNLIKELY( !fd_uchar_extract_bit( parent_block->flags, FD_BLOCK_FLAG_PREPARED ) ) ) {
+      /* ... but it is not prepared */
+      re_adds[re_adds_cnt++] = slot;
+    }
     re_adds[re_adds_cnt++] = parent_slot;
     re_add_delay = (long)5e6;
     goto end;
