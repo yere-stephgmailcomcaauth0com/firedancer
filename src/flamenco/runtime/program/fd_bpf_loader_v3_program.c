@@ -547,8 +547,9 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
   fd_pubkey_t const * txn_accs   = instr_ctx->txn_ctx->accounts;
   fd_pubkey_t const * program_id = &instr_ctx->instr->program_id_pubkey;
 
+  switch( instruction.discriminant ) {
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L476-L493 */
-  if( fd_bpf_upgradeable_loader_program_instruction_is_initialize_buffer( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_initialize_buffer: {
     if( FD_UNLIKELY( instr_ctx->instr->acct_cnt<2U ) ) {
       FD_LOG_WARNING(( "Not enough account keys for instruction" ));
       return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;
@@ -583,8 +584,10 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       FD_LOG_WARNING(( "Bpf loader state write for buffer account failed" ));
       return err;
     }
+    break;
+  }
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L494-L525 */
-  } else if ( fd_bpf_upgradeable_loader_program_instruction_is_write( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_write: {
     if( FD_UNLIKELY( instr_ctx->instr->acct_cnt<2U ) ) {
       FD_LOG_WARNING(( "Not enough account keys for instruction" ));
       return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;
@@ -630,8 +633,10 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
     if( FD_UNLIKELY( err ) ) {
       return err;
     }
+    break;
+  }
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L526-L702 */
-  } else if( fd_bpf_upgradeable_loader_program_instruction_is_deploy_with_max_data_len( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_deploy_with_max_data_len: {
     /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L527-L541 */
     if( instr_ctx->instr->acct_cnt<4U ) {
       return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;
@@ -884,7 +889,9 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       FD_LOG_WARNING(( "Couldn't set account to executable" ));
       return err;
     }
-  } else if( fd_bpf_upgradeable_loader_program_instruction_is_upgrade( &instruction ) ) {
+    break;
+  }
+  case fd_bpf_upgradeable_loader_program_instruction_enum_upgrade: {
     /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L704-L714 */
     if( FD_UNLIKELY( instr_ctx->instr->acct_cnt<3U ) ) {
       FD_LOG_WARNING(( "Not enough account keys for instruction" ));
@@ -1096,8 +1103,10 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
     buffer->meta->info.lamports      = 0UL;
     programdata->meta->info.lamports = programdata_balance_required;
     buffer->meta->dlen               = PROGRAMDATA_METADATA_SIZE; /* UpgradeableLoaderState::size_of_buffer(0) */
+    break;
+  }
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L893-L957 */
-  } else if( fd_bpf_upgradeable_loader_program_instruction_is_set_authority( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_set_authority: {
     if( FD_UNLIKELY( instr_ctx->instr->acct_cnt<2U ) ) {
       FD_LOG_WARNING(( "Not enough account keys for instruction" ));
       return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;
@@ -1167,8 +1176,10 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       FD_LOG_WARNING(( "Account does not support authorities" ));
       return FD_EXECUTOR_INSTR_ERR_INVALID_ARG;
     }
+    break;
+  }
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L958-L1030 */
-  } else if( fd_bpf_upgradeable_loader_program_instruction_is_set_authority_checked( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_set_authority_checked: {
     if( FD_UNLIKELY( instr_ctx->instr->acct_cnt<3U ) ) {
       FD_LOG_WARNING(( "Not enough account keys for instruction" ));
       return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;
@@ -1239,8 +1250,10 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       FD_LOG_WARNING(( "Account does not support authorities" ));
       return FD_EXECUTOR_INSTR_ERR_INVALID_ARG;
     }
+    break;
+  }
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L1031-L1134 */
-  } else if( fd_bpf_upgradeable_loader_program_instruction_is_close( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_close: {
     /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L1032-L1046 */
     if( FD_UNLIKELY( instr_ctx->instr->acct_cnt<2U ) ) {
       FD_LOG_WARNING(( "Not enough account keys for instruction" ));
@@ -1355,8 +1368,10 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       FD_LOG_WARNING(( "Account does not support closing" ));
       return FD_EXECUTOR_INSTR_ERR_INVALID_ARG;
     }
+    break;
+  }
   /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L1136-L1294 */
-  } else if( fd_bpf_upgradeable_loader_program_instruction_is_extend_program( &instruction ) ) {
+  case fd_bpf_upgradeable_loader_program_instruction_enum_extend_program: {
     /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L1137-L1172 */
     uint additional_bytes = instruction.inner.extend_program.additional_bytes;
     if( FD_UNLIKELY( additional_bytes==0U ) ) {
@@ -1510,9 +1525,12 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       FD_LOG_WARNING(( "Bincode encode for programdata account failed" ));
       return err;
     }
-  } else {
+    break;
+  }
+  default: {
     FD_LOG_WARNING(( "ProgramData state is invalid" ));
     return FD_EXECUTOR_INSTR_ERR_INVALID_ACC_DATA;
+  }
   }
   return FD_EXECUTOR_INSTR_SUCCESS;
 }
