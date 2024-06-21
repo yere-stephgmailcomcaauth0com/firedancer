@@ -155,6 +155,7 @@ struct fd_replay_tile_ctx {
   fd_bank_hash_cmp_t * bank_hash_cmp;
   fd_tower_t *         tower;
   fd_ghost_t *         ghost;
+  fd_voter_t           voter;
 
   ulong * first_turbine;
 
@@ -347,13 +348,49 @@ during_frag( void * _ctx,
   fd_blockstore_end_read( ctx->replay->blockstore );
 }
 
-void
+static void
 vote_txn_signer( void *        signer_ctx,
                  uchar         signature[ static 64 ],
                  uchar const * buffer,
                  ulong         len ) {
   fd_replay_tile_ctx_t * ctx = (fd_replay_tile_ctx_t *)signer_ctx;
   fd_keyguard_client_sign( ctx->keyguard_client, signature, buffer, len );
+}
+
+static void
+send_vote_txn( fd_replay_tile_ctx_t * ctx,
+               fd_hash_t *            recent_blockhash ) {
+  uchar txn_meta_buf [ FD_TXN_MAX_SZ ] ;
+  uchar * msg_to_gossip = fd_chunk_to_laddr( ctx->gossip_out_mem, ctx->gossip_out_chunk );
+
+  fd_fork_t * vote_fork = fd_tower_vote_fork_select( ctx->tower );
+
+  fd_compact_vote_state_update_t vote;
+
+  ulong vote_timestamp = vote_timestamp;
+  vote.timestamp = &vote_timestamp;
+  memcpy( vote.hash.uc, vote_fork->slot_ctx.slot_bank.banks_hash.uc, sizeof(fd_hash_t) );
+  vote.root = ctx->tower->root;
+  
+  fd_lockout_offset_t vote_lockouts[ 32 ];
+  for( ulong i = 0; i<ctx->tower->vote_slot_cnt; i++ ) {
+    fd_lockout_offset_t * lockout_offset = &vote.lockouts;
+    vote.lockouts[ i ].confirmation_count = (uchar)i;
+    vote.lockouts[ i ].offset = ctx->tower->vote_slots[ i ];
+  }
+  vote.lockouts = vote_lockouts;
+  vote.lockouts_len = (ushort)ctx->tower->vote_slot_cnt;
+  ulong vote_txn_sz = fd_vote_txn_generate( &ctx->voter,
+                                            &vote,
+                                            recent_blockhash,
+                                            txn_meta_buf,
+                                            msg_to_gossip );
+
+  fd_mcache_publish( ctx->gossip_out_mcache, ctx->gossip_out_depth, ctx->gossip_out_seq, 1UL, ctx->gossip_out_chunk,
+    vote_txn_sz, 0UL, 0, 0 );
+  ctx->gossip_out_seq   = fd_seq_inc( ctx->gossip_out_seq, 1UL );
+  ctx->gossip_out_chunk = fd_dcache_compact_next( ctx->gossip_out_chunk, vote_txn_sz,
+                                                  ctx->gossip_out_chunk0, ctx->gossip_out_wmark );
 }
 
 static void
@@ -377,30 +414,8 @@ after_frag( void *             _ctx,
     if ( !ctx->vote ) return;
     /* for now, if consensus.vote == true, modify the timestamp and echo the vote txn back with gossip */
     /* later, we should send out our own vote txns through gossip  */
-    ulong MAGIC_TIMESTAMP = 12345678;
-    vote.timestamp = &MAGIC_TIMESTAMP;
-    fd_voter_t voter = {
-      .vote_acct_addr              = ctx->vote_acct_addr,
-      .vote_authority_pubkey       = ctx->validator_identity_pubkey,
-      .validator_identity_pubkey   = ctx->validator_identity_pubkey,
-      .voter_sign_arg              = ctx,
-      .vote_authority_sign_fun     = vote_txn_signer,
-      .validator_identity_sign_fun = vote_txn_signer
-    };
 
-    uchar txn_meta_buf [ FD_TXN_MAX_SZ ] ;
-    uchar * msg_to_gossip = fd_chunk_to_laddr( ctx->gossip_out_mem, ctx->gossip_out_chunk );
-    ulong vote_txn_sz = fd_vote_txn_generate( &voter,
-                                              &vote,
-                                              ctx->gossip_vote_txn + recent_blockhash_off,
-                                              txn_meta_buf,
-                                              msg_to_gossip );
 
-    fd_mcache_publish( ctx->gossip_out_mcache, ctx->gossip_out_depth, ctx->gossip_out_seq, 1UL, ctx->gossip_out_chunk,
-      vote_txn_sz, 0UL, 0, 0 );
-    ctx->gossip_out_seq   = fd_seq_inc( ctx->gossip_out_seq, 1UL );
-    ctx->gossip_out_chunk = fd_dcache_compact_next( ctx->gossip_out_chunk, vote_txn_sz,
-                                                    ctx->gossip_out_chunk0, ctx->gossip_out_wmark );
     return;
   }
 
@@ -427,7 +442,7 @@ after_frag( void *             _ctx,
       long prepare_time_ns = -fd_log_wallclock();
 
       fork = fd_replay_prepare_ctx( ctx->replay, ctx->parent_slot );
-      fork->executing = 1;
+      fork->executing = 1; 
       // Remove slot ctx from frontier
       fd_fork_t * child = fd_fork_frontier_ele_remove( ctx->replay->forks->frontier, &fork->slot, NULL, ctx->replay->forks->pool );
       child->slot = ctx->curr_slot;
@@ -695,8 +710,8 @@ after_frag( void *             _ctx,
       ctx->poh_out_seq = fd_seq_inc(ctx->poh_out_seq, 1UL);
       ctx->poh_init_done = 1;
     }
-    /* Publish mblk to POH. */
 
+    /* Publish mblk to POH. */
     if( ctx->poh_init_done == 1 && !( ctx->flags & REPLAY_FLAG_FINISHED_BLOCK ) 
         && ( ( ctx->flags & REPLAY_FLAG_MICROBLOCK ) || ( ctx->flags & REPLAY_FLAG_PACKED_MICROBLOCK ) ) ) {
       FD_LOG_INFO(( "publishing mblk to poh - slot: %lu, parent_slot: %lu", ctx->curr_slot, ctx->parent_slot ));
@@ -1131,6 +1146,16 @@ unprivileged_init( fd_topo_t *      topo,
   const uchar* vote_acct_pubkey   = fd_keyload_load( tile->replay.vote_account_path, 1 );
   ctx->validator_identity_pubkey  = (fd_pubkey_t *) fd_type_pun_const( identity_pubkey );
   ctx->vote_acct_addr             = (fd_pubkey_t *) fd_type_pun_const( vote_acct_pubkey );
+
+  ctx->voter = (fd_voter_t){
+    .vote_acct_addr              = ctx->vote_acct_addr,
+    .vote_authority_pubkey       = ctx->validator_identity_pubkey,
+    .validator_identity_pubkey   = ctx->validator_identity_pubkey,
+    .voter_sign_arg              = ctx,
+    .vote_authority_sign_fun     = vote_txn_signer,
+    .validator_identity_sign_fun = vote_txn_signer,
+  };
+
   fd_topo_link_t * sign_in  = &topo->links[ tile->in_link_id[ SIGN_IN_IDX ] ];
   fd_topo_link_t * sign_out = &topo->links[ tile->out_link_id[ SIGN_OUT_IDX ] ];
   if ( fd_keyguard_client_join( fd_keyguard_client_new( ctx->keyguard_client,
