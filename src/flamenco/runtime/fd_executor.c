@@ -870,25 +870,25 @@ fd_execute_txn_prepare_phase1( fd_exec_slot_ctx_t *  slot_ctx,
 
   fd_executor_setup_accessed_accounts_for_txn( txn_ctx );
   int err;
-  int is_nonce = fd_has_nonce_account(txn_ctx, &err);
-  if ((NULL == txn_descriptor) || !is_nonce) {
-    if ( txn_raw == NULL ) {
+  int is_nonce = fd_has_nonce_account( txn_ctx, &err );
+  if( ( NULL == txn_descriptor ) || !is_nonce ) {
+    if( txn_raw == NULL ) {
       return FD_RUNTIME_TXN_ERR_BLOCKHASH_NOT_FOUND;
     }
   }
 
-  #ifdef VLOG
-    fd_txn_t const *txn = txn_ctx->txn_descriptor;
-    fd_rawtxn_b_t const *raw_txn = txn_ctx->_txn_raw;
-    uchar * sig = (uchar *)raw_txn->raw + txn->signature_off;
-    FD_LOG_WARNING(("Preparing Transaction %64J, %lu", sig, txn_ctx->heap_size));
-  #endif
+#ifdef VLOG
+  fd_txn_t const *txn = txn_ctx->txn_descriptor;
+  fd_rawtxn_b_t const *raw_txn = txn_ctx->_txn_raw;
+  uchar * sig = (uchar *)raw_txn->raw + txn->signature_off;
+  FD_LOG_WARNING(("Preparing Transaction %64J, %lu", sig, txn_ctx->heap_size));
+#endif
 
   int compute_budget_status = fd_executor_compute_budget_program_execute_instructions( txn_ctx, txn_ctx->_txn_raw );
 
-  if ((NULL != txn_descriptor) && is_nonce) {
+  if( ( NULL != txn_descriptor ) && is_nonce ) {
     uchar found_fee_payer = 0;
-    for ( ulong i = 0; i < txn_descriptor->acct_addr_cnt; i++ ) {
+    for( ulong i = 0; i < txn_descriptor->acct_addr_cnt; i++ ) {
       if( is_non_loader_program_key( txn_descriptor, txn_raw, (uchar)i ) ) {
         found_fee_payer = 1;
       }
@@ -897,7 +897,6 @@ fd_execute_txn_prepare_phase1( fd_exec_slot_ctx_t *  slot_ctx,
       return FD_RUNTIME_TXN_ERR_ACCOUNT_NOT_FOUND;
     }
   }
-
 
   return compute_budget_status;
 }

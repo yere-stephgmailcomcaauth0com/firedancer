@@ -731,7 +731,6 @@ fd_runtime_prepare_txns_phase1( fd_exec_slot_ctx_t * slot_ctx,
   for (ulong txn_idx = 0; txn_idx < txn_cnt; txn_idx++) {
     fd_txn_p_t * txn = &txns[txn_idx];
 
-
     task_info[txn_idx].txn_ctx = fd_valloc_malloc( slot_ctx->valloc, FD_EXEC_TXN_CTX_ALIGN, FD_EXEC_TXN_CTX_FOOTPRINT );
     fd_exec_txn_ctx_t * txn_ctx = task_info[txn_idx].txn_ctx;
     task_info[txn_idx].exec_res = -1;
@@ -739,10 +738,8 @@ fd_runtime_prepare_txns_phase1( fd_exec_slot_ctx_t * slot_ctx,
     fd_txn_t const * txn_descriptor = (fd_txn_t const *) txn->_;
     fd_rawtxn_b_t raw_txn = {.raw = txn->payload, .txn_sz = (ushort)txn->payload_sz };
 
-    // FD_LOG_INFO(("preparing txn - slot: %lu, txn_idx: %lu, fee_payer: %32J, sig: %64J", slot_ctx->slot_bank.slot, txn_idx, (uchar*)raw_txn.raw + txn_descriptor->acct_addr_off, (uchar *)raw_txn.raw + txn_descriptor->signature_off));
-
-    int res = fd_execute_txn_prepare_phase1(slot_ctx, txn_ctx, txn_descriptor, &raw_txn);
-    if( res != 0 ) {
+    int res = fd_execute_txn_prepare_phase1( slot_ctx, txn_ctx, txn_descriptor, &raw_txn );
+    if( FD_UNLIKELY( res ) ) {
       txn->flags = 0;
       result = res;
       break;
@@ -863,7 +860,7 @@ fd_runtime_prepare_txns_phase2_tpool( fd_exec_slot_ctx_t * slot_ctx,
     fd_collect_fee_task_info_t * collect_fee_task_infos = fd_scratch_alloc( 8UL, txn_cnt * sizeof(fd_collect_fee_task_info_t) );
 
     /* Loop across transactions */
-    for (ulong txn_idx = 0; txn_idx < txn_cnt; txn_idx++) {
+    for( ulong txn_idx=0UL; txn_idx<txn_cnt; txn_idx++ ) {
       fd_exec_txn_ctx_t * txn_ctx = task_info[txn_idx].txn_ctx;
       fd_hash_t * blockhash = (fd_hash_t *)((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->recent_blockhash_off);
 
@@ -875,7 +872,7 @@ fd_runtime_prepare_txns_phase2_tpool( fd_exec_slot_ctx_t * slot_ctx,
         fd_hash_hash_age_pair_t_mapnode_t key;
         fd_memcpy( key.elem.key.uc, blockhash, sizeof(fd_hash_t) );
 
-        if ( fd_hash_hash_age_pair_t_map_find( slot_ctx->slot_bank.block_hash_queue.ages_pool, slot_ctx->slot_bank.block_hash_queue.ages_root, &key ) == NULL ) {
+        if( fd_hash_hash_age_pair_t_map_find( slot_ctx->slot_bank.block_hash_queue.ages_pool, slot_ctx->slot_bank.block_hash_queue.ages_root, &key ) == NULL ) {
           task_info[ txn_idx ].txn->flags = 0;
           res |= FD_RUNTIME_TXN_ERR_BLOCKHASH_NOT_FOUND;
           continue;
