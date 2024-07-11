@@ -25,7 +25,7 @@
 
 #define FD_TXNCACHE_SLOTCACHE_MAP_CNT (1024UL)
 
-/* Value for an empty blockcache `lowest_slot` or empty slotcache
+/* Value for an empty blockcache `max_slot` or empty slotcache
   `slot` entry. When the entries are set to this value, we can insert
   to the entry, but stop iterating while running queries. */
 
@@ -64,7 +64,7 @@ typedef struct fd_txncache_private_txnpage fd_txncache_private_txnpage_t;
 
 struct fd_txncache_private_blockcache {
   uchar blockhash[ 32 ]; /* The actual blockhash of these transactions. */
-  ulong lowest_slot;     /* The lowest slot we have seen that contains a transaction referencing this blockhash.
+  ulong max_slot;     /* The lowest slot we have seen that contains a transaction referencing this blockhash.
                             The blockhash entry will not be purged until the lowest rooted slot is at least 150
                             slots higher than this. */
   ulong txnhash_offset;  /* To save memory, the Agave validator decided to truncate the hash of transactions stored in
@@ -288,7 +288,7 @@ fd_txncache_new( void * shmem,
   memset( tc->root_slots, 0xFF, max_rooted_slots*sizeof(ulong) );
 
   for( ulong i=0UL; i<max_live_slots; i++ ) {
-    tc->blockcache[ i ].lowest_slot = FD_TXNCACHE_EMPTY_ENTRY;
+    tc->blockcache[ i ].max_slot = FD_TXNCACHE_EMPTY_ENTRY;
     tc->blockcache[ i ].pages       = (uint *)_blockcache_pages + i*max_txnpages_per_blockhash;
     tc->slotcache[ i ].slot         = FD_TXNCACHE_EMPTY_ENTRY;
   }
@@ -364,7 +364,7 @@ fd_txncache_delete( void * shtc ) {
 static void
 fd_txncache_remove_blockcache_idx( fd_txncache_t * tc,
                                    ulong idx ) {
-  tc->blockcache[ idx ].lowest_slot = FD_TXNCACHE_TOMBSTONE_ENTRY;
+  tc->blockcache[ idx ].max_slot = FD_TXNCACHE_TOMBSTONE_ENTRY;
   memcpy( tc->txnpages_free+tc->txnpages_free_cnt, tc->blockcache[ idx ].pages, tc->blockcache[ idx ].pages_cnt*sizeof(ushort) );
   tc->txnpages_free_cnt += tc->blockcache[ idx ].pages_cnt;
 }
@@ -379,7 +379,7 @@ static void
 fd_txncache_purge_slot( fd_txncache_t * tc,
                         ulong           slot ) {
   for( ulong i=0UL; i<tc->live_slots_max; i++ ) {
-    if( FD_LIKELY( tc->blockcache[ i ].lowest_slot==FD_TXNCACHE_EMPTY_ENTRY || tc->blockcache[ i ].lowest_slot==FD_TXNCACHE_TOMBSTONE_ENTRY || (tc->blockcache[ i ].lowest_slot+150UL)>slot ) ) continue;
+    if( FD_LIKELY( tc->blockcache[ i ].max_slot==FD_TXNCACHE_EMPTY_ENTRY || tc->blockcache[ i ].max_slot==FD_TXNCACHE_TOMBSTONE_ENTRY || tc->blockcache[ i ].max_slot>slot ) ) continue;
     fd_txncache_remove_blockcache_idx( tc, i );
   }
 
@@ -441,17 +441,17 @@ fd_txncache_find_blockhash( fd_txncache_t const *               tc,
   for( ulong i=0UL; i<tc->live_slots_max; i++ ) {
     ulong blockcache_idx = (hash+i)%tc->live_slots_max;
     fd_txncache_private_blockcache_t * blockcache = &tc->blockcache[ blockcache_idx ];
-    if( FD_UNLIKELY( blockcache->lowest_slot==FD_TXNCACHE_EMPTY_ENTRY ) ) {
+    if( FD_UNLIKELY( blockcache->max_slot==FD_TXNCACHE_EMPTY_ENTRY ) ) {
       *out_blockcache = blockcache;
       return FD_TXNCACHE_FIND_FOUNDEMPTY;
-    } else if ( blockcache->lowest_slot==FD_TXNCACHE_TOMBSTONE_ENTRY) {
+    } else if ( blockcache->max_slot==FD_TXNCACHE_TOMBSTONE_ENTRY) {
       if( is_insert ) {
         *out_blockcache = blockcache;
         return FD_TXNCACHE_FIND_FOUNDEMPTY;
       }
       continue;
     }
-    while( FD_UNLIKELY( blockcache->lowest_slot==FD_TXNCACHE_TEMP_ENTRY ) ) {
+    while( FD_UNLIKELY( blockcache->max_slot==FD_TXNCACHE_TEMP_ENTRY ) ) {
       FD_SPIN_PAUSE();
     }
     FD_COMPILER_MFENCE(); /* Prevent reordering of the blockhash read to before the atomic lock
@@ -529,8 +529,8 @@ fd_txncache_ensure_blockcache( fd_txncache_t *                     tc,
     if( FD_LIKELY( blockcache_find==FD_TXNCACHE_FIND_FOUND ) ) return 1;
     else if( FD_UNLIKELY( blockcache_find==FD_TXNCACHE_FIND_FULL ) ) return 0;
 
-    if( FD_LIKELY( FD_ATOMIC_CAS( &(*out_blockcache)->lowest_slot, FD_TXNCACHE_EMPTY_ENTRY, FD_TXNCACHE_TEMP_ENTRY ) ||
-        FD_ATOMIC_CAS( &(*out_blockcache)->lowest_slot, FD_TXNCACHE_TOMBSTONE_ENTRY, FD_TXNCACHE_TEMP_ENTRY ) ) ) {
+    if( FD_LIKELY( FD_ATOMIC_CAS( &(*out_blockcache)->max_slot, FD_TXNCACHE_EMPTY_ENTRY, FD_TXNCACHE_TEMP_ENTRY ) ||
+        FD_ATOMIC_CAS( &(*out_blockcache)->max_slot, FD_TXNCACHE_TOMBSTONE_ENTRY, FD_TXNCACHE_TEMP_ENTRY ) ) ) {
       memcpy( (*out_blockcache)->blockhash, blockhash, 32UL );
       memset( (*out_blockcache)->heads, 0xFF, FD_TXNCACHE_BLOCKCACHE_MAP_CNT*sizeof(uint) );
       (*out_blockcache)->pages_cnt      = 0;
@@ -538,7 +538,7 @@ fd_txncache_ensure_blockcache( fd_txncache_t *                     tc,
       memset( (*out_blockcache)->pages, 0xFF, tc->txnpages_per_blockhash_max*sizeof(uint) );
       FD_COMPILER_MFENCE();
       /* Set it to max unreserved value possible */
-      (*out_blockcache)->lowest_slot    = ULONG_MAX-3UL;
+      (*out_blockcache)->max_slot    = ULONG_MAX-3UL;
       return 1;
     }
     FD_SPIN_PAUSE();
@@ -668,9 +668,10 @@ fd_txncache_insert_txn( fd_txncache_t *                        tc,
     }
 
     for(;;) {
-      ulong lowest_slot = blockcache->lowest_slot;
-      if( FD_UNLIKELY( txn->slot>=lowest_slot ) ) break;
-      if( FD_LIKELY( FD_ATOMIC_CAS( &blockcache->lowest_slot, lowest_slot, txn->slot )==lowest_slot ) ) break;
+      ulong max_slot = blockcache->max_slot;
+
+      if( FD_UNLIKELY( txn->slot<=max_slot && max_slot != ULONG_MAX-3UL) ) break;
+      if( FD_LIKELY( FD_ATOMIC_CAS( &blockcache->max_slot, max_slot, txn->slot )==max_slot ) ) break;
       FD_SPIN_PAUSE();
     }
     return 1;
@@ -688,8 +689,8 @@ fd_txncache_insert_batch( fd_txncache_t *              tc,
     if( FD_UNLIKELY( !fd_txncache_ensure_blockcache( tc, txns[ i ].blockhash, &blockcache ) ) ) goto unlock_fail;
 
     // TODO: should this be enabled? Ledger tests fail immediately
-    // if( FD_UNLIKELY( blockcache->lowest_slot!=ULONG_MAX-2 && txns[ i ].slot>=blockcache->lowest_slot+150UL ) ) {
-    //   FD_LOG_WARNING(("Lowest slot %lu for slot %lu", blockcache->lowest_slot, txns[i].slot ));
+    // if( FD_UNLIKELY( blockcache->max_slot!=ULONG_MAX-2 && txns[ i ].slot>=blockcache->max_slot+150UL ) ) {
+    //   FD_LOG_WARNING(("Lowest slot %lu for slot %lu", blockcache->max_slot, txns[i].slot ));
     //   goto unlock_fail;
     // }
 
