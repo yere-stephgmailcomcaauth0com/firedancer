@@ -173,6 +173,7 @@ fd_snapshot_load( const char *         snapshotfile,
 
   // In order to calculate the snapshot hash, we need to know what features are active...
   fd_features_restore( slot_ctx );
+  slot_ctx->slot_bank.slot = name.slot;
   fd_calculate_epoch_accounts_hash_values( slot_ctx );
 
   if( verify_hash ) {
