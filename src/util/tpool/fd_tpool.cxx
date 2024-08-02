@@ -316,6 +316,9 @@ fd_tpool_private_exec_all_##style##_node( void * _node_tpool,                   
   while( wait_cnt ) fd_tpool_wait( node_tpool, (ulong)wait_child[ --wait_cnt ] ); \
 }
 
+#define FD_TPOOL_EXEC_ALL_IMPL_NBLOCK_FTR                                         \
+}
+
 FD_TPOOL_EXEC_ALL_IMPL_HDR(rrobin)
   ulong m_stride = t1-t0;
   ulong m        = l0 + fd_ulong_min( node_t0-t0, ULONG_MAX-l0 ); /* robust against overflow */
@@ -324,6 +327,15 @@ FD_TPOOL_EXEC_ALL_IMPL_HDR(rrobin)
     m += fd_ulong_min( m_stride, ULONG_MAX-m ); /* robust against overflow */
   }
 FD_TPOOL_EXEC_ALL_IMPL_FTR
+
+FD_TPOOL_EXEC_ALL_IMPL_HDR(nblock_rrobin)
+  ulong m_stride = t1-t0;
+  ulong m        = l0 + fd_ulong_min( node_t0-t0, ULONG_MAX-l0 ); /* robust against overflow */
+  while( m<l1 ) {
+    task( (void *)_tpool,t0,t1, args,reduce,stride, l0,l1, m,m+1UL, node_t0,node_t1 );
+    m += fd_ulong_min( m_stride, ULONG_MAX-m ); /* robust against overflow */
+  }
+FD_TPOOL_EXEC_ALL_IMPL_NBLOCK_FTR
 
 FD_TPOOL_EXEC_ALL_IMPL_HDR(block)
   ulong m0; ulong m1; FD_TPOOL_PARTITION( l0,l1,1UL, node_t0-t0,t1-t0, m0,m1 );

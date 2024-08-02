@@ -909,6 +909,7 @@ fd_tpool_exec_all_##style( fd_tpool_t *    tpool,                               
 }
 
 FD_TPOOL_EXEC_ALL_DECL(rrobin)
+FD_TPOOL_EXEC_ALL_DECL(nblock_rrobin)
 FD_TPOOL_EXEC_ALL_DECL(block)
 FD_TPOOL_EXEC_ALL_DECL(batch)
 FD_TPOOL_EXEC_ALL_DECL(raw)
