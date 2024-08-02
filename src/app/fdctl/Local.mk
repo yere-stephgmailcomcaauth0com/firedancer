@@ -47,6 +47,7 @@ $(call add-objs,run/tiles/fd_replay,fd_fdctl)
 $(call add-objs,run/tiles/fd_replay_thread,fd_fdctl)
 $(call add-objs,run/tiles/fd_poh_int,fd_fdctl)
 $(call add-objs,run/tiles/fd_sender,fd_fdctl)
+$(call add-objs,run/tiles/fd_gossip_verify,fd_fdctl)
 endif
 
 # fdctl topologies
