@@ -931,12 +931,13 @@ after_frag( void *             _ctx,
               ctx->publish = 1;
             }
           }
-
-          /* Send our updated tower to the cluster. */
-
-          send_tower_sync( ctx );
         }
+
+        /* Send our updated tower to the cluster. */
+
+        send_tower_sync( ctx );
       }
+
 
       /* Prepare bank for next execution. */
 
