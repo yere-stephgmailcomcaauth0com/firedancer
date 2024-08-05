@@ -73,6 +73,8 @@ typedef struct {
   fd_frag_meta_t * pack_out_mcache;
   ulong            pack_out_depth;
   ulong            pack_out_seq;
+  ulong *          pack_out_sync;
+
   fd_wksp_t *      pack_out_mem;
   ulong            pack_out_chunk0;
   ulong            pack_out_wmark;
@@ -446,8 +448,9 @@ unprivileged_init( fd_topo_t *      topo,
   ctx->shred_out_chunk  = ctx->shred_out_chunk0;
 
   ctx->pack_out_mcache = topo->links[ tile->out_link_id[ 0 ] ].mcache;
+  ctx->pack_out_sync   = fd_mcache_seq_laddr( ctx->pack_out_mcache );
   ctx->pack_out_depth  = fd_mcache_depth( ctx->pack_out_mcache );
-  ctx->pack_out_seq    = 0UL;
+  ctx->pack_out_seq    = fd_mcache_seq_query( ctx->pack_out_sync );
 
   ctx->pack_out_mem    = topo->workspaces[ topo->objs[ topo->links[ tile->out_link_id[ 0 ] ].dcache_obj_id ].wksp_id ].wksp;
   ctx->pack_out_chunk0 = fd_dcache_compact_chunk0( ctx->pack_out_mem, topo->links[ tile->out_link_id[ 0 ] ].dcache );

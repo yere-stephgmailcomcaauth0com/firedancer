@@ -472,18 +472,26 @@ fd_tower_reset_fork_select( fd_tower_t const * tower,
   fd_fork_frontier_t const * frontier = forks->frontier;
   fd_fork_t const *          pool     = forks->pool;
 
+  fd_fork_t const * frozen_fork = NULL;
   for( fd_fork_frontier_iter_t iter = fd_fork_frontier_iter_init( frontier, pool );
        !fd_fork_frontier_iter_done( iter, frontier, pool );
        iter = fd_fork_frontier_iter_next( iter, frontier, pool ) ) {
     fd_fork_t const * fork = fd_fork_frontier_iter_ele_const( iter, frontier, pool );
-    if( FD_LIKELY( fd_ghost_is_descendant( ghost, fork->slot, latest_vote->slot ) ) ) return fork;
+    if( fork->frozen ) {
+      if( FD_LIKELY( fd_ghost_is_descendant( ghost, fork->slot_ctx.slot_bank.prev_slot, latest_vote->slot ) ) ) frozen_fork = fork;
+    } else {
+      if( FD_LIKELY( fd_ghost_is_descendant( ghost, fork->slot, latest_vote->slot ) ) ) return fork;
+    }
   }
 
+  if( frozen_fork ) {
+    return frozen_fork;
+  }
   /* TODO this can happen if somehow prune our last vote fork or we
      discard it due to equivocation. Both these cases are currently
      unhandled. */
 
-  FD_LOG_ERR( ( "None of the frontier forks matched our last vote fork. Halting." ) );
+  FD_LOG_ERR( ( "None of the frontier forks matched our last vote fork (slot: %lu). Halting.", latest_vote->slot ) );
 }
 
 fd_fork_t const *
@@ -602,21 +610,21 @@ fd_tower_epoch_update( fd_tower_t * tower, fd_exec_epoch_ctx_t const * epoch_ctx
 
 void
 fd_tower_fork_start( fd_fork_t const *  fork,
-                     fd_blockstore_t *  blockstore FD_PARAM_UNUSED,
+                     fd_blockstore_t *  blockstore,
                      fd_ghost_t *       ghost,
-                     ulong              parent_slot ) {
+                     ulong              parent_slot_ FD_PARAM_UNUSED ) {
   /* Get the parent key. Every slot except the root must have a parent. */
 
-//   fd_blockstore_start_read( blockstore );
-//   ulong parent_slot = fd_blockstore_query( blockstore, fork->slot );
-// #if FD_TOWER_USE_HANDHOLDING
-//   /* we must have a parent slot and bank hash, given we just executed
-//      its child. if not, likely a bug in blockstore pruning. */
-//   if( FD_UNLIKELY( parent_slot == FD_SLOT_NULL ) ) {
-//     FD_LOG_ERR( ( "missing parent slot for curr slot %lu", fork->slot ) );
-//   };
-// #endif
-//   fd_blockstore_end_read( blockstore );
+  fd_blockstore_start_read( blockstore );
+  ulong parent_slot = fd_blockstore_parent_slot_query( blockstore, fork->slot );
+#if FD_TOWER_USE_HANDHOLDING
+  /* we must have a parent slot and bank hash, given we just executed
+     its child. if not, likely a bug in blockstore pruning. */
+  if( FD_UNLIKELY( parent_slot == FD_SLOT_NULL ) ) {
+    FD_LOG_ERR( ( "missing parent slot for curr slot %lu", fork->slot ) );
+  };
+#endif
+  fd_blockstore_end_read( blockstore );
 
   /* Insert the new fork head into ghost. */
 

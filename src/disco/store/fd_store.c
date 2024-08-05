@@ -153,6 +153,7 @@ fd_store_slot_prepare( fd_store_t *   store,
   /* See if the parent is executed yet */
   if( FD_UNLIKELY( !fd_uchar_extract_bit( parent_block_map_entry->flags, FD_BLOCK_FLAG_PROCESSED ) ) ) {
     rc = FD_STORE_SLOT_PREPARE_NEED_PARENT_EXEC;
+    FD_LOG_WARNING(("NEED PARENT EXEC"));
     if( FD_UNLIKELY( !fd_uchar_extract_bit( parent_block_map_entry->flags, FD_BLOCK_FLAG_PREPARING ) ) ) {
       /* ... but it is not prepared */
       re_add_delays[re_adds_cnt] = (long)5e6;
@@ -218,6 +219,7 @@ fd_store_shred_insert( fd_store_t * store,
   if( FD_UNLIKELY( rc < FD_BLOCKSTORE_OK ) ) {
     FD_LOG_ERR( ( "failed to insert shred. reason: %d", rc ) );
   } else if ( rc == FD_BLOCKSTORE_OK_SLOT_COMPLETE ) {
+    FD_LOG_WARNING(("BLOCK COMPLETE"));
     fd_store_add_pending( store, shred->slot, (long)5e6, 0, 1 );
   } else {
     fd_store_add_pending( store, shred->slot, FD_REPAIR_BACKOFF_TIME, 0, 0 );
@@ -367,7 +369,7 @@ fd_store_slot_repair( fd_store_t * store,
       repair_req->type = FD_REPAIR_REQ_TYPE_NEED_WINDOW_INDEX;
     }
     if( repair_req_cnt ) {
-      FD_LOG_DEBUG( ( "[repair] need %lu [%lu, %lu], sent %lu requests", slot, block_map_entry->consumed_idx + 1, complete_idx, repair_req_cnt ) );
+      FD_LOG_INFO( ( "[repair] need %lu [%lu, %lu], sent %lu requests", slot, block_map_entry->consumed_idx + 1, complete_idx, repair_req_cnt ) );
     }
   }
   // fd_store_add_pending( store, slot, FD_REPAIR_BACKOFF_TIME, 1, 0 );

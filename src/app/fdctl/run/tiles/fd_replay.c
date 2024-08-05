@@ -641,8 +641,8 @@ after_frag( void *             _ctx,
         FD_LOG_ERR( ( "invariant violation: child slot %lu was already in the frontier", curr_slot ) );
       }
       fd_fork_frontier_ele_insert( ctx->forks->frontier, child, ctx->forks->pool );
+      fork->frozen = 1;
       FD_TEST( fork == child );
-      fd_tower_fork_start( fork, ctx->blockstore, ctx->ghost, ctx->parent_slot );
 
       // fork is advancing
       FD_LOG_NOTICE(( "new block execution - slot: %lu, parent_slot: %lu", curr_slot, ctx->parent_slot ));
@@ -816,11 +816,19 @@ after_frag( void *             _ctx,
       /* Consensus */
 
       FD_PARAM_UNUSED long tic_ = fd_log_wallclock();
-
+      fd_tower_fork_start( fork, ctx->blockstore, ctx->ghost, ctx->parent_slot );
       fd_tower_fork_update( ctx->tower, fork, ctx->acc_mgr, ctx->ghost );
 
       /* Check which fork to reset to for pack. */
       fd_fork_t const * reset_fork = fd_tower_reset_fork_select( ctx->tower, ctx->forks, ctx->ghost );
+      if( reset_fork->frozen ) {
+        FD_LOG_WARNING(("RESET FORK FROZEN: %lu", reset_fork->slot ));
+        fd_fork_t * new_reset_fork = fd_forks_prepare( ctx->forks, reset_fork->slot_ctx.slot_bank.prev_slot, ctx->acc_mgr, 
+            ctx->blockstore, ctx->epoch_ctx, ctx->funk, ctx->valloc );
+        new_reset_fork->frozen = 0;
+        reset_fork = new_reset_fork;
+      }
+
       memcpy( microblock_trailer->hash, reset_fork->slot_ctx.slot_bank.block_hash_queue.last_hash->uc, sizeof(fd_hash_t) );
       if( ctx->poh_init_done == 1 ) {
         ulong parent_slot = reset_fork->slot_ctx.slot_bank.prev_slot;
@@ -1171,7 +1179,7 @@ after_credit( void *             _ctx,
     }
 
     if ( ctx->blockstore != NULL ) {
-
+      FD_LOG_WARNING(( "INIT BLOCKSTORE" ));
       /* Init slot_ctx */
 
       fd_exec_slot_ctx_t slot_ctx = { 0 };
@@ -1278,6 +1286,7 @@ unprivileged_init( fd_topo_t *      topo,
   /**********************************************************************/
 
   ctx->wksp = topo->workspaces[ topo->objs[ tile->tile_obj_id ].wksp_id ].wksp;
+  ctx->blockstore = NULL;
 
   ulong blockstore_obj_id = fd_pod_queryf_ulong( topo->props, ULONG_MAX, "blockstore" );
   FD_TEST( blockstore_obj_id!=ULONG_MAX );

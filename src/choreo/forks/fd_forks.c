@@ -334,7 +334,7 @@ fd_forks_publish( fd_forks_t * forks, ulong slot, fd_ghost_t const * ghost ) {
   for( fd_fork_frontier_iter_t iter = fd_fork_frontier_iter_init( forks->frontier, forks->pool );
        !fd_fork_frontier_iter_done( iter, forks->frontier, forks->pool );
        iter = fd_fork_frontier_iter_next( iter, forks->frontier, forks->pool ) ) {
-
+        
     fd_fork_t * fork = fd_fork_frontier_iter_ele( iter, forks->frontier, forks->pool );
 
     /* Prune any forks not in the ancestry from root.

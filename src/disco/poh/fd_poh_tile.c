@@ -206,6 +206,7 @@ fd_poh_tile_begin_leader( fd_poh_tile_ctx_t * ctx,
     FD_TEST( ctx->last_slot==ctx->reset_slot );
     FD_TEST( !ctx->last_hashcnt );
     ctx->slot = ctx->reset_slot;
+    FD_LOG_WARNING(("BEGIN SLOT: %lu", ctx->slot));
     ctx->hashcnt = 0UL;
   }
 
@@ -293,6 +294,7 @@ fd_poh_tile_reset( fd_poh_tile_ctx_t * ctx,
 
   memcpy( ctx->hash, reset_blockhash, 32UL );
   ctx->slot         = completed_bank_slot+1UL;
+  FD_LOG_WARNING(("RESET SLOT: %lu", ctx->slot));
   ctx->hashcnt      = 0UL;
   ctx->last_slot    = ctx->slot;
   ctx->last_hashcnt = 0UL;
@@ -622,7 +624,6 @@ fd_poh_tile_after_credit( fd_poh_tile_ctx_t * ctx,
   if( FD_UNLIKELY( is_leader && !(ctx->hashcnt%ctx->hashcnt_per_tick) ) ) {
     /* We ticked while leader... tell the leader bank. */
     ctx->register_tick_func( ctx->arg, ctx->current_leader_slot, ctx->hash );
-    // FD_LOG_WARNING(("TICK TIME"));
     /* And send an empty microblock (a tick) to the shred tile. */
     fd_poh_tile_publish_tick( ctx, ctx->hash, 0 );
   }
@@ -761,7 +762,7 @@ fd_poh_tile_process_packed_microblock( fd_poh_tile_ctx_t * ctx,
      the microblock and don't hash or update the hashcnt. */
   if( FD_UNLIKELY( !executed_txn_cnt ) ) return;
 
-  FD_LOG_INFO(( "rx packed mblk - target_slot: %lu, txn_cnt: %lu", target_slot, executed_txn_cnt ));
+  FD_LOG_DEBUG(( "rx packed mblk - target_slot: %lu, txn_cnt: %lu", target_slot, executed_txn_cnt ));
 
   uchar data[ 64 ];
   fd_memcpy( data, ctx->hash, 32UL );
@@ -780,6 +781,7 @@ fd_poh_tile_process_packed_microblock( fd_poh_tile_ctx_t * ctx,
      sending the microblock below is the publishing action. */
   if( FD_UNLIKELY( !(ctx->hashcnt%ctx->hashcnt_per_slot ) ) ) {
     ctx->slot++;
+    FD_LOG_WARNING(("SLOT INC: %lu", ctx->slot));
     ctx->hashcnt = 0UL;
   }
 

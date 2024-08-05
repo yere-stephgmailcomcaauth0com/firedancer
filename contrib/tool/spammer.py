@@ -24,10 +24,11 @@ def send_round_of_txs(txs, sock, tpus):
         for tpu in tpus:
             sock.sendto(message, tpu)
 
-def create_account_tx(lamports, recent_blockhash, acc):
+def create_accounts_tx(lamports, recent_blockhash, accs):
     client = Client("http://127.0.0.1:8899")
-    tx = Transaction(recent_blockhash, None, funder.pubkey(), []).add(
-        transfer(TransferParams(from_pubkey=funder.pubkey(), to_pubkey=acc.pubkey(), lamports=lamports)))
+    tx = Transaction(recent_blockhash, None, funder.pubkey(), [])
+    for acc in accs:
+        tx = tx.add(transfer(TransferParams(from_pubkey=funder.pubkey(), to_pubkey=acc.pubkey(), lamports=lamports)))
     tx.sign(funder)
     return tx
     # client.send_transaction(tx, funder, opts=TxOpts(skip_confirmation=True))
@@ -57,7 +58,9 @@ def create_accounts(funder, client: Client, num_accs, lamports, seed, sock, tpus
         if len(remaining_accs) == 0:
             break
         recent_blockhash = client.get_latest_blockhash().value.blockhash
-        txs = pqdm(remaining_accs, partial(create_account_tx, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
+        chunk_size = 8
+        acc_chunks = [remaining_accs[i:i+chunk_size] for i in range(0, len(remaining_accs), chunk_size) ]
+        txs = pqdm(acc_chunks, partial(create_accounts_tx, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
         send_round_of_txs(txs, sock, tpus)
         time.sleep(10)
 
