@@ -7,6 +7,7 @@ import socket
 import math
 import multiprocessing
 import threading
+import requests
 from functools import partial
 from typing import List
 from multiprocessing.sharedctypes import SynchronizedBase
@@ -89,7 +90,7 @@ def get_balance(lamports, client: Client, acc):
     else:
         return None
 
-def create_accounts(funder, client: Client, num_accs, lamports, seed, sock, tpus):
+def create_accounts(funder, rpc: str, num_accs, lamports, seed, sock, tpus):
     accs = []
     for i in tqdm.trange(num_accs, desc="keypairs"):
         acc = Keypair.from_seed_and_derivation_path(seed, f"m/44'/42'/0'/{i}'")
@@ -100,9 +101,10 @@ def create_accounts(funder, client: Client, num_accs, lamports, seed, sock, tpus
     rem_accs_list = list(remaining_accs)
     acc_chunks = [rem_accs_list[i:i+chunk_size] for i in range(0, len(rem_accs_list), chunk_size) ]
     # recent_blockhash = client.get_latest_blockhash().value.blockhash
-    with open("../test-ledger/meep", "r") as x:
-      recent_blockhash = Hash.from_string(x.read())
-      print(recent_blockhash)
+    resp = requests.get(rpc +"/meep")
+    print(resp.text)
+    recent_blockhash = Hash.from_string(resp.text)
+
     txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
     send_round_of_txs(txs, sock, tpus)
     return accs
@@ -134,19 +136,19 @@ def gen_tx(recent_blockhash, key, acc, cu_price):
   tx.sign(key)
   return tx
 
-def send_txs(client: Client, tpus: List[str], keys: List[Keypair], tx_idx, mult):
+def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   accs = [key.pubkey() for key in keys]
   # recent_blockhash = client.get_latest_blockhash().value.blockhash
-  with open("../test-ledger/meep", "r") as x:
-    recent_blockhash = Hash.from_string(x.read())
+  resp = requests.get(rpc +"/meep")
+  recent_blockhash = Hash.from_string(resp.text)
   prev_recent_blockhash = recent_blockhash
   while True:
     # recent_blockhash = client.get_latest_blockhash().value.blockhash
-    with open("../test-ledger/meep", "r") as x:
-      recent_blockhash = Hash.from_string(x.read())
+    resp = requests.get(rpc +"/meep")
+    recent_blockhash = Hash.from_string(resp.text)
     if recent_blockhash == prev_recent_blockhash:
-       time.sleep(0.01)
+       time.sleep(0.1)
        continue
     prev_recent_blockhash = recent_blockhash
     for j in range(mult):
@@ -184,7 +186,7 @@ def main():
   tpus = list(map(lambda t: (t[0], int(t[1])), tpus))
 
   print(tpus)
-  accs = create_accounts(funder, client, args.nkeys, 10_000_000, seed, sock, tpus)
+  accs = create_accounts(funder, args.rpc, args.nkeys, 10_000_000, seed, sock, tpus)
   
   chunk_size = math.ceil(len(accs)/args.workers)
   acc_chunks = [accs[i:i+chunk_size] for i in range(0, len(accs), chunk_size)]
@@ -199,7 +201,7 @@ def main():
         target=send_txs,
         name=f"worker{i}",
         args=(
-            client,
+            args.rpc,
             tpus,
             acc_chunks[i],
             tx_idx,
