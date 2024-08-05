@@ -153,7 +153,7 @@ fd_store_slot_prepare( fd_store_t *   store,
   /* See if the parent is executed yet */
   if( FD_UNLIKELY( !fd_uchar_extract_bit( parent_block_map_entry->flags, FD_BLOCK_FLAG_PROCESSED ) ) ) {
     rc = FD_STORE_SLOT_PREPARE_NEED_PARENT_EXEC;
-    FD_LOG_WARNING(("NEED PARENT EXEC"));
+    // FD_LOG_WARNING(("NEED PARENT EXEC %lu %lu", slot, parent_slot));
     if( FD_UNLIKELY( !fd_uchar_extract_bit( parent_block_map_entry->flags, FD_BLOCK_FLAG_PREPARING ) ) ) {
       /* ... but it is not prepared */
       re_add_delays[re_adds_cnt] = (long)5e6;
@@ -194,9 +194,11 @@ int
 fd_store_shred_insert( fd_store_t * store,
                        fd_shred_t const * shred ) {
   uchar shred_type = fd_shred_type( shred->variant );
+  // FD_LOG_INFO(("is chained: %u", fd_shred_is_chained(shred_type) ));
   if( shred_type != FD_SHRED_TYPE_LEGACY_DATA
       && shred_type != FD_SHRED_TYPE_MERKLE_DATA 
-      && shred_type != FD_SHRED_TYPE_MERKLE_DATA_CHAINED ) {
+      && shred_type != FD_SHRED_TYPE_MERKLE_DATA_CHAINED
+      && shred_type != FD_SHRED_TYPE_MERKLE_DATA_CHAINED_RESIGNED ) {
     return FD_BLOCKSTORE_OK;
   } 
 
