@@ -127,7 +127,6 @@ FD_FN_PURE fd_slot_hashes_t                  const * fd_sysvar_cache_slot_hashes
 FD_FN_PURE fd_recent_block_hashes_t          const * fd_sysvar_cache_recent_block_hashes( fd_sysvar_cache_t const * cache );
 FD_FN_PURE fd_stake_history_t                const * fd_sysvar_cache_stake_history      ( fd_sysvar_cache_t const * cache );
 FD_FN_PURE fd_sol_sysvar_last_restart_slot_t const * fd_sysvar_cache_last_restart_slot  ( fd_sysvar_cache_t const * cache );
-
 /* fd_sysvar_from_instr_acct_{...} pretends to read a sysvar from an
    instruction account.  Checks that a given instruction account has
    an address matching the sysvar.  Returns the sysvar from the sysvar

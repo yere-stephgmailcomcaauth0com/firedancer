@@ -416,7 +416,7 @@ fd_cap_transaction_accounts_data_size( fd_exec_txn_ctx_t *       txn_ctx,
 
   if( total_accounts_data_size > txn_ctx->loaded_accounts_data_size_limit ) {
     FD_LOG_WARNING(( "Total loaded accounts data size %lu has exceeded its set limit %lu", total_accounts_data_size, txn_ctx->loaded_accounts_data_size_limit ));
-    return FD_RUNTIME_TXN_ERR_INVALID_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
+    return FD_RUNTIME_TXN_ERR_MAX_LOADED_ACCOUNTS_DATA_SIZE_EXCEEDED;
   }
 
   return FD_EXECUTOR_INSTR_SUCCESS;
@@ -897,7 +897,6 @@ fd_execute_txn_prepare_phase1( fd_exec_slot_ctx_t *  slot_ctx,
     }
   }
 
-
   return compute_budget_status;
 }
 
@@ -1028,6 +1027,7 @@ int
 fd_execute_txn_prepare_phase4( fd_exec_slot_ctx_t * slot_ctx,
                                fd_exec_txn_ctx_t * txn_ctx ) {
   fd_executor_setup_borrowed_accounts_for_txn( txn_ctx );
+
   /* Update rent exempt on writable accounts if feature activated
     TODO this should probably not run on executable accounts
         Also iterate over LUT accounts */

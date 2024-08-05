@@ -30,7 +30,7 @@ while [ $(solana -u localhost epoch-info --output json | jq .blockHeight) -le 15
   sleep 1
 done
 
-FULL_SNAPSHOT=$(wget -c -nc -S --trust-server-names http://$PRIMARY_IP:8899/snapshot.tar.bz2 |& grep 'location:' | cut -d/ -f2)
+# FULL_SNAPSHOT=$(wget -c -nc -S --trust-server-names http://$PRIMARY_IP:8899/snapshot.tar.bz2 |& grep 'location:' | cut -d/ -f2)
 
 echo "
 name = \"fd1test\"
@@ -41,21 +41,22 @@ name = \"fd1test\"
 [gossip]
     port = 8700
 [tiles]
+    [tiles.pack]
+        max_pending_transactions = 40000
     [tiles.gossip]
         entrypoints = [\"$PRIMARY_IP\"]
         peer_ports = [8001]
         gossip_listen_port = 8700
-    
     [tiles.repair]
         repair_intake_listen_port = 8701
         repair_serve_listen_port = 8702
     [tiles.replay]
-        capture = \"fddev.solcap\"
+        # capture = \"fddev.solcap\"
         blockstore_checkpt = \"fddev-blockstore.checkpt\"
-        snapshot = \"$FULL_SNAPSHOT\"
-        tpool_thread_count = 8
+        snapshot = \"$(ls snapshot-* | head -n1)\"
+        tpool_thread_count = 4
         funk_sz_gb = 32
-        funk_rec_max = 10000000
+        funk_rec_max = 100000000
         funk_txn_max = 1024
         cluster_version = 1180
 [log]
@@ -65,9 +66,13 @@ name = \"fd1test\"
 [development]
     topology = \"firedancer\"
 [consensus]
+    expected_shred_version = 3232
     vote = true
-    identity_path = \"fd-identity-keypair.json\"
-    vote_account_path = \"fd-vote-keypair.json\"
+    identity_path = \"validator-keypair.json\"
+    vote_account_path = \"vote-account-keypair.json\"
+[development]
+    [development.bench]
+        larger_max_cost_per_block = true
 " > fddev.toml
 
 sudo $FD_DIR/build/native/$CC/bin/fddev configure init kill --config $(readlink -f fddev.toml)

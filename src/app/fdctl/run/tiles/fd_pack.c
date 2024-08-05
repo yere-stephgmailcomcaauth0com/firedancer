@@ -544,6 +544,7 @@ during_frag( void * _ctx,
     fd_memcpy( TXN(ctx->cur_spot),     txn,     fd_txn_footprint( txn->instr_cnt, txn->addr_table_lookup_cnt ) );
     ctx->cur_spot->payload_sz = payload_sz;
   } else {
+    FD_LOG_WARNING(("gossip vote"));
     /* Here there is just a transaction payload, so it needs to be
        parsed.  We can parse right out into the pack structure. */
     FD_MCNT_INC( PACK, GOSSIPED_VOTES_RECEIVED, 1UL );

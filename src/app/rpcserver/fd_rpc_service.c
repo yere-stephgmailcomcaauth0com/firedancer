@@ -71,7 +71,7 @@ read_epoch_bank( fd_rpc_ctx_t * ctx, fd_valloc_t valloc, ulong * smr ) {
 
   for(;;) {
     fd_readwrite_start_read( &glob->lock );
-    *smr = glob->blockstore->smr;
+    *smr = glob->blockstore->root;
 
     if( glob->epoch_bank != NULL &&
         glob->epoch_bank_epoch == fd_slot_to_epoch(&glob->epoch_bank->epoch_schedule, *smr, NULL) ) {
@@ -199,7 +199,7 @@ method_getAccountInfo(struct fd_web_replier* replier, struct json_values* values
     fd_blockstore_t * blockstore = ctx->global->blockstore;
     if (val == NULL) {
       fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"" FIREDANCER_VERSION "\",\"slot\":%lu},\"value\":null},\"id\":%lu}" CRLF,
-                            blockstore->smr, ctx->call_id);
+                            blockstore->root, ctx->call_id);
       fd_web_replier_done(replier);
       return 0;
     }
@@ -248,7 +248,7 @@ method_getAccountInfo(struct fd_web_replier* replier, struct json_values* values
     long len = (len_ptr ? *(long *)len_ptr : FD_LONG_UNSET);
 
     fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"" FIREDANCER_VERSION "\",\"slot\":%lu},\"value\":",
-                          blockstore->smr);
+                          blockstore->root);
     const char * err = fd_account_to_json( ts, acct, enc, val, val_sz, off, len );
     if( err ) {
       fd_web_replier_error(replier, "%s", err);
@@ -293,7 +293,7 @@ method_getBalance(struct fd_web_replier* replier, struct json_values* values, fd
     fd_textstream_t * ts = fd_web_replier_textstream(replier);
     fd_blockstore_t * blockstore = ctx->global->blockstore;
     fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"" FIREDANCER_VERSION "\",\"slot\":%lu},\"value\":%lu},\"id\":%lu}" CRLF,
-                          blockstore->smr, metadata->info.lamports, ctx->call_id);
+                          blockstore->root, metadata->info.lamports, ctx->call_id);
     fd_web_replier_done(replier);
   } FD_METHOD_SCRATCH_END;
   return 0;
@@ -469,10 +469,10 @@ method_getBlocks(struct fd_web_replier* replier, struct json_values* values, fd_
   ulong endslotn = (endslot == NULL ? ULONG_MAX : (ulong)(*(long*)endslot));
 
   fd_blockstore_t * blockstore = ctx->global->blockstore;
-  if (startslotn < blockstore->min)
-    startslotn = blockstore->min;
-  if (endslotn > blockstore->max)
-    endslotn = blockstore->max;
+  // if (startslotn < blockstore->min)
+  //   startslotn = blockstore->min;
+  // if (endslotn > blockstore->max)
+  //   endslotn = blockstore->max;
 
   fd_textstream_t * ts = fd_web_replier_textstream(replier);
   fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":[");
@@ -522,15 +522,15 @@ method_getBlocksWithLimit(struct fd_web_replier* replier, struct json_values* va
   ulong limitn = (ulong)(*(long*)limit);
 
   fd_blockstore_t * blockstore = ctx->global->blockstore;
-  if (startslotn < blockstore->min)
-    startslotn = blockstore->min;
+  // if (startslotn < blockstore->min)
+  //   startslotn = blockstore->min;
   if (limitn > 500000)
     limitn = 500000;
 
   fd_textstream_t * ts = fd_web_replier_textstream(replier);
   fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":[");
   uint cnt = 0;
-  for ( ulong i = startslotn; i <= blockstore->max && cnt < limitn; ++i ) {
+  for ( ulong i = startslotn; i <= blockstore->root && cnt < limitn; ++i ) {
     fd_block_map_t meta[1];
     int ret = fd_blockstore_block_map_query_volatile(blockstore, i, meta);
     if (!ret) {
@@ -659,7 +659,7 @@ method_getFirstAvailableBlock(struct fd_web_replier* replier, struct json_values
   fd_blockstore_t * blockstore = ctx->global->blockstore;
   fd_textstream_t * ts = fd_web_replier_textstream(replier);
   fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":%lu,\"id\":%lu}" CRLF,
-                        blockstore->min, ctx->call_id);
+                        0, ctx->call_id);
   fd_web_replier_done(replier);
   return 0;
 }
@@ -816,7 +816,7 @@ method_getMaxShredInsertSlot(struct fd_web_replier* replier, struct json_values*
   fd_blockstore_t * blockstore = ctx->global->blockstore;
   fd_textstream_t * ts = fd_web_replier_textstream(replier);
   fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":%lu,\"id\":%lu}" CRLF,
-                        blockstore->max, ctx->call_id);
+                        0UL, ctx->call_id);
   fd_web_replier_done(replier);
   return 0;
 }
@@ -879,7 +879,7 @@ method_getMultipleAccounts(struct fd_web_replier* replier, struct json_values* v
     fd_blockstore_t * blockstore = ctx->global->blockstore;
     fd_textstream_t * ts = fd_web_replier_textstream(replier);
     fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"" FIREDANCER_VERSION "\",\"slot\":%lu},\"value\":[",
-                          blockstore->smr);
+                          blockstore->root);
 
     // Iterate through account ids
     for ( ulong i = 0; ; ++i ) {
@@ -967,7 +967,7 @@ method_getSignatureStatuses(struct fd_web_replier* replier, struct json_values* 
   fd_textstream_t * ts = fd_web_replier_textstream(replier);
   fd_blockstore_t * blockstore = ctx->global->blockstore;
   fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"" FIREDANCER_VERSION "\",\"slot\":%lu},\"value\":[",
-                        blockstore->smr);
+                        blockstore->root);
 
   // Iterate through account ids
   for ( ulong i = 0; ; ++i ) {
@@ -1218,7 +1218,7 @@ method_getTransaction(struct fd_web_replier* replier, struct json_values* values
     FD_LOG_ERR(("failed to parse transaction"));
 
   fd_textstream_sprintf(ts, "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"" FIREDANCER_VERSION "\",\"slot\":%lu},\"blockTime\":%ld,\"slot\":%lu,",
-                        blockstore->smr, blk_ts/(long)1e9, elem.slot);
+                        blockstore->root, blk_ts/(long)1e9, elem.slot);
   const char * err = fd_txn_to_json( ts, (fd_txn_t *)txn_out, txn_data_raw, pay_sz, enc, 0, FD_BLOCK_DETAIL_FULL, 0 );
   if( err ) {
     fd_web_replier_error(replier, "%s", err);

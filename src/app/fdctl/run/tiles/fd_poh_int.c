@@ -353,7 +353,6 @@ after_frag( void *             _ctx,
 
   ulong is_packed_microblock = target_flags & REPLAY_FLAG_PACKED_MICROBLOCK;
   ulong is_finalized_block = target_flags & REPLAY_FLAG_FINISHED_BLOCK;
-  // ulong is_catching_up = target_flags & REPLAY_FLAG_CATCHING_UP;
 
   if( is_packed_microblock ) {
     ulong txn_cnt = *opt_sz;

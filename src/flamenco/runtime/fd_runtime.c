@@ -1036,13 +1036,13 @@ fd_runtime_prepare_txns_phase2_tpool( fd_exec_slot_ctx_t * slot_ctx,
                                       ulong max_workers ) {
   int res = 0;
   FD_SCRATCH_SCOPE_BEGIN  {
-    fd_tpool_exec_all_batch( tpool, 0, max_workers, fd_txn_sigverify_task, task_info, NULL, NULL, 1, 0, txn_cnt );
-    for( ulong txn_idx = 0; txn_idx < txn_cnt; txn_idx++ ) {
-      if( !( task_info[txn_idx].txn->flags & FD_TXN_P_FLAGS_SANITIZE_SUCCESS ) ) {
-        res |= FD_RUNTIME_TXN_ERR_SIGNATURE_FAILURE;
-        break;
-      }
-    }
+    // fd_tpool_exec_all_rrobin( tpool, 0, max_workers, fd_txn_sigverify_task, task_info, NULL, NULL, 1, 0, txn_cnt );
+    // for( ulong txn_idx = 0; txn_idx < txn_cnt; txn_idx++ ) {
+    //   if( !( task_info[txn_idx].txn->flags & FD_TXN_P_FLAGS_SANITIZE_SUCCESS ) ) {
+    //     res |= FD_RUNTIME_TXN_ERR_SIGNATURE_FAILURE;
+    //     break;
+    //   }
+    // }
 
     ulong fee_payer_accs_cnt = 0;
     ulong * fee_payer_idxs = fd_scratch_alloc( sizeof(ulong), txn_cnt * sizeof(ulong) );
@@ -1092,7 +1092,7 @@ fd_runtime_prepare_txns_phase2_tpool( fd_exec_slot_ctx_t * slot_ctx,
         }
       }
 
-      err = fd_executor_check_txn_accounts( txn_ctx );
+      // err = fd_executor_check_txn_accounts( txn_ctx );
       if ( err != FD_RUNTIME_EXECUTE_SUCCESS ) {
         FD_LOG_DEBUG(("phase 2 invalid: %64J", (uchar *)txn_ctx->_txn_raw->raw+txn_ctx->txn_descriptor->signature_off ));
         task_info[ txn_idx ].txn->flags = 0;
@@ -1788,7 +1788,7 @@ fd_runtime_execute_txns_in_waves_tpool( fd_exec_slot_ctx_t * slot_ctx,
         FD_LOG_DEBUG(("Fail prep 3"));
       }
 
-      fd_tpool_exec_all_taskq( tpool, 0, max_workers, fd_runtime_execute_txn_task, wave_task_infos, NULL, NULL, 1, 0, wave_task_infos_cnt );
+      fd_tpool_exec_all_rrobin( tpool, 0, max_workers, fd_runtime_execute_txn_task, wave_task_infos, NULL, NULL, 1, 0, wave_task_infos_cnt );
       int finalize_res = fd_runtime_finalize_txns_tpool( slot_ctx, capture_ctx, wave_task_infos, wave_task_infos_cnt, tpool, max_workers );
       if( finalize_res != 0 ) {
         FD_LOG_ERR(("Fail finalize"));

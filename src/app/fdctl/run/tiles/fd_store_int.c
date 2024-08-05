@@ -288,21 +288,21 @@ fd_store_tile_slot_prepare( fd_store_tile_ctx_t * ctx,
                             ulong slot ) {
   ulong tsorig = fd_frag_meta_ts_comp( fd_tickcount() );
   fd_repair_request_t * repair_reqs = fd_chunk_to_laddr( ctx->repair_req_out_mem, ctx->repair_req_out_chunk );
-  fd_epoch_leaders_t const * lsched = fd_stake_ci_get_lsched_for_slot( ctx->stake_ci, slot );
+  // fd_epoch_leaders_t const * lsched = fd_stake_ci_get_lsched_for_slot( ctx->stake_ci, slot );
 
-  fd_pubkey_t const * slot_leader = NULL;
-  if( FD_LIKELY( !ctx->sim ) ) {
-    if( FD_UNLIKELY( !lsched ) ) {
-    // FD_LOG_WARNING(("Get leader schedule for slot %lu failed", slot));
-      return;
-    }
+  // fd_pubkey_t const * slot_leader = NULL;
+  // if( FD_LIKELY( !ctx->sim ) ) {
+  //   if( FD_UNLIKELY( !lsched ) ) {
+  //   // FD_LOG_WARNING(("Get leader schedule for slot %lu failed", slot));
+  //     return;
+  //   }
 
-    slot_leader = fd_epoch_leaders_get( lsched, slot );
-    if( FD_UNLIKELY( !slot_leader ) ) {
-      FD_LOG_WARNING(( "Epoch leaders get fails" ));
-      return;
-    }
-  }
+  //   slot_leader = fd_epoch_leaders_get( lsched, slot );
+  //   if( FD_UNLIKELY( !slot_leader ) ) {
+  //     FD_LOG_WARNING(( "Epoch leaders get fails" ));
+  //     return;
+  //   }
+  // }
   /* We are leader at this slot and the slot is newer than turbine! */
   // FIXME: I dont think that this `ctx->store->curr_turbine_slot >= slot`
   // check works on fork switches to lower slot numbers. Use a given fork height
@@ -419,6 +419,7 @@ fd_store_tile_slot_prepare( fd_store_tile_ctx_t * ctx,
       if( FD_UNLIKELY( fd_trusted_slots_find( ctx->trusted_slots, slot ) ) ) {
         /* if is caught up and is leader */
         replay_sig = fd_disco_replay_sig( slot, REPLAY_FLAG_FINISHED_BLOCK );
+        FD_LOG_INFO(( "packed block prepared - slot: %lu, mblks: %lu, blockhash: %32J, txn_cnt: %lu, tick_cnt: %lu", slot, block_info.microblock_cnt, block_hash->uc, block_info.txn_cnt, tick_cnt ));
       } else {
         fd_txn_p_t * txns = fd_type_pun( out_buf );
         FD_LOG_DEBUG(( "first turbine: %lu, current received turbine: %lu, behind: %lu current "
@@ -513,7 +514,7 @@ after_credit( void *             _ctx,
     int store_slot_prepare_mode = fd_store_slot_prepare( ctx->store, i, &repair_slot, &block, &block_sz );
 
     ulong slot = repair_slot == 0 ? i : repair_slot;
-    FD_LOG_DEBUG(( "store slot - mode: %d, slot: %lu, repair_slot: %lu", store_slot_prepare_mode, i, repair_slot ));
+    FD_LOG_WARNING(( "store slot - mode: %d, slot: %lu, repair_slot: %lu", store_slot_prepare_mode, i, repair_slot ));
     fd_store_tile_slot_prepare( ctx, store_slot_prepare_mode, slot );
   }
 }

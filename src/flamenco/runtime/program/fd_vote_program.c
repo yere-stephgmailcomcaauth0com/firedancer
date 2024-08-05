@@ -2279,6 +2279,7 @@ uint vote_state_versions_is_correct_and_initialized( fd_borrowed_account_t * vot
 
 int
 fd_vote_program_execute( fd_exec_instr_ctx_t ctx ) {
+  FD_LOG_WARNING(("vote instr"));
   /* FD-specific init */
   int rc = FD_EXECUTOR_INSTR_SUCCESS;
 
