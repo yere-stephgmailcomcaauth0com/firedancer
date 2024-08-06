@@ -290,7 +290,6 @@ fd_store_tile_slot_prepare( fd_store_tile_ctx_t * ctx,
   fd_repair_request_t * repair_reqs = fd_chunk_to_laddr( ctx->repair_req_out_mem, ctx->repair_req_out_chunk );
   // fd_epoch_leaders_t const * lsched = fd_stake_ci_get_lsched_for_slot( ctx->stake_ci, slot );
 
-  // fd_pubkey_t const * slot_leader = NULL;
   // if( FD_LIKELY( !ctx->sim ) ) {
   //   if( FD_UNLIKELY( !lsched ) ) {
   //   // FD_LOG_WARNING(("Get leader schedule for slot %lu failed", slot));

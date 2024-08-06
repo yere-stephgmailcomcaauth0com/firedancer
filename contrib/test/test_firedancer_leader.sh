@@ -35,7 +35,7 @@ done
 echo "
 name = \"fd1test\"
 [layout]
-    affinity = \"1-37\"
+    affinity = \"1-40\"
     bank_tile_count = 1
     verify_tile_count = 16
 [gossip]
