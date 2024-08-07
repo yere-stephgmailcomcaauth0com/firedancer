@@ -958,12 +958,12 @@ fd_collect_fee_task( void *tpool,
                      ulong m0, ulong m1 FD_PARAM_UNUSED,
                      ulong n0 FD_PARAM_UNUSED, ulong n1 FD_PARAM_UNUSED ) {
   fd_collect_fee_task_info_t * task_info = (fd_collect_fee_task_info_t *)tpool + m0;
+  fd_exec_txn_ctx_t * txn_ctx = task_info->txn_ctx;
+  fd_exec_slot_ctx_t * slot_ctx = task_info->txn_ctx->slot_ctx;
+  
   if( task_info->result!=0 ) {
     return;
   }
-
-  fd_exec_txn_ctx_t * txn_ctx = task_info->txn_ctx;
-  fd_exec_slot_ctx_t * slot_ctx = task_info->txn_ctx->slot_ctx;
 
   fd_pubkey_t * tx_accs = (fd_pubkey_t *)((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->acct_addr_off);
 
@@ -1071,34 +1071,36 @@ fd_runtime_prepare_txns_phase2_tpool( fd_exec_slot_ctx_t * slot_ctx,
         }
       }
 
-      if( slot_ctx->status_cache ) {
-        fd_txncache_query_t curr_query;
-        curr_query.blockhash = blockhash->uc;
-        fd_blake3_t b3[1];
-        uchar hash[32];
-        fd_blake3_init( b3 );
-        fd_blake3_append( b3, ((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->message_off),(ulong)( txn_ctx->_txn_raw->txn_sz - txn_ctx->txn_descriptor->message_off ) );
-        fd_blake3_fini( b3, hash );
-        curr_query.txnhash = hash;
+      (void)query_func;
+      (void)query_arg;
+      // if( slot_ctx->status_cache ) {
+      //   fd_txncache_query_t curr_query;
+      //   curr_query.blockhash = blockhash->uc;
+      //   fd_blake3_t b3[1];
+      //   uchar hash[32];
+      //   fd_blake3_init( b3 );
+      //   fd_blake3_append( b3, ((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->message_off),(ulong)( txn_ctx->_txn_raw->txn_sz - txn_ctx->txn_descriptor->message_off ) );
+      //   fd_blake3_fini( b3, hash );
+      //   curr_query.txnhash = hash;
 
-        // TODO: figure out if it is faster to batch query properly and loop all txns again
-        fd_txncache_query_batch( slot_ctx->status_cache, &curr_query, 1UL, query_arg, query_func, &err );
+      //   // TODO: figure out if it is faster to batch query properly and loop all txns again
+      //   fd_txncache_query_batch( slot_ctx->status_cache, &curr_query, 1UL, query_arg, query_func, &err );
 
-        if( err != FD_RUNTIME_EXECUTE_SUCCESS ) {
-          FD_LOG_DEBUG(("phase 2 invalid: %64J", (uchar *)txn_ctx->_txn_raw->raw+txn_ctx->txn_descriptor->signature_off ));
-          task_info[ txn_idx ].txn->flags = 0;
-          res |= FD_RUNTIME_TXN_ERR_ALREADY_PROCESSED;
-          continue;
-        }
-      }
+      //   if( err != FD_RUNTIME_EXECUTE_SUCCESS ) {
+      //     FD_LOG_DEBUG(("phase 2 invalid: %64J", (uchar *)txn_ctx->_txn_raw->raw+txn_ctx->txn_descriptor->signature_off ));
+      //     task_info[ txn_idx ].txn->flags = 0;
+      //     res |= FD_RUNTIME_TXN_ERR_ALREADY_PROCESSED;
+      //     continue;
+      //   }
+      // }
 
       // err = fd_executor_check_txn_accounts( txn_ctx );
-      if ( err != FD_RUNTIME_EXECUTE_SUCCESS ) {
-        FD_LOG_DEBUG(("phase 2 invalid: %64J", (uchar *)txn_ctx->_txn_raw->raw+txn_ctx->txn_descriptor->signature_off ));
-        task_info[ txn_idx ].txn->flags = 0;
-        res |= err;
-        continue;
-      }
+      // if ( err != FD_RUNTIME_EXECUTE_SUCCESS ) {
+      //   FD_LOG_DEBUG(("phase 2 invalid: %64J", (uchar *)txn_ctx->_txn_raw->raw+txn_ctx->txn_descriptor->signature_off ));
+      //   task_info[ txn_idx ].txn->flags = 0;
+      //   res |= err;
+      //   continue;
+      // }
 
       fee_payer_idxs[fee_payer_accs_cnt] = txn_idx;
       fee_payer_accs[fee_payer_accs_cnt] = fd_borrowed_account_init( &collect_fee_task_infos[fee_payer_accs_cnt].fee_payer_rec );

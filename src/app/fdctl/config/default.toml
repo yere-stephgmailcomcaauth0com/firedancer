@@ -554,7 +554,7 @@ dynamic_port_range = "8900-9000"
     # parallel to create shreds from transaction entries.
     shred_tile_count = 1
 
-# All memory that will be used in Firedancer is pre-allocated in two
+# All memory that will be used in Firedancer is pre-allocated in twox 
 # kinds of pages: huge and gigantic.  Huge pages are 2MB and gigantic
 # pages are 1GB.  This is done to prevent TLB misses which can have a
 # high performance cost.  There are three important steps in this
