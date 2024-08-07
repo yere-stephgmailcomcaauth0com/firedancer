@@ -35,7 +35,8 @@ done
 echo "
 name = \"fd1test\"
 [layout]
-    affinity = \"1-50\"
+    affinity = \"1-55\"
+    quic_tile_count = 1
     bank_tile_count = 1
     verify_tile_count = 16
 
@@ -61,6 +62,8 @@ name = \"fd1test\"
         funk_rec_max = 100000000
         funk_txn_max = 1024
         cluster_version = 1180
+    [tiles.shred]
+        max_pending_shred_sets = 16384
 [log]
     path = \"fddev.log\"
     level_stderr = \"INFO\"
