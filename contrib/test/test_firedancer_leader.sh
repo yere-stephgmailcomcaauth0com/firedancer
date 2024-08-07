@@ -35,9 +35,10 @@ done
 echo "
 name = \"fd1test\"
 [layout]
-    affinity = \"1-40\"
+    affinity = \"1-50\"
     bank_tile_count = 1
     verify_tile_count = 16
+
 [gossip]
     port = 8700
 [tiles]
@@ -52,9 +53,10 @@ name = \"fd1test\"
         repair_serve_listen_port = 8702
     [tiles.replay]
         # capture = \"fddev.solcap\"
-        blockstore_checkpt = \"fddev-blockstore.checkpt\"
+        # blockstore_checkpt = \"fddev-blockstore.checkpt\"
+        blockstore_publish = true
         snapshot = \"$(ls snapshot-* | head -n1)\"
-        tpool_thread_count = 4
+        tpool_thread_count = 8
         funk_sz_gb = 32
         funk_rec_max = 100000000
         funk_txn_max = 1024

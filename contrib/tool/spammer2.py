@@ -24,6 +24,11 @@ from solana.rpc.commitment import Commitment
 from solders.keypair import Keypair
 from solders.system_program import TransferParams, transfer
 from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
+from solders.signature import Signature
+from solders.message import Message
+
+from cProfile import Profile
+from pstats import SortKey, Stats
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
@@ -132,34 +137,37 @@ def create_accounts(funder, rpc: str, num_accs, lamports, seed, sock, tpus):
     return accs
 
 def gen_tx(recent_blockhash, key, acc, cu_price):
-  tx = Transaction(recent_blockhash, None, acc).add(set_compute_unit_price(cu_price)).add(set_compute_unit_limit(300))
-  tx.sign(key)
+  msg = Message.new_with_blockhash([set_compute_unit_price(cu_price), set_compute_unit_limit(300)], acc, recent_blockhash)
+  # tx = Transaction(recent_blockhash, None, acc, )
+  tx = Transaction.populate(msg, Signature(random.randbytes(64)))
+  # tx.populate()
   return tx
 
-def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult):
-  sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
-  accs = [key.pubkey() for key in keys]
-  # recent_blockhash = client.get_latest_blockhash().value.blockhash
-  resp = requests.get(rpc +"/meep")
-  recent_blockhash = Hash.from_string(resp.text)
-  prev_recent_blockhash = recent_blockhash
-  while True:
+def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, id):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+    accs = [key.pubkey() for key in keys]
     # recent_blockhash = client.get_latest_blockhash().value.blockhash
     resp = requests.get(rpc +"/meep")
     recent_blockhash = Hash.from_string(resp.text)
-    if recent_blockhash == prev_recent_blockhash:
-       time.sleep(0.1)
-       continue
     prev_recent_blockhash = recent_blockhash
-    for j in range(mult):
-      for i in range(len(keys)):
-        with tx_idx.get_lock():
-          tx_idx.value += 1
-        tx = gen_tx(recent_blockhash, keys[i], accs[i], j+1)
-        message = bytes(tx.to_solders())
-        for tpu in tpus:
-          sock.sendto(message, tpu)
-
+    while True:
+      with Profile() as profile:
+        # recent_blockhash = client.get_latest_blockhash().value.blockhash
+        resp = requests.get(rpc +"/meep")
+        recent_blockhash = Hash.from_string(resp.text)
+        if recent_blockhash == prev_recent_blockhash:
+          time.sleep(0.1)
+          continue
+        prev_recent_blockhash = recent_blockhash
+        for j in range(mult):
+          for i in range(len(keys)):
+            with tx_idx.get_lock():
+              tx_idx.value += 1
+            tx = gen_tx(recent_blockhash, keys[i], accs[i], j+1)
+            message = bytes(tx.to_solders())
+            for tpu in tpus:
+              sock.sendto(message, tpu)
+        profile.print_stats()
 
 def monitor_send_tps(tx_idx: int, interval: int = 1) -> None:
     prev_count = 0
@@ -174,6 +182,7 @@ def monitor_send_tps(tx_idx: int, interval: int = 1) -> None:
             interval += 1
 
 def main():
+  print(Signature(random.randbytes(64)))
   args = parse_args()
   client = Client(args.rpc)
   seed_file = open(args.seed, "r")
@@ -195,6 +204,7 @@ def main():
   monitor_thread = threading.Thread(target=monitor_send_tps, args=(tx_idx,))
   monitor_thread.start()
 
+  send_txs(args.rpc, tpus, acc_chunks[0], tx_idx,16)
   workers = []
   for i in range(args.workers):
     worker_process = multiprocessing.Process(
@@ -205,7 +215,8 @@ def main():
             tpus,
             acc_chunks[i],
             tx_idx,
-            16
+            32,
+            i
         ),
     )
     workers.append(worker_process)
