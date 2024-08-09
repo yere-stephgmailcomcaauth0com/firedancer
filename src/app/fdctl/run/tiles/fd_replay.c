@@ -695,7 +695,7 @@ after_frag( void *             _ctx,
       }
 
       prepare_time_ns += fd_log_wallclock();
-      FD_LOG_DEBUG(("TIMING: prepare_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)prepare_time_ns * 1e-6));
+      FD_LOG_NOTICE(("TIMING: prepare_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)prepare_time_ns * 1e-6));
     }
 
     if( ctx->capture_ctx )
@@ -746,7 +746,7 @@ after_frag( void *             _ctx,
       long finalize_time_ns = -fd_log_wallclock();
       int res = fd_runtime_block_execute_finalize_tpool( &fork->slot_ctx, ctx->capture_ctx, block_info, ctx->tpool, ctx->max_workers );
       finalize_time_ns += fd_log_wallclock();
-      FD_LOG_DEBUG(("TIMING: finalize_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)finalize_time_ns * 1e-6));
+      FD_LOG_INFO(("TIMING: finalize_time - slot: %lu, elapsed: %6.6f ms", ctx->curr_slot, (double)finalize_time_ns * 1e-6));
 
       if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
         FD_LOG_ERR(("block finalize failed"));

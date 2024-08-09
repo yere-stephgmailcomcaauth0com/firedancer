@@ -1365,16 +1365,16 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t * slot_ctx,
       prune_txn = fd_funk_txn_query( &prune_xid, txn_map );
     }
 
-    fd_txncache_insert_t * status_insert = NULL;
-    fd_hash_t * txn_hashes = NULL;
-    uchar * results = NULL;
-    ulong num_cache_txns = 0;
+    // fd_txncache_insert_t * status_insert = NULL;
+    // fd_hash_t * txn_hashes = NULL;
+    // uchar * results = NULL;
+    // ulong num_cache_txns = 0;
 
-    if( slot_ctx->status_cache ) {
-      status_insert = fd_scratch_alloc( alignof(fd_txncache_insert_t), txn_cnt * sizeof(fd_txncache_insert_t) );
-      txn_hashes = fd_scratch_alloc( alignof(fd_hash_t), txn_cnt * sizeof(fd_hash_t) );
-      results = fd_scratch_alloc( alignof(uchar), txn_cnt * sizeof(uchar) );
-    }
+    // if( slot_ctx->status_cache ) {
+    //   status_insert = fd_scratch_alloc( alignof(fd_txncache_insert_t), txn_cnt * sizeof(fd_txncache_insert_t) );
+    //   txn_hashes = fd_scratch_alloc( alignof(fd_hash_t), txn_cnt * sizeof(fd_hash_t) );
+    //   results = fd_scratch_alloc( alignof(uchar), txn_cnt * sizeof(uchar) );
+    // }
     /* Finalize */
     for( ulong txn_idx = 0; txn_idx < txn_cnt; txn_idx++ ) {
       /* Transaction was skipped due to preparation failure. */
@@ -1402,21 +1402,21 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t * slot_ctx,
           accounts_to_save_cnt++;
         }
       }
-      if( slot_ctx->status_cache ) {
-        results[num_cache_txns] = exec_txn_err == 0 ? 1 : 0;
-        fd_txncache_insert_t * curr_insert = &status_insert[num_cache_txns];
-        curr_insert->blockhash = ((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->recent_blockhash_off);
-        curr_insert->slot = slot_ctx->slot_bank.slot;
-        fd_blake3_t b3[1];
-        fd_hash_t * hash = &txn_hashes[ num_cache_txns ];
-        fd_blake3_init( b3 );
-        fd_blake3_append( b3, ((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->message_off), (ulong)( txn_ctx->_txn_raw->txn_sz - txn_ctx->txn_descriptor->message_off ) );
-        fd_blake3_fini( b3, hash->uc );
+      // if( slot_ctx->status_cache ) {
+      //   results[num_cache_txns] = exec_txn_err == 0 ? 1 : 0;
+      //   fd_txncache_insert_t * curr_insert = &status_insert[num_cache_txns];
+      //   curr_insert->blockhash = ((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->recent_blockhash_off);
+      //   curr_insert->slot = slot_ctx->slot_bank.slot;
+      //   fd_blake3_t b3[1];
+      //   fd_hash_t * hash = &txn_hashes[ num_cache_txns ];
+      //   fd_blake3_init( b3 );
+      //   fd_blake3_append( b3, ((uchar *)txn_ctx->_txn_raw->raw + txn_ctx->txn_descriptor->message_off), (ulong)( txn_ctx->_txn_raw->txn_sz - txn_ctx->txn_descriptor->message_off ) );
+      //   fd_blake3_fini( b3, hash->uc );
 
-        curr_insert->txnhash = hash->uc;
-        curr_insert->result = &results[num_cache_txns];
-        num_cache_txns++;
-      }
+      //   curr_insert->txnhash = hash->uc;
+      //   curr_insert->result = &results[num_cache_txns];
+      //   num_cache_txns++;
+      // }
       if( exec_txn_err != 0 ) {
         // fd_funk_txn_cancel( slot_ctx->acc_mgr->funk, txn_ctx->funk_txn, 0 );
         continue;
@@ -1481,11 +1481,11 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t * slot_ctx,
       }
     }
 
-    if( slot_ctx->status_cache ) {
-      if( !fd_txncache_insert_batch( slot_ctx->status_cache, status_insert, num_cache_txns ) ) {
-        FD_LOG_WARNING(("Status cache is full, this should not be possible"));
-      }
-    }
+    // if( slot_ctx->status_cache ) {
+    //   if( !fd_txncache_insert_batch( slot_ctx->status_cache, status_insert, num_cache_txns ) ) {
+    //     FD_LOG_WARNING(("Status cache is full, this should not be possible"));
+    //   }
+    // }
 
     fd_borrowed_account_t * * accounts_to_save = fd_scratch_alloc( 8UL, accounts_to_save_cnt * sizeof(fd_borrowed_account_t *) );
     ulong accounts_to_save_idx = 0;
