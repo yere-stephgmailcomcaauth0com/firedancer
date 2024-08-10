@@ -25,6 +25,9 @@ from solders.keypair import Keypair
 from solders.system_program import TransferParams, transfer
 from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
 
+from solders.signature import Signature
+from solders.message import Message
+
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument(
@@ -90,7 +93,7 @@ def get_balance(lamports, client: Client, acc):
     else:
         return None
 
-def create_accounts(funder, rpc: str, num_accs, lamports, seed, sock, tpus):
+def create_accounts(funder, client, num_accs, lamports, seed, sock, tpus):
     accs = []
     for i in tqdm.trange(num_accs, desc="keypairs"):
         acc = Keypair.from_seed_and_derivation_path(seed, f"m/44'/42'/0'/{i}'")
@@ -100,17 +103,13 @@ def create_accounts(funder, rpc: str, num_accs, lamports, seed, sock, tpus):
     chunk_size = 8
     rem_accs_list = list(remaining_accs)
     acc_chunks = [rem_accs_list[i:i+chunk_size] for i in range(0, len(rem_accs_list), chunk_size) ]
-    # recent_blockhash = client.get_latest_blockhash().value.blockhash
-    resp = requests.get(rpc +"/meep")
-    print(resp.text)
-    recent_blockhash = Hash.from_string(resp.text)
+    recent_blockhash = client.get_latest_blockhash().value.blockhash
 
     txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
     send_round_of_txs(txs, sock, tpus)
-    return accs
 
     while len(remaining_accs) > 0:
-        # done_accs = pqdm(remaining_accs, partial(get_balance, lamports, client), desc="check bal", n_jobs=32)
+        done_accs = pqdm(remaining_accs, partial(get_balance, lamports, client), desc="check bal", n_jobs=32)
 
         for acc in done_accs:
             if acc is not None:
@@ -121,10 +120,7 @@ def create_accounts(funder, rpc: str, num_accs, lamports, seed, sock, tpus):
         chunk_size = 8
         rem_accs_list = list(remaining_accs)
         acc_chunks = [rem_accs_list[i:i+chunk_size] for i in range(0, len(rem_accs_list), chunk_size) ]
-        # recent_blockhash = client.get_latest_blockhash().value.blockhash
-        with open("../test-ledger/meep", "r") as x:
-          recent_blockhash = x.read()
-          print(recent_blockhash)
+        recent_blockhash = client.get_latest_blockhash().value.blockhash
         txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
         send_round_of_txs(txs, sock, tpus)
         time.sleep(1)
@@ -132,34 +128,38 @@ def create_accounts(funder, rpc: str, num_accs, lamports, seed, sock, tpus):
     return accs
 
 def gen_tx(recent_blockhash, key, acc, cu_price):
-  tx = Transaction(recent_blockhash, None, acc).add(set_compute_unit_price(cu_price)).add(set_compute_unit_limit(300))
-  tx.sign(key)
+  msg = Message.new_with_blockhash([set_compute_unit_price(cu_price), set_compute_unit_limit(300)], acc, recent_blockhash)
+  # tx = Transaction(recent_blockhash, None, acc, )
+  tx = Transaction.populate(msg, [Signature(random.randbytes(64))])
+  # tx.populate()
   return tx
 
-def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult):
+def send_txs(client: Client, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   accs = [key.pubkey() for key in keys]
-  # recent_blockhash = client.get_latest_blockhash().value.blockhash
-  resp = requests.get(rpc +"/meep")
-  recent_blockhash = Hash.from_string(resp.text)
+  recent_blockhash = client.get_latest_blockhash().value.blockhash
   prev_recent_blockhash = recent_blockhash
   while True:
-    # recent_blockhash = client.get_latest_blockhash().value.blockhash
-    resp = requests.get(rpc +"/meep")
-    recent_blockhash = Hash.from_string(resp.text)
+    x = -time.time()
+    try:
+      recent_blockhash = client.get_latest_blockhash().value.blockhash
+    except:
+      print("bad RBH")
+      continue
     if recent_blockhash == prev_recent_blockhash:
-       time.sleep(0.1)
+       time.sleep(0.4)
        continue
     prev_recent_blockhash = recent_blockhash
     for j in range(mult):
       for i in range(len(keys)):
-        with tx_idx.get_lock():
-          tx_idx.value += 1
         tx = gen_tx(recent_blockhash, keys[i], accs[i], j+1)
         message = bytes(tx.to_solders())
         for tpu in tpus:
           sock.sendto(message, tpu)
-
+      with tx_idx.get_lock():
+        tx_idx.value += len(keys)
+    x+=time.time()
+    #print("round done", idx, x)
 
 def monitor_send_tps(tx_idx: int, interval: int = 1) -> None:
     prev_count = 0
@@ -186,7 +186,7 @@ def main():
   tpus = list(map(lambda t: (t[0], int(t[1])), tpus))
 
   print(tpus)
-  accs = create_accounts(funder, args.rpc, args.nkeys, 10_000_000, seed, sock, tpus)
+  accs = create_accounts(funder, client, args.nkeys, 100_000_000, seed, sock, tpus)
   
   chunk_size = math.ceil(len(accs)/args.workers)
   acc_chunks = [accs[i:i+chunk_size] for i in range(0, len(accs), chunk_size)]
@@ -201,11 +201,12 @@ def main():
         target=send_txs,
         name=f"worker{i}",
         args=(
-            args.rpc,
+            client,
             tpus,
             acc_chunks[i],
             tx_idx,
-            16
+            128,
+            i
         ),
     )
     workers.append(worker_process)
