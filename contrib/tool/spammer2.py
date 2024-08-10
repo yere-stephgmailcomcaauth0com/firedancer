@@ -24,9 +24,26 @@ from solana.rpc.commitment import Commitment
 from solders.keypair import Keypair
 from solders.system_program import TransferParams, transfer
 from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
-
+from solders.pubkey import Pubkey
 from solders.signature import Signature
 from solders.message import Message
+
+def get_recent_blockhash(rpc: str) -> Hash:
+  data="{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlockhash\",\"params\":[{\"commitment\":\"processed\"}]}"
+  resp = requests.post(rpc, data=data, headers={"Content-Type": "application/json"})
+  return Hash.from_string(resp.json()["result"]["value"]["blockhash"])
+
+def get_balance(rpc: str, acc: Pubkey) -> int:
+  try:
+    acc_str = str(acc)
+    data = f"{{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"getBalance\",\"params\":[\"{acc_str}\",{{\"commitment\":\"confirmed\"}}]}}"
+    resp = requests.post(rpc, data=data, headers={"Content-Type": "application/json"})
+    if resp.status_code != 200:
+      return 0
+    else:
+      return resp.json()["result"]["value"]
+  except:
+    return 0
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
@@ -86,14 +103,14 @@ def create_accounts_tx(funder, lamports, recent_blockhash, accs):
     return tx
     # client.send_transaction(tx, funder, opts=TxOpts(skip_confirmation=True))
 
-def get_balance(lamports, client: Client, acc):
-    bal = client.get_balance(acc.pubkey(), commitment="confirmed").value
+def get_balance_sufficient(lamports, rpc: str, acc):
+    bal = get_balance(rpc, acc.pubkey())
     if bal >= lamports:
         return acc
     else:
         return None
 
-def create_accounts(funder, client, num_accs, lamports, seed, sock, tpus):
+def create_accounts(funder, rpc, num_accs, lamports, seed, sock, tpus):
     accs = []
     for i in tqdm.trange(num_accs, desc="keypairs"):
         acc = Keypair.from_seed_and_derivation_path(seed, f"m/44'/42'/0'/{i}'")
@@ -103,13 +120,13 @@ def create_accounts(funder, client, num_accs, lamports, seed, sock, tpus):
     chunk_size = 8
     rem_accs_list = list(remaining_accs)
     acc_chunks = [rem_accs_list[i:i+chunk_size] for i in range(0, len(rem_accs_list), chunk_size) ]
-    recent_blockhash = client.get_latest_blockhash().value.blockhash
+    recent_blockhash = get_recent_blockhash(rpc)
 
     txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
     send_round_of_txs(txs, sock, tpus)
 
     while len(remaining_accs) > 0:
-        done_accs = pqdm(remaining_accs, partial(get_balance, lamports, client), desc="check bal", n_jobs=32)
+        done_accs = pqdm(remaining_accs, partial(get_balance_sufficient, lamports, rpc), desc="check bal", n_jobs=32)
 
         for acc in done_accs:
             if acc is not None:
@@ -120,7 +137,7 @@ def create_accounts(funder, client, num_accs, lamports, seed, sock, tpus):
         chunk_size = 8
         rem_accs_list = list(remaining_accs)
         acc_chunks = [rem_accs_list[i:i+chunk_size] for i in range(0, len(rem_accs_list), chunk_size) ]
-        recent_blockhash = client.get_latest_blockhash().value.blockhash
+        recent_blockhash = get_recent_blockhash(rpc)
         txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
         send_round_of_txs(txs, sock, tpus)
         time.sleep(1)
@@ -134,15 +151,15 @@ def gen_tx(recent_blockhash, key, acc, cu_price):
   # tx.populate()
   return tx
 
-def send_txs(client: Client, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx):
+def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   accs = [key.pubkey() for key in keys]
-  recent_blockhash = client.get_latest_blockhash().value.blockhash
+  recent_blockhash = get_recent_blockhash(rpc)
   prev_recent_blockhash = recent_blockhash
   while True:
     x = -time.time()
     try:
-      recent_blockhash = client.get_latest_blockhash().value.blockhash
+      recent_blockhash = get_recent_blockhash(rpc)
     except:
       print("bad RBH")
       continue
@@ -173,6 +190,8 @@ def monitor_send_tps(tx_idx: int, interval: int = 1) -> None:
         if tps == 0:
             interval += 1
 
+
+
 def main():
   args = parse_args()
   client = Client(args.rpc)
@@ -184,9 +203,8 @@ def main():
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   tpus = map(lambda t: t.split(":", 1), args.tpus)
   tpus = list(map(lambda t: (t[0], int(t[1])), tpus))
-
   print(tpus)
-  accs = create_accounts(funder, client, args.nkeys, 100_000_000, seed, sock, tpus)
+  accs = create_accounts(funder, args.rpc, args.nkeys, 100_000_000, seed, sock, tpus)
   
   chunk_size = math.ceil(len(accs)/args.workers)
   acc_chunks = [accs[i:i+chunk_size] for i in range(0, len(accs), chunk_size)]
@@ -201,7 +219,7 @@ def main():
         target=send_txs,
         name=f"worker{i}",
         args=(
-            client,
+            args.rpc,
             tpus,
             acc_chunks[i],
             tx_idx,
