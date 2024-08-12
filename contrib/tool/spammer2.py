@@ -11,7 +11,7 @@ import requests
 from functools import partial
 from typing import List
 from multiprocessing.sharedctypes import SynchronizedBase
-from multiprocessing.synchronize import Event
+from multiprocessing import Event, Value, Array
 
 import tqdm
 from pqdm.processes import pqdm
@@ -140,7 +140,7 @@ def create_accounts(funder, rpc, num_accs, lamports, seed, sock, tpus):
         recent_blockhash = get_recent_blockhash(rpc)
         txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
         send_round_of_txs(txs, sock, tpus)
-        time.sleep(1)
+        time.sleep(5)
 
     return accs
 
@@ -151,46 +151,61 @@ def gen_tx(recent_blockhash, key, acc, cu_price):
   # tx.populate()
   return tx
 
-def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx):
+def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx, stop_event, rbh):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   accs = [key.pubkey() for key in keys]
-  recent_blockhash = get_recent_blockhash(rpc)
+  recent_blockhash = Hash.from_bytes(rbh)
   prev_recent_blockhash = recent_blockhash
-  while True:
-    x = -time.time()
-    try:
-      recent_blockhash = get_recent_blockhash(rpc)
-    except:
-      print("bad RBH")
-      continue
+  cu_price = 1
+  while not stop_event.is_set():
+    recent_blockhash = Hash.from_bytes(rbh)
     if recent_blockhash == prev_recent_blockhash:
-       time.sleep(0.4)
-       continue
+      cu_price += 1
+    else:
+      print("new rbh:", cu_price)
+      cu_price = 1
     prev_recent_blockhash = recent_blockhash
-    for j in range(mult):
-      for i in range(len(keys)):
-        tx = gen_tx(recent_blockhash, keys[i], accs[i], j+1)
-        message = bytes(tx.to_solders())
-        for tpu in tpus:
-          sock.sendto(message, tpu)
-      with tx_idx.get_lock():
-        tx_idx.value += len(keys)
+    x = -time.time()
+    for i in range(len(keys)):
+      tx = gen_tx(recent_blockhash, keys[i], accs[i], cu_price)
+      message = bytes(tx.to_solders())
+      for tpu in tpus:
+        sock.sendto(message, tpu)
+    with tx_idx.get_lock():
+      tx_idx.value += len(keys)
     x+=time.time()
-    #print("round done", idx, x)
+  print("stopping:", idx)
 
-def monitor_send_tps(tx_idx: int, interval: int = 1) -> None:
+def monitor_send_tps(tx_idx, stop_event, interval: int = 1) -> None:
     prev_count = 0
-    while interval < 10:
+    prev_time = time.time()
+    while interval < 10 and not stop_event.is_set():
         time.sleep(interval)
         with tx_idx.get_lock():
             current_count = tx_idx.value
+        curr_time = time.time()
         tps = (current_count - prev_count) / interval
         prev_count = current_count
-        print(f"tps={tps}")
+        elapsed = curr_time - prev_time
+        print(f"tps={tps} elapsed={elapsed}")
         if tps == 0:
             interval += 1
+        prev_time = curr_time
 
-
+def fetch_recent_blockhash(rbh, rpc, stop_event) -> None:
+  prev_recent_blockhash = get_recent_blockhash(rpc)
+  while not stop_event.is_set():
+    time.sleep(0.1)
+    try:
+      recent_blockhash = get_recent_blockhash(rpc)
+      if recent_blockhash == prev_recent_blockhash:
+        continue
+      rbh[:] = bytes(recent_blockhash)
+      prev_recent_blockhash = recent_blockhash
+      print(recent_blockhash)
+    except:
+      print("bad RBH")
+  
 
 def main():
   args = parse_args()
@@ -209,9 +224,13 @@ def main():
   chunk_size = math.ceil(len(accs)/args.workers)
   acc_chunks = [accs[i:i+chunk_size] for i in range(0, len(accs), chunk_size)]
 
+  rbh = Array('B', 32)
+  stop_event = Event()
   tx_idx = multiprocessing.Value("i", 0)
-  monitor_thread = threading.Thread(target=monitor_send_tps, args=(tx_idx,))
+  monitor_thread = threading.Thread(target=monitor_send_tps, args=(tx_idx, stop_event))
   monitor_thread.start()
+  fetch_thread = threading.Thread(target=fetch_recent_blockhash, args=(rbh, args.rpc, stop_event))
+  fetch_thread.start()
 
   workers = []
   for i in range(args.workers):
@@ -224,11 +243,19 @@ def main():
             acc_chunks[i],
             tx_idx,
             128,
-            i
+            i,
+            stop_event,
+            rbh,
         ),
     )
     workers.append(worker_process)
     worker_process.start()
+
+  try:
+    while True:
+      time.sleep(0.1)
+  finally:
+    stop_event.set()
 
   for worker in workers:
     worker.join()
