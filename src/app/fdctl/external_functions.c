@@ -15,6 +15,7 @@ extern int  fd_ext_bank_verify_precompiles( void const * bank FD_PARAM_UNUSED, v
 extern void fd_ext_bank_commit_txns( void const * bank FD_PARAM_UNUSED, void const * txns FD_PARAM_UNUSED, ulong txn_cnt FD_PARAM_UNUSED, void * load_and_execute_output FD_PARAM_UNUSED, void * pre_balance_info FD_PARAM_UNUSED ) {}
 extern void fd_ext_poh_signal_leader_change( void * sender FD_PARAM_UNUSED ) {}
 extern void fd_ext_poh_register_tick( void const * bank FD_PARAM_UNUSED, uchar const * hash FD_PARAM_UNUSED ) {}
+extern void fd_ext_poh_update_active_descendants( ulong active_descendants_len FD_PARAM_UNUSED, ulong * active_descendants FD_PARAM_UNUSED ) {}
 
 extern int
 fd_ext_blockstore_insert_shreds( void const *  blockstore FD_PARAM_UNUSED,

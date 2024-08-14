@@ -316,17 +316,6 @@
 #include "../../../../disco/metrics/generated/fd_metrics_poh.h"
 #include "../../../../flamenco/leaders/fd_leaders.h"
 
-/* When we are becoming leader, and we think the prior leader might have
-   skipped their slot, we give them a grace period to finish.  In the
-   Agave client this is called grace ticks.  This is a courtesy to
-   maintain network health, and is not strictly necessary.  It is
-   actually advantageous to us as new leader to take over right away and
-   give no grace period, since we could generate more fees.
-
-   Here we define the grace period to be two slots, which is taken from
-   Agave directly. */
-#define GRACE_SLOTS (2UL)
-
 /* The maximum number of microblocks that pack is allowed to pack into a
    single slot.  This is not consensus critical, and pack could, if we
    let it, produce as many microblocks as it wants, and the slot would
@@ -439,6 +428,9 @@ typedef struct {
      we have no known next leader slot. */
   ulong next_leader_slot;
 
+  ulong active_descendants_len;
+  ulong active_descendants[ 1024UL ];
+
   ulong bank_cnt;
   ulong * bank_busy[ 64UL ];
 
@@ -513,9 +505,9 @@ typedef struct {
      2. Signal to the tile they wish to acquire the lock, by setting
         fd_poh_waiting_lock to 1.
 
-   During housekeeping, the tile will check if there is the waiting lock
-   is set to 1, and if so, set the returned lock to 1, indicating to the
-   waiter that they may now proceed.
+   During before_credit, the tile will check if there is the waiting
+   lock is set to 1, and if so, set the returned lock to 1, indicating
+   to the waiter that they may now proceed.
 
    When the waiter is done reading and writing, they restore the
    returned lock value back to zero, and the POH tile continues with its
@@ -676,6 +668,19 @@ fd_ext_poh_reset_slot( void ) {
   return reset_slot;
 }
 
+CALLED_FROM_RUST void
+fd_ext_poh_update_active_descendants( ulong         active_descendants_len,
+                                      ulong const * active_descendants ) {
+  fd_poh_ctx_t * ctx = fd_ext_poh_write_lock();
+
+  ulong active_descendants_max = sizeof(ctx->active_descendants)/sizeof(ctx->active_descendants[0]);
+  ctx->active_descendants_len = fd_ulong_min( active_descendants_max, active_descendants_len );
+  for( ulong i=0UL; i<ctx->active_descendants_len; i++ ) {
+    ctx->active_descendants[ i ] = active_descendants[ i ];
+  }
+  fd_ext_poh_write_unlock();
+}
+
 /* fd_ext_poh_reached_leader_slot returns 1 if we have reached a slot
    where we are leader.  This is used by the replay stage to determine
    if it should create a new leader bank descendant of the prior reset
@@ -712,34 +717,24 @@ fd_ext_poh_reached_leader_slot( ulong * out_leader_slot,
     return 1;
   }
 
-  if( FD_LIKELY( ctx->next_leader_slot>=1UL ) ) {
-    fd_epoch_leaders_t * leaders = fd_stake_ci_get_lsched_for_slot( ctx->stake_ci, ctx->next_leader_slot-1UL ); /* Safe to call from Rust */
-    if( FD_LIKELY( leaders ) ) {
-      fd_pubkey_t const * leader = fd_epoch_leaders_get( leaders, ctx->next_leader_slot-1UL ); /* Safe to call from Rust */
-      if( FD_LIKELY( leader ) ) {
-        if( FD_UNLIKELY( !memcmp( leader->uc, ctx->identity_key.uc, 32UL ) ) ) {
-          /* We were the leader in the previous slot, so also no need for
-             a grace period.  We wouldn't get here if we were still
-             processing the prior slot so begin new one immediately. */
-          fd_ext_poh_write_unlock();
-          return 1;
-        }
-      }
+  ulong highest_pending_slot = ULONG_MAX;
+  for( ulong i=0UL; i<ctx->active_descendants_len; i++ ) {
+    if( FD_LIKELY( ctx->active_descendants[ i ]>=ctx->reset_slot && ctx->active_descendants[ i ]<ctx->next_leader_slot ) ) {
+      highest_pending_slot = fd_ulong_if( highest_pending_slot==ULONG_MAX, ctx->active_descendants[ i ], fd_ulong_min( highest_pending_slot, ctx->active_descendants[ i ] ) );
     }
   }
 
-  if( FD_UNLIKELY( ctx->next_leader_slot-ctx->reset_slot>=4UL ) ) {
-    /* The prior leader has not completed any slot successfully during
-       their 4 leader slots, so they are probably inactive and no need
-       to give a grace period. */
-    fd_ext_poh_write_unlock();
-    return 1;
-  }
+  if( FD_LIKELY( highest_pending_slot!=ULONG_MAX && (ctx->next_leader_slot-highest_pending_slot)<=12UL ) ) {
+    /* If one of the leaders between the reset slot and our leader slot
+       is in the process of publishing (they have a descendant bank that
+       is in progress of being replayed), then keep waiting.  We
+       probably wouldn't get a leader slot out before they finished.
 
-  if( FD_LIKELY( ctx->slot-ctx->next_leader_slot<GRACE_SLOTS ) ) {
-    /* The prior leader hasn't finished their last slot, and they are
-       likely still publishing, and within their grace period of two
-       slots so we will keep waiting. */
+       Unless... the slot has been being replayed for more than 12 slots
+       (4.8 seconds).  In that case it might never get published or if
+       does we can get our 400ms block out quicker anyway.  We also need
+       this upper bound to prevent all the leaders waiting forever which
+       would hang the cluster. */
     fd_ext_poh_write_unlock();
     return 0;
   }
@@ -1054,6 +1049,25 @@ publish_tick( fd_poh_ctx_t *     ctx,
 }
 
 static inline void
+before_credit( void *             _ctx,
+               fd_mux_context_t * mux ) {
+  fd_poh_ctx_t * ctx = (fd_poh_ctx_t *)_ctx;
+
+  FD_COMPILER_MFENCE();
+  if( FD_UNLIKELY( fd_poh_waiting_lock ) )  {
+    FD_VOLATILE( fd_poh_returned_lock ) = 1UL;
+    FD_COMPILER_MFENCE();
+    for(;;) {
+      if( FD_UNLIKELY( !FD_VOLATILE_CONST( fd_poh_returned_lock ) ) ) break;
+      FD_SPIN_PAUSE();
+    }
+    FD_COMPILER_MFENCE();
+    FD_VOLATILE( fd_poh_waiting_lock ) = 0UL;
+  }
+  FD_COMPILER_MFENCE();
+}
+
+static inline void
 after_credit( void *             _ctx,
               fd_mux_context_t * mux,
               int *              opt_poll_in ) {
@@ -1308,19 +1322,6 @@ after_credit( void *             _ctx,
 static inline void
 during_housekeeping( void * _ctx ) {
   fd_poh_ctx_t * ctx = (fd_poh_ctx_t *)_ctx;
-
-  FD_COMPILER_MFENCE();
-  if( FD_UNLIKELY( fd_poh_waiting_lock ) )  {
-    FD_VOLATILE( fd_poh_returned_lock ) = 1UL;
-    FD_COMPILER_MFENCE();
-    for(;;) {
-      if( FD_UNLIKELY( !FD_VOLATILE_CONST( fd_poh_returned_lock ) ) ) break;
-      FD_SPIN_PAUSE();
-    }
-    FD_COMPILER_MFENCE();
-    FD_VOLATILE( fd_poh_waiting_lock ) = 0UL;
-  }
-  FD_COMPILER_MFENCE();
 
   FD_MHIST_COPY( POH_TILE, BEGIN_LEADER_DELAY_SECONDS,     ctx->begin_leader_delay );
   FD_MHIST_COPY( POH_TILE, FIRST_MICROBLOCK_DELAY_SECONDS, ctx->first_microblock_delay );
@@ -1844,6 +1845,7 @@ fd_topo_run_tile_t fd_tile_poh = {
   .mux_flags                = FD_MUX_FLAG_COPY | FD_MUX_FLAG_MANUAL_PUBLISH,
   .burst                    = 3UL, /* One tick, one microblock, and one leader update. */
   .mux_ctx                  = mux_ctx,
+  .mux_before_credit        = before_credit,
   .mux_after_credit         = after_credit,
   .mux_during_housekeeping  = during_housekeeping,
   .mux_during_frag          = during_frag,
