@@ -98,13 +98,10 @@ fd_epoch_slot0( fd_epoch_schedule_t const * schedule,
     return fd_ulong_sat_mul( power-1UL, FD_EPOCH_LEN_MIN );
   }
 
-  return fd_ulong_sat_add(
-          fd_ulong_sat_mul( 
-            fd_ulong_sat_sub(
-              epoch,
-              schedule->first_normal_epoch),
-            schedule->slots_per_epoch),
-          schedule->first_normal_slot);
+  ulong n_epoch = epoch - schedule->first_normal_epoch;
+  ulong n_slot  = n_epoch * schedule->slots_per_epoch;
+
+  return schedule->first_normal_slot + n_slot;
 }
 
 /* https://github.com/solana-labs/solana/blob/88aeaa82a856fc807234e7da0b31b89f2dc0e091/sdk/program/src/epoch_schedule.rs#L140 */

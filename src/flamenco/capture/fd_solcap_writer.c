@@ -196,8 +196,11 @@ fd_solcap_writer_init( fd_solcap_writer_t * writer,
   }
 
   /* Init writer */
-  writer->file        = file;
-  writer->stream_goff = stream_goff;
+
+  *writer = (fd_solcap_writer_t) {
+    .file        = (FILE *)file,
+    .stream_goff = (ulong)stream_goff
+  };
 
   return writer;
 }
@@ -282,7 +285,6 @@ fd_solcap_flush_account_table( fd_solcap_writer_t * writer ) {
 
   /* FIXME: This breaks account recording for epoch boundaries and needs to be fixed */
   if( writer->account_idx >= FD_SOLCAP_ACC_TBL_CNT ) {
-    FD_LOG_WARNING(( "too many records in solcap accounts table - try increasing FD_SOLCAP_ACC_TBL_CNT" ));
     writer->account_idx = 0UL;
     return 0;
   }
