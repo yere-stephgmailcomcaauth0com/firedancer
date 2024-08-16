@@ -28,6 +28,10 @@ from solders.pubkey import Pubkey
 from solders.signature import Signature
 from solders.message import Message
 
+TXN_TYPE_EMPTY = 0
+TXN_TYPE_SYSTEM_TRANSFER = 1
+TXN_TYPE_TOKEN_TRANSFER = 2
+
 def get_recent_blockhash(rpc: str) -> Hash:
   data="{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"getLatestBlockhash\",\"params\":[{\"commitment\":\"processed\"}]}"
   resp = requests.post(rpc, data=data, headers={"Content-Type": "application/json"})
@@ -85,6 +89,12 @@ def parse_args() -> argparse.Namespace:
     required=True,
     type=int,
   )
+  parser.add_argument(
+    "-x",
+    "--txn-type",
+    required=True,
+    type=str
+  )
   args = parser.parse_args()
   return args
 
@@ -110,18 +120,17 @@ def get_balance_sufficient(lamports, rpc: str, acc):
     else:
         return None
 
-def create_accounts(funder, rpc, num_accs, lamports, seed, sock, tpus):
+def create_accounts(funder, rpc, num_accs, lamports, seed, sock, tpus, txn_type):
     accs = []
     for i in tqdm.trange(num_accs, desc="keypairs"):
         acc = Keypair.from_seed_and_derivation_path(seed, f"m/44'/42'/0'/{i}'")
         accs.append(acc)
-    remaining_accs = set(accs)
+    remaining_accs = set(accs)       
 
     chunk_size = 8
     rem_accs_list = list(remaining_accs)
     acc_chunks = [rem_accs_list[i:i+chunk_size] for i in range(0, len(rem_accs_list), chunk_size) ]
     recent_blockhash = get_recent_blockhash(rpc)
-
     txs = pqdm(acc_chunks, partial(create_accounts_tx, funder, lamports, recent_blockhash), desc="fund accounts", n_jobs=32)
     send_round_of_txs(txs, sock, tpus)
 
@@ -144,14 +153,22 @@ def create_accounts(funder, rpc, num_accs, lamports, seed, sock, tpus):
 
     return accs
 
-def gen_tx(recent_blockhash, key, acc, cu_price):
+def gen_tx_empty(recent_blockhash, key, acc, cu_price):
   msg = Message.new_with_blockhash([set_compute_unit_price(cu_price), set_compute_unit_limit(300)], acc, recent_blockhash)
   # tx = Transaction(recent_blockhash, None, acc, )
   tx = Transaction.populate(msg, [Signature(random.randbytes(64))])
   # tx.populate()
   return tx
 
-def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx, stop_event, rbh):
+def gen_tx_system_transfer(recent_blockhash, key, acc, cu_price):
+  msg = Message.new_with_blockhash([set_compute_unit_price(cu_price), set_compute_unit_limit(300+300+150), 
+                                    transfer(TransferParams(from_pubkey=acc,to_pubkey=acc,lamports=1))], acc, recent_blockhash)
+  # tx = Transaction(recent_blockhash, None, acc, )
+  tx = Transaction.populate(msg, [Signature(random.randbytes(64))])
+  # tx.populate()
+  return tx
+
+def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx, stop_event, rbh, txn_type: int):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   accs = [key.pubkey() for key in keys]
   recent_blockhash = Hash.from_bytes(rbh)
@@ -167,7 +184,12 @@ def send_txs(rpc: str, tpus: List[str], keys: List[Keypair], tx_idx, mult, idx, 
     prev_recent_blockhash = recent_blockhash
     x = -time.time()
     for i in range(len(keys)):
-      tx = gen_tx(recent_blockhash, keys[i], accs[i], cu_price)
+      if txn_type == TXN_TYPE_EMPTY:
+        tx = gen_tx_empty(recent_blockhash, keys[i], accs[i], cu_price)
+      elif txn_type == TXN_TYPE_SYSTEM_TRANSFER:
+        tx = gen_tx_system_transfer(recent_blockhash, keys[i], accs[i], cu_price)
+      elif txn_type == TXN_TYPE_TOKEN_TRANSFER:
+        tx = gen_tx_system_transfer(recent_blockhash, keys[i], accs[i], cu_price)
       message = bytes(tx.to_solders())
       for tpu in tpus:
         sock.sendto(message, tpu)
@@ -219,8 +241,19 @@ def main():
   tpus = map(lambda t: t.split(":", 1), args.tpus)
   tpus = list(map(lambda t: (t[0], int(t[1])), tpus))
   print(tpus)
-  accs = create_accounts(funder, args.rpc, args.nkeys, 100_000_000, seed, sock, tpus)
   
+  if args.txn_type == "empty":
+    txn_type = TXN_TYPE_EMPTY
+  elif args.txn_type == "system-transfer":
+    txn_type = TXN_TYPE_SYSTEM_TRANSFER
+  elif args.txn_type == "token-transfer":
+    txn_type = TXN_TYPE_TOKEN_TRANSFER
+  else:
+    print("unknown txn type")
+    exit(1)
+
+  accs = create_accounts(funder, args.rpc, args.nkeys, 100_000_000, seed, sock, tpus, txn_type)
+
   chunk_size = math.ceil(len(accs)/args.workers)
   acc_chunks = [accs[i:i+chunk_size] for i in range(0, len(accs), chunk_size)]
 
@@ -246,6 +279,7 @@ def main():
             i,
             stop_event,
             rbh,
+            txn_type,
         ),
     )
     workers.append(worker_process)
