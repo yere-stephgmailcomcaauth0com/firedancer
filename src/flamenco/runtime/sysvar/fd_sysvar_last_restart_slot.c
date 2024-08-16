@@ -30,7 +30,8 @@ fd_sysvar_last_restart_slot_init( fd_exec_slot_ctx_t * slot_ctx ) {
                  fd_sysvar_owner_id.key,
                  &fd_sysvar_last_restart_slot_id,
                  enc, sz,
-                 slot_ctx->slot_bank.slot );
+                 slot_ctx->slot_bank.slot,
+                 0UL );
 }
 
 fd_sol_sysvar_last_restart_slot_t *
@@ -81,6 +82,7 @@ fd_sysvar_last_restart_slot_update( fd_exec_slot_ctx_t * slot_ctx ) {
         slot_ctx, fd_sysvar_owner_id.key,
         &fd_sysvar_last_restart_slot_id,
         &last_restart_slot, sizeof(ulong),
-        slot_ctx->slot_bank.slot );
+        slot_ctx->slot_bank.slot,
+        0UL );
   }
 }

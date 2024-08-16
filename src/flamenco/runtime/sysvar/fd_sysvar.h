@@ -14,6 +14,7 @@ fd_sysvar_set( fd_exec_slot_ctx_t * state,
                fd_pubkey_t const *  pubkey,
                void const *         data,
                ulong                sz,
-               ulong                slot );
+               ulong                slot,
+               ulong                lamports );
 
 #endif /* HEADER_fd_src_flamenco_runtime_fd_sysvar_h */
