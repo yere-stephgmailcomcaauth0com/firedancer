@@ -510,6 +510,19 @@ after_credit( void *             _ctx,
     }
   }
 
+  /* Do slot_prepare for the first one in pending_slots regardless of whether ele->time>ctx->store->now
+   * This seems to be what Liam's pending_slots implementation did
+   * Specifically, Liam's implementation would certainly do slot_prepare for pending_slots->start (returned by fd_pending_slots_iter_init) */
+  fd_pending_slots_treap_ele_t * ele = fd_pending_slots_treap_fwd_iter_ele( first, pending_slots->pool );
+  uchar const * block         = NULL;
+  ulong         block_sz      = 0;
+  ulong         repair_slot   = FD_SLOT_NULL;
+  int store_slot_prepare_mode = fd_store_slot_prepare( ctx->store, ele->slot, &repair_slot, &block, &block_sz );
+
+  ulong slot = repair_slot == 0 ? ele->slot : repair_slot;
+  FD_LOG_DEBUG(( "store slot - mode: %d, slot: %lu, repair_slot: %lu", store_slot_prepare_mode, ele->slot, repair_slot ));
+  fd_store_tile_slot_prepare( ctx, store_slot_prepare_mode, slot );
+
   for( fd_pending_slots_treap_fwd_iter_t iter=first;
        !fd_pending_slots_treap_fwd_iter_done( iter ); ) {
     fd_pending_slots_treap_ele_t * ele = fd_pending_slots_treap_fwd_iter_ele( iter, pending_slots->pool );
@@ -517,6 +530,14 @@ after_credit( void *             _ctx,
       iter = fd_pending_slots_treap_fwd_iter_next( iter, pending_slots->pool );
       continue;
     }
+    /* Remove ele from pending_slots *before* invoking the two slot_prepare functions below
+     * This seems to be what Liam's pending_slots implementation did
+     * The slot_prepare functions below may insert ele->slot back with a higher ele->time, and in this case
+     * Liam's implementation would keep such insertion at the end of this loop iteration,
+     * but my old implementation would delete such insertion because previously treap_ele_remove was invoked at the end of the loop */
+    iter = fd_pending_slots_treap_fwd_iter_next( iter, pending_slots->pool );
+    fd_pending_slots_treap_ele_remove( pending_slots->treap, ele, pending_slots->pool );
+    fd_pending_slots_pool_ele_release( pending_slots->pool, ele );
 
     uchar const * block         = NULL;
     ulong         block_sz      = 0;
@@ -526,10 +547,6 @@ after_credit( void *             _ctx,
     ulong slot = repair_slot == 0 ? ele->slot : repair_slot;
     FD_LOG_DEBUG(( "store slot - mode: %d, slot: %lu, repair_slot: %lu", store_slot_prepare_mode, ele->slot, repair_slot ));
     fd_store_tile_slot_prepare( ctx, store_slot_prepare_mode, slot );
-
-    iter = fd_pending_slots_treap_fwd_iter_next( iter, pending_slots->pool );
-    fd_pending_slots_treap_ele_remove( pending_slots->treap, ele, pending_slots->pool );
-    fd_pending_slots_pool_ele_release( pending_slots->pool, ele );
   }
 }
 
