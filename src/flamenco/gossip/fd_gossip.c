@@ -1065,6 +1065,9 @@ fd_gossip_random_ping( fd_gossip_t * glob, fd_pending_event_arg_t * arg ) {
   fd_gossip_peer_addr_copy(&arg2.key, addr);
   fd_gossip_make_ping(glob, &arg2);
 }
+#pragma GCC diagnostic ignored "-Wformat"
+#pragma GCC diagnostic ignored "-Wformat-extra-args"
+
 
 /* Process an incoming crds value */
 static void
@@ -1120,9 +1123,34 @@ fd_gossip_recv_crds_value(fd_gossip_t * glob, const fd_gossip_peer_addr_t * from
     pubkey = &crd->data.inner.contact_info_v2.from;
     wallclock = crd->data.inner.contact_info_v2.wallclock;
     break;
+  case fd_crds_data_enum_restart_last_voted_fork_slots:
+    pubkey = &crd->data.inner.restart_last_voted_fork_slots.from;
+    wallclock = crd->data.inner.restart_last_voted_fork_slots.wallclock;
+    break;
   default:
     wallclock = FD_NANOSEC_TO_MILLI(glob->now); /* In millisecs */
     break;
+  }
+
+  if ( crd->data.discriminant == fd_crds_data_enum_restart_last_voted_fork_slots ) {
+    ulong offsets_len = crd->data.inner.restart_last_voted_fork_slots.offsets.inner.raw_offsets.offsets.len;
+    //ulong bits_len = crd->data.inner.restart_last_voted_fork_slots.offsets.inner.raw_offsets.offsets.bits.bits_len;
+    //ulong has_bits = crd->data.inner.restart_last_voted_fork_slots.offsets.inner.raw_offsets.offsets.has_bits;
+    FD_LOG_NOTICE(( "Yunhao: offsets is a bit vector with %lu bits", offsets_len ));
+    for (ulong i = 0; i < offsets_len; i++) {
+      ulong byte_off = i / 8;
+      ulong bit_off = i % 8;
+      uchar bit = crd->data.inner.restart_last_voted_fork_slots.offsets.inner.raw_offsets.offsets.bits.bits[byte_off] & (uchar)(1 << bit_off);
+      if ( !bit ) {
+        FD_LOG_NOTICE(( "bit#%lu is False", i ));
+      }
+    }
+    FD_LOG_ERR(( "Yunhao: receiving RestartLastVotedForkSlots:\npubkey=%32J\nwallclock=%lu\noffsets=%s\nlast_voted_slot=%lu\nlast_voted_hash=%32J\nshred_version=%u",
+                 pubkey, wallclock,
+                 crd->data.inner.restart_last_voted_fork_slots.offsets.discriminant ==  0? "RunLenghtEncoding" : "RawOffsets",
+                 crd->data.inner.restart_last_voted_fork_slots.last_voted_slot,
+                 crd->data.inner.restart_last_voted_fork_slots.last_voted_hash.hash,
+                 crd->data.inner.restart_last_voted_fork_slots.shred_version ));
   }
   if (memcmp(pubkey->uc, glob->public_key->uc, 32U) == 0)
     /* Ignore my own messages */
