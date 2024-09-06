@@ -4,6 +4,7 @@
 #include "../stem/fd_stem.h"
 #include "../quic/fd_tpu.h"
 #include "../../tango/fd_tango.h"
+#include "../../ballet/base58/fd_base58.h"
 
 /* Maximum number of workspaces that may be present in a topology. */
 #define FD_TOPO_MAX_WKSPS         (256UL)
@@ -228,6 +229,8 @@ typedef struct {
       char  status_cache[ PATH_MAX ];
       ulong tpool_thread_count;
       char  cluster_version[ 32 ];
+      int   in_wen_restart;
+      char  wen_restart_coordinator[ FD_BASE58_ENCODED_32_SZ ];
 
       /* not specified by [tiles.replay] */
 
@@ -300,6 +303,8 @@ typedef struct {
       char  identity_key_path[ PATH_MAX ];
       char  shred_cap_archive[ PATH_MAX ];
       char  shred_cap_replay[ PATH_MAX ];
+
+      int   in_wen_restart;
     } store_int;
 
     struct {
