@@ -446,7 +446,6 @@ fd_update_hash_bank_tpool( fd_exec_slot_ctx_t * slot_ctx,
   /* Find accounts which have changed */
   fd_tpool_exec_all_rrobin( tpool, 0, wcnt, fd_account_hash_task, &task_data, NULL, NULL, 1, 0, task_data.info_sz );
 
-
   // Apply the lthash changes to the bank lthash
   fd_lthash_value_t * acc = (fd_lthash_value_t *)fd_type_pun(slot_ctx->slot_bank.lthash);
   for( ulong i = 0; i < wcnt; i++ ) {
@@ -916,7 +915,11 @@ typedef struct accounts_hash accounts_hash_t;
 #include "../../util/tmpl/fd_map_dynamic.c"
 
 static fd_pubkey_hash_pair_t *
-fd_accounts_sorted_subrange( fd_exec_slot_ctx_t * slot_ctx, uint range_idx, uint range_cnt, ulong do_hash_verify, ulong * num_pairs_out ) {
+fd_accounts_sorted_subrange( fd_exec_slot_ctx_t * slot_ctx, uint range_idx, uint range_cnt, ulong do_hash_verify, ulong * num_pairs_out,
+  ulong task_idx,fd_lthash_value_t *lthash_values
+ ) {
+  (void) lthash_values;
+  (void) task_idx;
   fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
   fd_wksp_t *     wksp = fd_funk_wksp( funk );
   fd_funk_rec_t * rec_map  = fd_funk_rec_map( funk, wksp );
@@ -994,12 +997,13 @@ struct fd_subrange_task_info {
   ulong do_hash_verify;
   ulong num_lists;
   fd_pubkey_hash_pair_list_t * lists;
+  fd_lthash_value_t *lthash_values;
 };
 typedef struct fd_subrange_task_info fd_subrange_task_info_t;
 
 static void
 fd_accounts_sorted_subrange_task( void *tpool,
-                                  ulong t0 FD_PARAM_UNUSED, ulong t1 FD_PARAM_UNUSED,
+                                  ulong t0, ulong t1 FD_PARAM_UNUSED,
                                   void *args FD_PARAM_UNUSED,
                                   void *reduce FD_PARAM_UNUSED, ulong stride FD_PARAM_UNUSED,
                                   ulong l0 FD_PARAM_UNUSED, ulong l1 FD_PARAM_UNUSED,
@@ -1007,7 +1011,7 @@ fd_accounts_sorted_subrange_task( void *tpool,
                                   ulong n0 FD_PARAM_UNUSED, ulong n1 FD_PARAM_UNUSED) {
   fd_subrange_task_info_t * task_info = (fd_subrange_task_info_t *)tpool;
   fd_pubkey_hash_pair_list_t * list = task_info->lists + m0;
-  list->pairs = fd_accounts_sorted_subrange( task_info->slot_ctx, (uint)m0, (uint)task_info->num_lists, task_info->do_hash_verify, &list->pairs_len );
+  list->pairs = fd_accounts_sorted_subrange( task_info->slot_ctx, (uint)m0, (uint)task_info->num_lists, task_info->do_hash_verify, &list->pairs_len, t0, task_info->lthash_values );
 }
 
 int
@@ -1016,26 +1020,38 @@ fd_accounts_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
 
   if( tpool == NULL || fd_tpool_worker_cnt( tpool ) <= 1U ) {
     ulong                   num_pairs = 0;
-    fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx, 0, 1, do_hash_verify, &num_pairs );
+    fd_lthash_value_t *lthash_values = fd_valloc_malloc( slot_ctx->valloc, FD_LTHASH_VALUE_ALIGN, FD_LTHASH_VALUE_FOOTPRINT );
+    fd_lthash_zero(&lthash_values[0]);
+
+    fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx, 0, 1, do_hash_verify, &num_pairs, 0, lthash_values );
     FD_TEST(NULL != pairs);
     fd_pubkey_hash_pair_list_t list1 = { .pairs = pairs, .pairs_len = num_pairs };
     fd_hash_account_deltas( &list1, 1, accounts_hash, slot_ctx );
     fd_valloc_free( slot_ctx->valloc, pairs );
-
+    fd_valloc_free( slot_ctx->valloc, lthash_values );
   } else {
     ulong num_lists = fd_tpool_worker_cnt( tpool );
     FD_LOG_NOTICE(( "launching %lu hash tasks", num_lists ));
     fd_pubkey_hash_pair_list_t lists[num_lists];
+
+    ulong wcnt = fd_tpool_worker_cnt( tpool );
+    fd_lthash_value_t *lthash_values = fd_valloc_malloc( slot_ctx->valloc, FD_LTHASH_VALUE_ALIGN, wcnt * FD_LTHASH_VALUE_FOOTPRINT );
+    for( ulong i = 0; i < wcnt; i++ ) {
+      fd_lthash_zero(&lthash_values[i]);
+    }
+
     fd_subrange_task_info_t task_info = {
       .slot_ctx = slot_ctx,
       .do_hash_verify = do_hash_verify,
       .num_lists = num_lists,
-      .lists = lists };
+      .lists = lists,
+      .lthash_values = lthash_values};
     fd_tpool_exec_all_rrobin( tpool, 0, num_lists, fd_accounts_sorted_subrange_task, &task_info, NULL, NULL, 1, 0, num_lists );
     fd_hash_account_deltas( lists, num_lists, accounts_hash, slot_ctx );
     for( ulong i = 0; i < num_lists; ++i ) {
       fd_valloc_free( slot_ctx->valloc, lists[i].pairs );
     }
+    fd_valloc_free( slot_ctx->valloc, lthash_values );
   }
 
   FD_LOG_INFO(("accounts_hash %32J", accounts_hash->hash));
