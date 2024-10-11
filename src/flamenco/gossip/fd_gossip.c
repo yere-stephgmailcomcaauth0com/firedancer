@@ -1792,7 +1792,7 @@ fd_gossip_push( fd_gossip_t * glob, fd_pending_event_arg_t * arg ) {
 
   /* Iterate across recent values */
   ulong expire = FD_NANOSEC_TO_MILLI(glob->now) - FD_GOSSIP_PULL_TIMEOUT;
-  while (glob->need_push_cnt > 0) {
+  while (glob->need_push_cnt > 0 && glob->push_states_cnt > 0) {
     fd_hash_t * h = glob->need_push + ((glob->need_push_head++) & (FD_NEED_PUSH_MAX-1));
     glob->need_push_cnt--;
 
@@ -2064,7 +2064,7 @@ fd_gossip_start( fd_gossip_t * glob ) {
   ev->fun = fd_gossip_random_ping;
   ev = fd_gossip_add_pending(glob, glob->now + (long)60e9);
   ev->fun = fd_gossip_log_stats;
-  ev = fd_gossip_add_pending(glob, glob->now + (long)20e9);
+  ev = fd_gossip_add_pending(glob, glob->now + (long)15e9);
   ev->fun = fd_gossip_refresh_push_states;
   ev = fd_gossip_add_pending(glob, glob->now + (long)1e8);
   ev->fun = fd_gossip_push;
