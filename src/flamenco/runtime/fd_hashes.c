@@ -157,7 +157,7 @@ fd_hash_account_deltas( fd_pubkey_hash_pair_list_t * lists, ulong lists_len, fd_
 
 void
 fd_calculate_epoch_accounts_hash_values(fd_exec_slot_ctx_t * slot_ctx) {
-  if( !FD_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
     return;
 
   ulong slot_idx = 0;
@@ -195,7 +195,7 @@ fd_calculate_epoch_accounts_hash_values(fd_exec_slot_ctx_t * slot_ctx) {
 // https://github.com/solana-labs/solana/blob/b0dcaf29e358c37a0fcb8f1285ce5fff43c8ec55/runtime/src/bank/epoch_accounts_hash_utils.rs#L13
 static int
 fd_should_include_epoch_accounts_hash(fd_exec_slot_ctx_t * slot_ctx) {
-  if( !FD_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
     return 0;
 
   fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
@@ -205,7 +205,7 @@ fd_should_include_epoch_accounts_hash(fd_exec_slot_ctx_t * slot_ctx) {
 
 static int
 fd_should_snapshot_include_epoch_accounts_hash(fd_exec_slot_ctx_t * slot_ctx) {
-  if( !FD_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
     return 0;
 
   fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
@@ -352,7 +352,7 @@ fd_account_hash_task( void *tpool,
   /* If hash didn't change, nothing to do */
   if( memcmp( task_info->acc_hash->hash, acc_meta->hash, sizeof(fd_hash_t) ) != 0 ) {
     task_info->hash_changed = 1;
-  } else if( FD_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot )
+  } else if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot )
              && acc_meta->slot == slot_ctx->slot_bank.slot ) {
     /* Even if the hash didnt change, in this scenario, the record did! */
     task_info->hash_changed = 1;
@@ -735,7 +735,7 @@ fd_update_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
 
     /* If hash didn't change, nothing to do */
     if( 0==memcmp( acc_hash->hash, acc_meta->hash, sizeof(fd_hash_t) ) ) {
-      if( FD_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot )
+      if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot )
         && acc_meta->slot == slot_ctx->slot_bank.slot ) {
         /* no-op */
       } else {
@@ -813,7 +813,7 @@ fd_update_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
 
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
   if (slot_ctx->slot_bank.slot >= epoch_bank->eah_start_slot) {
-    if (FD_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash)) {
+    if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash)) {
       fd_accounts_hash(slot_ctx, NULL, &slot_ctx->slot_bank.epoch_account_hash, 0);
       epoch_bank->eah_start_slot = ULONG_MAX;
     }
@@ -886,7 +886,7 @@ fd_hash_account_current( uchar                      hash  [ static 32 ],
                          uchar const                pubkey[ static 32 ],
                          uchar const              * data,
                          fd_exec_slot_ctx_t const * slot_ctx ) {
-  if( FD_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot ) )
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot ) )
     return fd_hash_account_v1( hash, account, pubkey, data );
   else
     return fd_hash_account_v0( hash, account, pubkey, data, slot_ctx->slot_bank.slot );
@@ -951,7 +951,7 @@ fd_accounts_sorted_subrange( fd_exec_slot_ctx_t * slot_ctx, uint range_idx, uint
       fd_hash_account_v1( (uchar *) metadata->hash, metadata, rec->pair.key->uc, fd_account_get_data(metadata) );
     } else if( do_hash_verify ) {
       uchar hash[32];
-      if( FD_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot ) )
+      if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, account_hash_ignore_slot ) )
         fd_hash_account_v1( hash, metadata, rec->pair.key->uc, fd_account_get_data(metadata) );
       else
         fd_hash_account_v0( hash, metadata, rec->pair.key->uc, fd_account_get_data(metadata), metadata->slot );
@@ -1116,7 +1116,7 @@ fd_accounts_hash_inc_only( fd_exec_slot_ctx_t * slot_ctx, fd_hash_t *accounts_ha
 
 int
 fd_snapshot_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t * accounts_hash, uint check_hash ) {
-  if (FD_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash)) {
+  if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash)) {
     if (fd_should_snapshot_include_epoch_accounts_hash (slot_ctx)) {
       FD_LOG_NOTICE(( "snapshot is including epoch account hash" ));
       fd_sha256_t h;

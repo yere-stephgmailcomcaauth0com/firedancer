@@ -165,7 +165,7 @@ VM_SYCALL_CPI_UPDATE_CALLEE_ACC_FUNC( fd_vm_t *                         vm,
     }
   }
 
-  if( !FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     /* Get the account data */
     /* Update the account data, if the account data can be changed */
     /* FIXME: double-check these permissions, especially the callee_acc_idx */
@@ -187,7 +187,7 @@ VM_SYCALL_CPI_UPDATE_CALLEE_ACC_FUNC( fd_vm_t *                         vm,
       return err;
     }
 
-    int is_disable_cpi_setting_executable_and_rent_epoch_active = FD_FEATURE_ACTIVE(vm->instr_ctx->slot_ctx, disable_cpi_setting_executable_and_rent_epoch);
+    int is_disable_cpi_setting_executable_and_rent_epoch_active = FD_SLOT_CTX_FEATURE_ACTIVE(vm->instr_ctx->slot_ctx, disable_cpi_setting_executable_and_rent_epoch);
     if( !is_disable_cpi_setting_executable_and_rent_epoch_active &&
         fd_account_is_executable( callee_acc->meta )!=account_info->executable ) {
       fd_pubkey_t const * program_acc = &vm->instr_ctx->instr->acct_pubkeys[vm->instr_ctx->instr->program_id];
@@ -201,7 +201,7 @@ VM_SYCALL_CPI_UPDATE_CALLEE_ACC_FUNC( fd_vm_t *                         vm,
 
     if( !is_disable_cpi_setting_executable_and_rent_epoch_active &&
         callee_acc->meta->info.rent_epoch!=account_info->rent_epoch ) {
-      if( FD_UNLIKELY( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, enable_early_verification_of_account_modifications ) ) ) return 1;
+      if( FD_UNLIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, enable_early_verification_of_account_modifications ) ) ) return 1;
       else callee_acc->meta->info.rent_epoch = account_info->rent_epoch;
     }
   } else { /* Direct mapping enabled */
@@ -392,7 +392,7 @@ VM_SYSCALL_CPI_UPDATE_CALLER_ACC_FUNC( fd_vm_t *                   vm,
                                        uchar                       instr_acc_idx,
                                        fd_pubkey_t const *         pubkey ) {
 
-  if( !FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     /* Look up the borrowed account from the instruction context, which will contain
       the callee's changes. */
     fd_borrowed_account_t * callee_acc_rec = NULL;
@@ -605,7 +605,7 @@ VM_SYSCALL_CPI_ENTRYPOINT( void *  _vm,
   VM_SYSCALL_CPI_INSTR_T const * cpi_instruction =
     FD_VM_MEM_HADDR_LD( vm, instruction_va, VM_SYSCALL_CPI_INSTR_ALIGN, VM_SYSCALL_CPI_INSTR_SIZE );
 
-  if( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, loosen_cpi_size_restriction ) ) {
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, loosen_cpi_size_restriction ) ) {
     FD_VM_CU_UPDATE( vm, VM_SYSCALL_CPI_INSTR_DATA_LEN( cpi_instruction ) / FD_VM_CPI_BYTES_PER_UNIT );
   }
 
@@ -714,7 +714,7 @@ VM_SYSCALL_CPI_ENTRYPOINT( void *  _vm,
   /* Update all account permissions before updating the account data updates.
      We have inlined the anza function update_caller_account_perms here.
      TODO: consider factoring this out */
-  if( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     for( ulong i=0UL; i<vm->instr_ctx->instr->acct_cnt; i++ ) {
       /* https://github.com/firedancer-io/solana/blob/508f325e19c0fd8e16683ea047d7c1a85f127e74/programs/bpf_loader/src/syscalls/cpi.rs#L939-L943 */
       /* Anza only even attemps to update the account permissions if it is a

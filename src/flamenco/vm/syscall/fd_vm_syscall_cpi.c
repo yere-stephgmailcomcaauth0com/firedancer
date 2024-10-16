@@ -363,7 +363,7 @@ fd_vm_prepare_instruction( fd_instr_info_t const *  caller_instr,
 
    https://github.com/solana-labs/solana/blob/dbf06e258ae418097049e845035d7d5502fe1327/sdk/program/src/syscalls/mod.rs#L25 */
 
-#define FD_CPI_MAX_ACCOUNT_INFOS           ( fd_ulong_if( FD_FEATURE_ACTIVE(slot_ctx, increase_tx_account_lock_limit), 128UL, 64UL ) )
+#define FD_CPI_MAX_ACCOUNT_INFOS           ( fd_ulong_if( FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, increase_tx_account_lock_limit), 128UL, 64UL ) )
 
 /* Maximum CPI instruction data size. 10 KiB was chosen to ensure that CPI
    instructions are not more limited than transaction instructions if the size
@@ -402,7 +402,7 @@ fd_vm_syscall_cpi_preflight_check( ulong signers_seeds_cnt,
   }
 
   /* https://github.com/solana-labs/solana/blob/eb35a5ac1e7b6abe81947e22417f34508f89f091/programs/bpf_loader/src/syscalls/cpi.rs#L996-L997 */
-  if( FD_FEATURE_ACTIVE( slot_ctx, loosen_cpi_size_restriction ) ) {
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, loosen_cpi_size_restriction ) ) {
     if( FD_UNLIKELY( acct_info_cnt > FD_CPI_MAX_ACCOUNT_INFOS  ) ) {
       // TODO: return SyscallError::MaxInstructionAccountInfosExceeded
       FD_LOG_WARNING(( "TODO: return max instruction account infos exceeded" ));
@@ -431,7 +431,7 @@ fd_vm_syscall_cpi_check_instruction( fd_vm_t const * vm,
                                      ulong           acct_cnt,
                                      ulong           data_sz ) {
   /* https://github.com/solana-labs/solana/blob/eb35a5ac1e7b6abe81947e22417f34508f89f091/programs/bpf_loader/src/syscalls/cpi.rs#L958-L959 */
-  if( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, loosen_cpi_size_restriction ) ) {
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, loosen_cpi_size_restriction ) ) {
     if( FD_UNLIKELY( data_sz > FD_CPI_MAX_INSTRUCTION_DATA_LEN ) ) {
       FD_LOG_WARNING(( "cpi: data too long (%#lx)", data_sz ));
       // SyscallError::MaxInstructionDataLenExceeded
@@ -498,7 +498,7 @@ fd_vm_syscall_cpi_check_authorized_program( fd_pubkey_t const * program_id,
             || (fd_vm_syscall_cpi_check_id(program_id, fd_solana_bpf_loader_upgradeable_program_id.key)
                 && !((instruction_data_len != 0 && instruction_data[0] == 3)  /* is_upgrade_instruction() */
                     || (instruction_data_len != 0 && instruction_data[0] == 4)  /* is_set_authority_instruction() */
-                    || (FD_FEATURE_ACTIVE(slot_ctx, enable_bpf_loader_set_authority_checked_ix)
+                    || (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, enable_bpf_loader_set_authority_checked_ix)
                         && (instruction_data_len != 0 && instruction_data[0] == 7)) /* is_set_authority_checked_instruction() */
                     || (instruction_data_len != 0 && instruction_data[0] == 5))) /* is_close_instruction */
             || fd_vm_syscall_cpi_is_precompile(program_id));

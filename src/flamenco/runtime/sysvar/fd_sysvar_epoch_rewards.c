@@ -70,7 +70,7 @@ fd_sysvar_epoch_rewards_set_inactive(
       FD_LOG_ERR(( "failed to read sysvar epoch rewards" ));
     }
 
-    if ( FD_LIKELY( FD_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
+    if ( FD_LIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
       FD_TEST( epoch_rewards->total_rewards >= epoch_rewards->distributed_rewards );
     } else {
       FD_TEST( epoch_rewards->total_rewards == epoch_rewards->distributed_rewards );
@@ -110,7 +110,7 @@ fd_sysvar_epoch_rewards_init(
        On other clusters, including those where enable_partitioned_epoch_reward is enabled, we should use total_rewards.
        
        https://github.com/anza-xyz/agave/blob/b9c9ecccbb05d9da774d600bdbef2cf210c57fa8/runtime/src/bank/partitioned_epoch_rewards/sysvar.rs#L36-L43 */
-    if ( FD_LIKELY( FD_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
+    if ( FD_LIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
       epoch_rewards.total_rewards = point_value.rewards;
     }
 

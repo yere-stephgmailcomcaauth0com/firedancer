@@ -370,7 +370,7 @@ fd_vm_syscall_sol_memcpy( /**/            void *  _vm,
     return FD_VM_SUCCESS;
   }
 
-  if( !FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     void *       dst = FD_VM_MEM_HADDR_ST( vm, dst_vaddr, FD_VM_ALIGN_RUST_U8, sz );
     void const * src = FD_VM_MEM_HADDR_LD( vm, src_vaddr, FD_VM_ALIGN_RUST_U8, sz );
 
@@ -493,7 +493,7 @@ fd_vm_syscall_sol_memcmp( /**/            void *  _vm,
      doesn't provide strong enough guarantees about the return value (it
      only promises the sign). */
 
-  if( !FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     uchar const * m0 = (uchar const *)FD_VM_MEM_SLICE_HADDR_LD( vm, m0_vaddr, FD_VM_ALIGN_RUST_U8, sz );
     uchar const * m1 = (uchar const *)FD_VM_MEM_SLICE_HADDR_LD( vm, m1_vaddr, FD_VM_ALIGN_RUST_U8, sz );
 
@@ -621,7 +621,7 @@ fd_vm_syscall_sol_memset( /**/            void *  _vm,
   ulong FD_FN_UNUSED dst_region = dst_vaddr >> 32;
   int b = (int)(c & 255UL);
 
-  if( dst_region!=4UL || !FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( dst_region!=4UL || !FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     void * dst = FD_VM_MEM_SLICE_HADDR_ST( vm, dst_vaddr, 1UL, sz );
     fd_memset( dst, b, sz );
   } else {
@@ -679,7 +679,7 @@ fd_vm_syscall_sol_memmove( /**/            void *  _vm,
 
   FD_VM_CU_MEM_OP_UPDATE( vm, sz );
 
-  if( !FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) ) {
     void *       dst = FD_VM_MEM_SLICE_HADDR_ST( vm, dst_vaddr, FD_VM_ALIGN_RUST_U8, sz );
     void const * src = FD_VM_MEM_SLICE_HADDR_LD( vm, src_vaddr, FD_VM_ALIGN_RUST_U8, sz );
     if( FD_LIKELY( sz > 0 ) ) {

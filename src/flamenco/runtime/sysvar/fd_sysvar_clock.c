@@ -324,7 +324,7 @@ fd_sysvar_clock_update( fd_exec_slot_ctx_t * slot_ctx ) {
   long ancestor_timestamp = clock.unix_timestamp;
 
   if (slot_ctx->slot_bank.slot != 0) {
-    fd_calculate_stake_weighted_timestamp(slot_ctx, &clock.unix_timestamp, FD_FEATURE_ACTIVE( slot_ctx, warp_timestamp_again ) );
+    fd_calculate_stake_weighted_timestamp(slot_ctx, &clock.unix_timestamp, FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, warp_timestamp_again ) );
   }
 
   if (0 == clock.unix_timestamp) {
@@ -358,7 +358,7 @@ fd_sysvar_clock_update( fd_exec_slot_ctx_t * slot_ctx ) {
   clock.epoch = epoch_new;
   if( epoch_old != epoch_new ) {
     long timestamp_estimate = 0L;
-    fd_calculate_stake_weighted_timestamp( slot_ctx, &timestamp_estimate, FD_FEATURE_ACTIVE( slot_ctx, warp_timestamp_again ) );
+    fd_calculate_stake_weighted_timestamp( slot_ctx, &timestamp_estimate, FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, warp_timestamp_again ) );
     clock.unix_timestamp = fd_long_max( timestamp_estimate, ancestor_timestamp );
     clock.epoch_start_timestamp = clock.unix_timestamp;
     clock.leader_schedule_epoch = fd_slot_to_leader_schedule_epoch( &epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot );

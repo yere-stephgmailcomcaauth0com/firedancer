@@ -80,7 +80,7 @@ main( int     argc,
 
   int vm_ok = !!fd_vm_init(
       /* vm               */ vm,
-      /* instr_ctx        */ instr_ctx,  /* required for FD_FEATURE_ACTIVE */
+      /* instr_ctx        */ instr_ctx,  /* required for FD_SLOT_CTX_FEATURE_ACTIVE */
       /* heap_max         */ FD_VM_HEAP_DEFAULT,
       /* entry_cu         */ FD_VM_COMPUTE_UNIT_LIMIT,
       /* rodata           */ rodata,

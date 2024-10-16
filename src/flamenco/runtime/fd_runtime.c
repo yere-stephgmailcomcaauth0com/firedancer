@@ -318,7 +318,7 @@ void fd_runtime_init_program(fd_exec_slot_ctx_t *slot_ctx)
   fd_sysvar_slot_history_init(slot_ctx);
   //  fd_sysvar_slot_hashes_init( slot_ctx );
   fd_sysvar_epoch_schedule_init(slot_ctx);
-  if( !FD_FEATURE_ACTIVE(slot_ctx, disable_fees_sysvar) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, disable_fees_sysvar) ) {
     fd_sysvar_fees_init(slot_ctx);
   }
   fd_sysvar_rent_init(slot_ctx);
@@ -2190,7 +2190,7 @@ fd_runtime_block_sysvar_update_pre_execute( fd_exec_slot_ctx_t * slot_ctx ) {
   clock_update_time += fd_log_wallclock();
   double clock_update_time_ms = (double)clock_update_time * 1e-6;
   FD_LOG_INFO(( "clock updated - slot: %lu, elapsed: %6.6f ms", slot_ctx->slot_bank.slot, clock_update_time_ms ));
-  if (!FD_FEATURE_ACTIVE(slot_ctx, disable_fees_sysvar))
+  if (!FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, disable_fees_sysvar))
     fd_sysvar_fees_update(slot_ctx);
   // It has to go into the current txn previous info but is not in slot 0
   if (slot_ctx->slot_bank.slot != 0)
@@ -2250,8 +2250,8 @@ fd_runtime_block_execute_prepare( fd_exec_slot_ctx_t * slot_ctx ) {
   slot_ctx->signature_cnt = 0;
 
   if( slot_ctx->slot_bank.slot != 0 && (
-      FD_FEATURE_ACTIVE( slot_ctx, enable_partitioned_epoch_reward ) ||
-      FD_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
+      FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, enable_partitioned_epoch_reward ) ||
+      FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
     fd_funk_start_write( slot_ctx->acc_mgr->funk );
     fd_distribute_partitioned_epoch_rewards( slot_ctx );
     fd_funk_end_write( slot_ctx->acc_mgr->funk );
@@ -2845,7 +2845,7 @@ fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
         fd_txncache_register_root_slot( slot_ctx->status_cache, txn->xid.ul[0] );
       }
 
-      if (FD_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash)) {
+      if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash)) {
         fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
         if (txn->xid.ul[0] >= epoch_bank->eah_start_slot) {
           fd_accounts_hash( slot_ctx, tpool, &slot_ctx->slot_bank.epoch_account_hash, 0 );
@@ -3149,7 +3149,7 @@ fd_runtime_calculate_fee(fd_exec_txn_ctx_t *txn_ctx,
   // https://github.com/anza-xyz/agave/blob/2e6ca8c1f62db62c1db7f19c9962d4db43d0d550/sdk/src/fee.rs#L116
   ulong MEMORY_USAGE_COST = (((txn_ctx->loaded_accounts_data_size_limit + (ACCOUNT_DATA_COST_PAGE_SIZE - 1)) / ACCOUNT_DATA_COST_PAGE_SIZE) * FD_VM_HEAP_COST);
   // https://github.com/anza-xyz/agave/blob/2e6ca8c1f62db62c1db7f19c9962d4db43d0d550/sdk/src/fee.rs#L180
-  ulong loaded_accounts_data_size_cost = FD_FEATURE_ACTIVE(txn_ctx->slot_ctx, include_loaded_accounts_data_size_in_fee_calculation) ? MEMORY_USAGE_COST : 0;
+  ulong loaded_accounts_data_size_cost = FD_SLOT_CTX_FEATURE_ACTIVE(txn_ctx->slot_ctx, include_loaded_accounts_data_size_in_fee_calculation) ? MEMORY_USAGE_COST : 0;
   ulong total_compute_units = loaded_accounts_data_size_cost + txn_ctx->compute_unit_limit;
   /* unused */
   (void)total_compute_units;
@@ -3309,7 +3309,7 @@ fd_runtime_collect_rent_from_account( fd_exec_slot_ctx_t *  slot_ctx,
                                       fd_account_meta_t  *  acc,
                                       fd_pubkey_t const  *  key,
                                       ulong                 epoch ) {
-  if( !FD_FEATURE_ACTIVE( slot_ctx, disable_rent_fees_collection ) ) {
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, disable_rent_fees_collection ) ) {
     fd_runtime_collect_from_existing_account( slot_ctx, acc, key, epoch );
   } else {
     if( FD_UNLIKELY( acc->info.rent_epoch!=FD_RENT_EXEMPT_RENT_EPOCH &&
@@ -3589,9 +3589,9 @@ void fd_runtime_distribute_rent_to_validators( fd_exec_slot_ctx_t * slot_ctx,
 
     sort_validator_stake_pair_inplace(validator_stakes, num_validator_stakes);
 
-    ulong enforce_fix = FD_FEATURE_ACTIVE(slot_ctx, no_overflow_rent_distribution);
-    ulong prevent_rent_fix = FD_FEATURE_ACTIVE(slot_ctx, prevent_rent_paying_rent_recipients);
-    ulong validate_fee_collector_account = FD_FEATURE_ACTIVE(slot_ctx, validate_fee_collector_account);
+    ulong enforce_fix = FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, no_overflow_rent_distribution);
+    ulong prevent_rent_fix = FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, prevent_rent_paying_rent_recipients);
+    ulong validate_fee_collector_account = FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, validate_fee_collector_account);
 
     ulong rent_distributed_in_initial_round = 0;
 
@@ -3717,7 +3717,7 @@ fd_runtime_freeze( fd_exec_slot_ctx_t * slot_ctx ) {
 
   fd_sysvar_recent_hashes_update( slot_ctx );
 
-  if( !FD_FEATURE_ACTIVE(slot_ctx, disable_fees_sysvar) )
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, disable_fees_sysvar) )
     fd_sysvar_fees_update(slot_ctx);
 
   ulong fees = fd_ulong_sat_add (slot_ctx->slot_bank.collected_execution_fees, slot_ctx->slot_bank.collected_priority_fees );
@@ -3732,7 +3732,7 @@ fd_runtime_freeze( fd_exec_slot_ctx_t * slot_ctx ) {
     }
 
     do {
-      if ( FD_FEATURE_ACTIVE( slot_ctx, validate_fee_collector_account ) ) {
+      if ( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, validate_fee_collector_account ) ) {
         if (memcmp(rec->meta->info.owner, fd_solana_system_program_id.key, sizeof(rec->meta->info.owner)) != 0) {
           FD_LOG_WARNING(("fd_runtime_freeze: burn %lu due to invalid owner", fees ));
           slot_ctx->slot_bank.capitalization = fd_ulong_sat_sub(slot_ctx->slot_bank.capitalization, fees);
@@ -3750,7 +3750,7 @@ fd_runtime_freeze( fd_exec_slot_ctx_t * slot_ctx ) {
       ulong fees = 0;
       ulong burn = 0;
 
-      if ( FD_FEATURE_ACTIVE( slot_ctx, reward_full_priority_fee ) ) {
+      if ( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, reward_full_priority_fee ) ) {
         ulong half_fee = slot_ctx->slot_bank.collected_execution_fees / 2;
         fees = fd_ulong_sat_add(slot_ctx->slot_bank.collected_priority_fees, slot_ctx->slot_bank.collected_execution_fees - half_fee);
         burn = half_fee;
@@ -4119,15 +4119,15 @@ void fd_process_new_epoch(
   fd_features_restore( slot_ctx );
 
   // Change the speed of the poh clock
-  if (FD_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick6))
+  if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick6))
     epoch_bank->hashes_per_tick = UPDATED_HASHES_PER_TICK6;
-  else if (FD_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick5))
+  else if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick5))
     epoch_bank->hashes_per_tick = UPDATED_HASHES_PER_TICK5;
-  else if (FD_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick4))
+  else if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick4))
     epoch_bank->hashes_per_tick = UPDATED_HASHES_PER_TICK4;
-  else if (FD_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick3))
+  else if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick3))
     epoch_bank->hashes_per_tick = UPDATED_HASHES_PER_TICK3;
-  else if (FD_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick2))
+  else if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, update_hashes_per_tick2))
     epoch_bank->hashes_per_tick = UPDATED_HASHES_PER_TICK2;
 
   /* Updates stake history sysvar accumulated values. */
@@ -4145,8 +4145,8 @@ void fd_process_new_epoch(
 
   /* Distribute rewards */
   fd_hash_t const * parent_blockhash = slot_ctx->slot_bank.block_hash_queue.last_hash;
-  if ( ( FD_FEATURE_ACTIVE( slot_ctx, enable_partitioned_epoch_reward ) ||
-         FD_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
+  if ( ( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, enable_partitioned_epoch_reward ) ||
+         FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature ) ) ) {
     fd_begin_partitioned_rewards( slot_ctx, parent_blockhash, parent_epoch );
   } else {
     fd_update_rewards( slot_ctx, parent_blockhash, parent_epoch );

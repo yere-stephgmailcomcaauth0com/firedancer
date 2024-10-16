@@ -237,7 +237,7 @@ fd_exec_txn_ctx_teardown( fd_exec_txn_ctx_t * txn_ctx ) {
 void
 fd_exec_txn_ctx_from_exec_slot_ctx( fd_exec_slot_ctx_t * slot_ctx,
                                     fd_exec_txn_ctx_t * txn_ctx ) {
-  txn_ctx->slot_ctx = slot_ctx;
+  txn_ctx->slot = slot_ctx->slot_bank.slot;
   txn_ctx->epoch_ctx = slot_ctx->epoch_ctx;
   txn_ctx->valloc = slot_ctx->valloc;
   txn_ctx->funk_txn = NULL;

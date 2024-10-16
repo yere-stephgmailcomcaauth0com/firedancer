@@ -191,7 +191,7 @@ create_lookup_table( fd_exec_instr_ctx_t *       ctx,
   lut_owner    = lut_acct->const_meta->info.owner;
 
   /* https://github.com/solana-labs/solana/blob/v1.17.4/programs/address-lookup-table/src/processor.rs#L63-L70 */
-  if( !FD_FEATURE_ACTIVE( ctx->slot_ctx, relax_authority_signer_check_for_lookup_table_creation )
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, relax_authority_signer_check_for_lookup_table_creation )
       && lut_acct->const_meta->dlen != 0UL ) {
     fd_log_collector_msg_literal( ctx, "Table account must not be allocated" );
     return FD_EXECUTOR_INSTR_ERR_ACC_ALREADY_INITIALIZED;
@@ -210,7 +210,7 @@ create_lookup_table( fd_exec_instr_ctx_t *       ctx,
   authority_key = authority_acct->pubkey;
 
   /* https://github.com/solana-labs/solana/blob/v1.17.4/programs/address-lookup-table/src/processor.rs#L76-L83 */
-  if( !FD_FEATURE_ACTIVE( ctx->slot_ctx, relax_authority_signer_check_for_lookup_table_creation )
+  if( !FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, relax_authority_signer_check_for_lookup_table_creation )
       && !fd_instr_acc_is_signer_idx( ctx->instr, ACC_IDX_AUTHORITY ) ) {
     fd_log_collector_msg_literal( ctx, "Authority account must be a signer" );
     return FD_EXECUTOR_INSTR_ERR_MISSING_REQUIRED_SIGNATURE;
@@ -275,7 +275,7 @@ create_lookup_table( fd_exec_instr_ctx_t *       ctx,
   }
 
   /* https://github.com/solana-labs/solana/blob/v1.17.4/programs/address-lookup-table/src/processor.rs#L129-L135 */
-  if( FD_FEATURE_ACTIVE( ctx->slot_ctx, relax_authority_signer_check_for_lookup_table_creation )
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, relax_authority_signer_check_for_lookup_table_creation )
       && 0==memcmp( lut_owner, fd_solana_address_lookup_table_program_id.key, sizeof(fd_pubkey_t) ) ) {
     return FD_EXECUTOR_INSTR_SUCCESS;
   }

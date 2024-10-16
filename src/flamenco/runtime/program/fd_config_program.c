@@ -185,7 +185,7 @@ _process_config_instr( fd_exec_instr_ctx_t * ctx ) {
      https://github.com/solana-labs/solana/blob/v1.17.17/programs/config/src/config_processor.rs#L105-L115
 
      TODO: Agave uses a O(n log n) algorithm here */
-  if( FD_FEATURE_ACTIVE( ctx->slot_ctx, dedupe_config_program_signers ) ) {
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, dedupe_config_program_signers ) ) {
     for( ulong i = 0; i < key_list.keys_len; i++ ) {
       for( ulong j = 0; j < key_list.keys_len; j++ ) {
         if( i == j ) continue;

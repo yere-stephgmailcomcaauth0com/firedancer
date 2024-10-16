@@ -58,11 +58,12 @@ struct __attribute__((aligned(8UL))) fd_exec_txn_ctx {
   ulong magic; /* ==FD_EXEC_TXN_CTX_MAGIC */
 
   fd_exec_epoch_ctx_t const * epoch_ctx;
-  fd_exec_slot_ctx_t *        slot_ctx;
 
   fd_funk_txn_t *       funk_txn;
   fd_acc_mgr_t *        acc_mgr;
   fd_valloc_t           valloc;
+
+  ulong                 slot;                                        /* Current slot */
 
   ulong                 paid_fees;
   ulong                 compute_unit_limit;                          /* Compute unit limit for this transaction. */

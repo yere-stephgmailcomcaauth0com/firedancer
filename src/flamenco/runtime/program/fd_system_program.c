@@ -565,7 +565,7 @@ fd_system_program_exec_transfer_with_seed( fd_exec_instr_ctx_t *                
 
   /* https://github.com/solana-labs/solana/blob/v1.17.22/programs/system/src/system_processor.rs#L264-L270 */
 
-  if( FD_UNLIKELY( ( !FD_FEATURE_ACTIVE( ctx->slot_ctx, system_transfer_zero_check ) ) ) &
+  if( FD_UNLIKELY( ( !FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, system_transfer_zero_check ) ) ) &
                    ( args->lamports == 0UL ) )
     return 0;
 

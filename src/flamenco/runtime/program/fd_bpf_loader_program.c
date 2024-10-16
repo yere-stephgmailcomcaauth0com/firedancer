@@ -467,7 +467,7 @@ execute( fd_exec_instr_ctx_t * instr_ctx, fd_sbpf_validated_program_t * prog, uc
   fd_vm_input_region_t    input_mem_regions[1000] = {0}; /* We can have a max of (3 * num accounts + 1) regions */
   fd_vm_acc_region_meta_t acc_region_metas[256]   = {0}; /* instr acc idx to idx */
   uint                    input_mem_regions_cnt   = 0U;
-  int                     direct_mapping          = FD_FEATURE_ACTIVE( instr_ctx->slot_ctx, bpf_account_data_direct_mapping );
+  int                     direct_mapping          = FD_SLOT_CTX_FEATURE_ACTIVE( instr_ctx->slot_ctx, bpf_account_data_direct_mapping );
 
   uchar * input = NULL;
   if( FD_UNLIKELY( is_deprecated ) ) {
@@ -535,7 +535,7 @@ execute( fd_exec_instr_ctx_t * instr_ctx, fd_sbpf_validated_program_t * prog, uc
   /* https://github.com/anza-xyz/agave/blob/9b22f28104ec5fd606e4bb39442a7600b38bb671/programs/bpf_loader/src/lib.rs#L288-L298 */
   ulong heap_size = instr_ctx->txn_ctx->heap_size;
   ulong heap_cost = FD_VM_HEAP_COST;
-  int round_up_heap_size = FD_FEATURE_ACTIVE( instr_ctx->slot_ctx, round_up_heap_size );
+  int round_up_heap_size = FD_SLOT_CTX_FEATURE_ACTIVE( instr_ctx->slot_ctx, round_up_heap_size );
   int heap_err = 0;
   ulong heap_cost_result = calculate_heap_cost( heap_size, heap_cost, round_up_heap_size, &heap_err );
 
@@ -1318,7 +1318,7 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
     }
     /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L958-L1030 */
     case fd_bpf_upgradeable_loader_program_instruction_enum_set_authority_checked: {
-      if( !FD_FEATURE_ACTIVE( instr_ctx->slot_ctx, enable_bpf_loader_set_authority_checked_ix ) ) {
+      if( !FD_SLOT_CTX_FEATURE_ACTIVE( instr_ctx->slot_ctx, enable_bpf_loader_set_authority_checked_ix ) ) {
         return FD_EXECUTOR_INSTR_ERR_INVALID_INSTR_DATA;
       }
 

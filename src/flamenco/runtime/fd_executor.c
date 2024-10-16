@@ -530,7 +530,7 @@ fd_executor_load_transaction_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
 /* https://github.com/anza-xyz/agave/blob/v2.0.9/runtime/src/bank.rs#L3239-L3251 */
 static inline ulong
 get_transaction_account_lock_limit( fd_exec_txn_ctx_t const * txn_ctx ) {
-  return fd_ulong_if( FD_FEATURE_ACTIVE( txn_ctx->slot_ctx, increase_tx_account_lock_limit ), MAX_TX_ACCOUNT_LOCKS, 64UL );
+  return fd_ulong_if( FD_SLOT_CTX_FEATURE_ACTIVE( txn_ctx->slot_ctx, increase_tx_account_lock_limit ), MAX_TX_ACCOUNT_LOCKS, 64UL );
 }
 
 /* https://github.com/anza-xyz/agave/blob/v2.0.9/sdk/src/transaction/sanitized.rs#L277-L289 */
@@ -562,7 +562,7 @@ static int
 fd_should_set_exempt_rent_epoch_max( fd_exec_slot_ctx_t *        slot_ctx,
                                      fd_borrowed_account_t *     rec ) {
   /* https://github.com/anza-xyz/agave/blob/89050f3cb7e76d9e273f10bea5e8207f2452f79f/svm/src/account_loader.rs#L109-L125 */
-  if( FD_FEATURE_ACTIVE( slot_ctx, disable_rent_fees_collection ) ) {
+  if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, disable_rent_fees_collection ) ) {
     if( FD_LIKELY( rec->const_meta->info.rent_epoch!=ULONG_MAX
                 && rec->const_meta->info.lamports>=fd_rent_exempt_minimum_balance( &slot_ctx->epoch_ctx->epoch_bank.rent, rec->const_meta->dlen ) ) ) {
       return 1;
@@ -608,7 +608,7 @@ fd_executor_collect_fees( fd_exec_txn_ctx_t * txn_ctx ) {
   ulong             total_fee  = fd_ulong_sat_add( execution_fee, priority_fee );
 
   // https://github.com/anza-xyz/agave/blob/2e6ca8c1f62db62c1db7f19c9962d4db43d0d550/sdk/src/fee.rs#L54
-  if ( !FD_FEATURE_ACTIVE( txn_ctx->slot_ctx, remove_rounding_in_fee_calculation ) ) {
+  if ( !FD_SLOT_CTX_FEATURE_ACTIVE( txn_ctx->slot_ctx, remove_rounding_in_fee_calculation ) ) {
     total_fee = fd_rust_cast_double_to_ulong( round( (double)total_fee ) );
   }
 
@@ -1363,7 +1363,7 @@ fd_execute_txn_prepare_phase3( fd_exec_slot_ctx_t * slot_ctx,
                                fd_txn_p_t *         txn ) {
   /* TODO: These checks should be moved to phase2. */
 
-  if (FD_FEATURE_ACTIVE( txn_ctx->slot_ctx, apply_cost_tracker_during_replay ) ) {
+  if (FD_SLOT_CTX_FEATURE_ACTIVE( txn_ctx->slot_ctx, apply_cost_tracker_during_replay ) ) {
     ulong est_cost = fd_pack_compute_cost( TXN(txn), txn->payload, &txn->flags, NULL, NULL, NULL );
     if( slot_ctx->total_compute_units_requested + est_cost <= MAX_COMPUTE_UNITS_PER_BLOCK ) {
       slot_ctx->total_compute_units_requested += est_cost;

@@ -414,7 +414,7 @@ fd_txn_account_is_writable_idx( fd_exec_txn_ctx_t const * txn_ctx, int idx ) {
   }
 
   if( fd_pubkey_is_active_reserved_key(&txn_ctx->accounts[idx] ) 
-      || ( FD_FEATURE_ACTIVE( txn_ctx->slot_ctx, add_new_reserved_account_keys ) && fd_pubkey_is_pending_reserved_key( &txn_ctx->accounts[idx] ) )) {
+      || ( FD_SLOT_CTX_FEATURE_ACTIVE( txn_ctx->slot_ctx, add_new_reserved_account_keys ) && fd_pubkey_is_pending_reserved_key( &txn_ctx->accounts[idx] ) )) {
     return 0;
   }
 

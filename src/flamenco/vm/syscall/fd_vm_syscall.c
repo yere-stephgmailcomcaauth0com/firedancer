@@ -33,15 +33,15 @@ fd_vm_syscall_register_slot( fd_sbpf_syscalls_t *       syscalls,
 
   if( slot_ctx ) {
 
-    enable_secp256k1_recover_syscall     = FD_FEATURE_ACTIVE( slot_ctx, secp256k1_recover_syscall_enabled );
-    enable_blake3_syscall                = FD_FEATURE_ACTIVE( slot_ctx, blake3_syscall_enabled );
-    enable_curve25519_syscall            = FD_FEATURE_ACTIVE( slot_ctx, curve25519_syscall_enabled );
-    enable_poseidon_syscall              = FD_FEATURE_ACTIVE( slot_ctx, enable_poseidon_syscall );
-    enable_alt_bn128_syscall             = FD_FEATURE_ACTIVE( slot_ctx, enable_alt_bn128_syscall );
-    enable_alt_bn128_compression_syscall = FD_FEATURE_ACTIVE( slot_ctx, enable_alt_bn128_compression_syscall );
-    enable_last_restart_slot_syscall     = FD_FEATURE_ACTIVE( slot_ctx, last_restart_slot_sysvar );
+    enable_secp256k1_recover_syscall     = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, secp256k1_recover_syscall_enabled );
+    enable_blake3_syscall                = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, blake3_syscall_enabled );
+    enable_curve25519_syscall            = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, curve25519_syscall_enabled );
+    enable_poseidon_syscall              = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, enable_poseidon_syscall );
+    enable_alt_bn128_syscall             = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, enable_alt_bn128_syscall );
+    enable_alt_bn128_compression_syscall = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, enable_alt_bn128_compression_syscall );
+    enable_last_restart_slot_syscall     = FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, last_restart_slot_sysvar );
 
-    disable_fees_sysvar                  = !FD_FEATURE_ACTIVE( slot_ctx, disable_fees_sysvar );
+    disable_fees_sysvar                  = !FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, disable_fees_sysvar );
 
   } else { /* enable ALL */
 

@@ -184,7 +184,7 @@ set_state( fd_exec_instr_ctx_t const * ctx,
 // https://github.com/anza-xyz/agave/blob/c8685ce0e1bb9b26014f1024de2cd2b8c308cbde/programs/stake/src/lib.rs#L29
 static inline ulong
 get_minimum_delegation( fd_exec_slot_ctx_t * slot_ctx /* feature set */ ) {
-  return fd_ulong_if( FD_FEATURE_ACTIVE( slot_ctx, stake_raise_minimum_delegation_to_1_sol ),
+  return fd_ulong_if( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, stake_raise_minimum_delegation_to_1_sol ),
                       MINIMUM_DELEGATION_SOL * LAMPORTS_PER_SOL,
                       1 );
 }
@@ -292,7 +292,7 @@ validate_split_amount( fd_exec_instr_ctx_t const * invoke_context,
 
   // https://github.com/anza-xyz/agave/blob/c8685ce0e1bb9b26014f1024de2cd2b8c308cbde/programs/stake/src/stake_state.rs#L1048
   if( FD_UNLIKELY(
-           FD_FEATURE_ACTIVE( invoke_context->slot_ctx, require_rent_exempt_split_destination ) &&
+           FD_SLOT_CTX_FEATURE_ACTIVE( invoke_context->slot_ctx, require_rent_exempt_split_destination ) &&
            source_is_active && source_remaining_balance!=0 &&
            destination_lamports<destination_rent_exempt_reserve ) ) {
     return FD_EXECUTOR_INSTR_ERR_INSUFFICIENT_FUNDS;
@@ -1569,7 +1569,7 @@ split( fd_exec_instr_ctx_t const * ctx,
     ulong minimum_delegation = get_minimum_delegation( ctx->slot_ctx );
     
     int   is_active;
-    if( FD_UNLIKELY( FD_FEATURE_ACTIVE( ctx->slot_ctx,
+    if( FD_UNLIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx,
                                          require_rent_exempt_split_destination ) ) ) {
       // https://github.com/anza-xyz/agave/blob/c8685ce0e1bb9b26014f1024de2cd2b8c308cbde/programs/stake/src/stake_state.rs#L434
       fd_sol_sysvar_clock_t const * clock = fd_sysvar_cache_clock( ctx->slot_ctx->sysvar_cache );
@@ -3044,7 +3044,7 @@ fd_stake_program_execute( fd_exec_instr_ctx_t * ctx ) {
    */
   case fd_stake_instruction_enum_move_stake: {
     // https://github.com/anza-xyz/agave/blob/cdff19c7807b006dd63429114fb1d9573bf74172/programs/stake/src/stake_instruction.rs#L359
-    if( FD_LIKELY( FD_FEATURE_ACTIVE( ctx->slot_ctx, move_stake_and_move_lamports_ixs ) ) ) {
+    if( FD_LIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, move_stake_and_move_lamports_ixs ) ) ) {
       // https://github.com/anza-xyz/agave/blob/cdff19c7807b006dd63429114fb1d9573bf74172/programs/stake/src/stake_instruction.rs#L361
       if( FD_UNLIKELY( ctx->instr->acct_cnt<3 ) )
         return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;
@@ -3073,7 +3073,7 @@ fd_stake_program_execute( fd_exec_instr_ctx_t * ctx ) {
    */
   case fd_stake_instruction_enum_move_lamports: {
     // https://github.com/anza-xyz/agave/blob/cdff19c7807b006dd63429114fb1d9573bf74172/programs/stake/src/stake_instruction.rs#L378
-    if( FD_LIKELY( FD_FEATURE_ACTIVE( ctx->slot_ctx, move_stake_and_move_lamports_ixs ) ) ) {
+    if( FD_LIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, move_stake_and_move_lamports_ixs ) ) ) {
       // https://github.com/anza-xyz/agave/blob/cdff19c7807b006dd63429114fb1d9573bf74172/programs/stake/src/stake_instruction.rs#L380
       if( FD_UNLIKELY( ctx->instr->acct_cnt<3 ) )
         return FD_EXECUTOR_INSTR_ERR_NOT_ENOUGH_ACC_KEYS;

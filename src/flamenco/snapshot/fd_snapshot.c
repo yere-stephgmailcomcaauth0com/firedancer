@@ -153,7 +153,7 @@ fd_snapshot_load( const char *         snapshotfile,
 
   fd_funk_txn_t * par_txn = slot_ctx->funk_txn;
   fd_funk_txn_t * child_txn = slot_ctx->funk_txn;
-  if( verify_hash && FD_FEATURE_ACTIVE(slot_ctx, incremental_snapshot_only_incremental_hash_calculation) ) {
+  if( verify_hash && FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, incremental_snapshot_only_incremental_hash_calculation) ) {
     fd_funk_txn_xid_t xid;
     memset( &xid, 0xc3, sizeof( xid ) );
     child_txn = fd_funk_txn_prepare( slot_ctx->acc_mgr->funk, child_txn, &xid, 0 );
@@ -189,7 +189,7 @@ fd_snapshot_load( const char *         snapshotfile,
     } else if (snapshot_type == FD_SNAPSHOT_TYPE_INCREMENTAL) {
       fd_hash_t accounts_hash;
 
-      if (FD_FEATURE_ACTIVE(slot_ctx, incremental_snapshot_only_incremental_hash_calculation)) {
+      if (FD_SLOT_CTX_FEATURE_ACTIVE(slot_ctx, incremental_snapshot_only_incremental_hash_calculation)) {
         FD_LOG_NOTICE(( "hashing incremental snapshot with only deltas" ));
         fd_accounts_hash_inc_only(slot_ctx, &accounts_hash, child_txn, check_hash);
       } else {

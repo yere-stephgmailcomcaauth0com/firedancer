@@ -100,7 +100,7 @@ fd_sysvar_fees_new_derived(
 
 void
 fd_sysvar_fees_update( fd_exec_slot_ctx_t * slot_ctx ) {
-  if ( FD_FEATURE_ACTIVE( slot_ctx, disable_fees_sysvar ))
+  if ( FD_SLOT_CTX_FEATURE_ACTIVE( slot_ctx, disable_fees_sysvar ))
     return;
   fd_sysvar_fees_t fees;
   fd_sysvar_fees_read( &fees, slot_ctx );

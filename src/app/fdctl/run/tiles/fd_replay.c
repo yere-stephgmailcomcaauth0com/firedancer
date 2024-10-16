@@ -543,7 +543,7 @@ funk_publish( fd_replay_tile_ctx_t * ctx, ulong smr ) {
     fd_txncache_register_root_slot( ctx->slot_ctx->status_cache, smr );
   }
 
-  if( FD_LIKELY( FD_FEATURE_ACTIVE( ctx->slot_ctx, epoch_accounts_hash ) ) ) {
+  if( FD_LIKELY( FD_SLOT_CTX_FEATURE_ACTIVE( ctx->slot_ctx, epoch_accounts_hash ) ) ) {
     fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( ctx->slot_ctx->epoch_ctx );
     if( smr >= epoch_bank->eah_start_slot ) {
       fd_accounts_hash( ctx->slot_ctx, ctx->tpool, &ctx->slot_ctx->slot_bank.epoch_account_hash, 0 );
@@ -1529,7 +1529,7 @@ unprivileged_init( fd_topo_t *      topo,
 
   void * alloc_shalloc = fd_alloc_new( alloc_shmem, 3UL );
   if( FD_UNLIKELY( !alloc_shalloc ) ) {
-    FD_LOG_ERR( ( "fd_allow_new failed" ) ); }
+    FD_LOG_ERR( ( "fd_alloc_new failed" ) ); }
   ctx->alloc = fd_alloc_join( alloc_shalloc, 3UL );
   if( FD_UNLIKELY( !ctx->alloc ) ) {
     FD_LOG_ERR( ( "fd_alloc_join failed" ) );
