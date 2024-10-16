@@ -266,6 +266,9 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
   fd_memcpy( &epoch_bank->epoch_schedule, &oldbank->epoch_schedule, FD_EPOCH_SCHEDULE_FOOTPRINT );
   epoch_bank->rent = oldbank->rent_collector.rent;
   fd_memcpy( &epoch_bank->rent, &oldbank->rent_collector.rent, FD_RENT_FOOTPRINT );
+  FD_LOG_WARNING(("ASDF %lu", oldbank->rent_collector.epoch_schedule.slots_per_epoch));
+  epoch_bank->rent_slots_per_epoch = oldbank->rent_collector.epoch_schedule.slots_per_epoch;
+  FD_LOG_WARNING(("ASDF %lu", epoch_bank->rent_slots_per_epoch));
 
   if( manifest->epoch_account_hash )
     slot_bank->epoch_account_hash = *manifest->epoch_account_hash;
@@ -428,6 +431,7 @@ fd_exec_slot_ctx_recover( fd_exec_slot_ctx_t *   slot_ctx,
   fd_solana_manifest_destroy( manifest, &destroy );
   fd_memset( manifest, 0, sizeof(fd_solana_manifest_t) );
 
+  FD_LOG_WARNING(("SLOTS PER EPOCH %lu", slot_ctx->epoch_ctx->epoch_bank.rent_slots_per_epoch));;
   return res;
 }
 

@@ -3212,8 +3212,11 @@ fd_runtime_get_rent_due( fd_exec_slot_ctx_t * slot_ctx, fd_account_meta_t * acc,
     slots_elapsed += fd_ulong_sat_sub( epoch+1UL, schedule->first_normal_epoch ) * schedule->slots_per_epoch;
   }
   else {
-    slots_elapsed = (epoch - info->rent_epoch + 1UL) * schedule->slots_per_epoch;
+    FD_LOG_WARNING(("RENT_SLOTS PER EPOCH %lu", epoch_bank->rent_slots_per_epoch));
+    slots_elapsed = (epoch - info->rent_epoch + 1UL) * epoch_bank->rent_slots_per_epoch;
   }
+  FD_LOG_WARNING(("acc lamports %lu slot elapsed %lu years elpased %f", acc->info.lamports, slots_elapsed, (double)slots_elapsed/slots_per_year));
+
   /* Consensus-critical use of doubles :( */
 
   double years_elapsed;
@@ -3238,6 +3241,8 @@ fd_runtime_collect_from_existing_account( fd_exec_slot_ctx_t * slot_ctx,
   #define NO_RENT_COLLECTION_NOW (-1)
   #define EXEMPT                 (-2)
   #define COLLECT_RENT           (-3)
+
+  FD_LOG_WARNING(("COLLECTING FROM EXISITING %s", FD_BASE58_ENC_32_ALLOCA(pubkey)));
 
   /* An account must be hashed regardless of if rent is collected from it. */
   acc->slot = slot_ctx->slot_bank.slot;
@@ -3278,6 +3283,8 @@ fd_runtime_collect_from_existing_account( fd_exec_slot_ctx_t * slot_ctx,
     case NO_RENT_COLLECTION_NOW:
       break;
     case COLLECT_RENT:
+      FD_LOG_WARNING(("COLLECTING RENT FROM ACC %s %lu", FD_BASE58_ENC_32_ALLOCA(pubkey), rent_due ));
+
       if( FD_UNLIKELY( (ulong)rent_due>=acc->info.lamports ) ) {
         /* Reclaim account */
         slot_ctx->slot_bank.collected_rent += (ulong)acc->info.lamports;
@@ -3309,7 +3316,9 @@ fd_runtime_collect_rent_from_account( fd_exec_slot_ctx_t *  slot_ctx,
                                       fd_account_meta_t  *  acc,
                                       fd_pubkey_t const  *  key,
                                       ulong                 epoch ) {
+                    
   if( !FD_FEATURE_ACTIVE( slot_ctx, disable_rent_fees_collection ) ) {
+    FD_LOG_WARNING(("COLLECTING RENT %s", FD_BASE58_ENC_32_ALLOCA(key)));
     fd_runtime_collect_from_existing_account( slot_ctx, acc, key, epoch );
   } else {
     if( FD_UNLIKELY( acc->info.rent_epoch!=FD_RENT_EXEMPT_RENT_EPOCH &&

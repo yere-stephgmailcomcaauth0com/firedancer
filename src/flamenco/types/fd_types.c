@@ -13495,6 +13495,7 @@ int fd_epoch_bank_decode( fd_epoch_bank_t * self, fd_bincode_decode_ctx_t * ctx 
   void const * data = ctx->data;
   int err = fd_epoch_bank_decode_preflight( ctx );
   if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) return err;
+  FD_LOG_WARNING(("DO WE MAKE IT HERE?"));
   ctx->data = data;
   if( !fd_is_null_alloc_virtual( ctx->valloc ) ) {
     fd_epoch_bank_new( self );
@@ -13538,6 +13539,8 @@ int fd_epoch_bank_decode_preflight( fd_bincode_decode_ctx_t * ctx ) {
     err = fd_bincode_uint32_decode_preflight( ctx );
     if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) return err;
   }
+  err = fd_bincode_uint64_decode_preflight( ctx );
+  if( FD_UNLIKELY( err ) ) return err;
   err = fd_vote_accounts_decode_preflight( ctx );
   if( FD_UNLIKELY( err ) ) return err;
   return FD_BINCODE_SUCCESS;
@@ -13561,6 +13564,7 @@ void fd_epoch_bank_decode_unsafe( fd_epoch_bank_t * self, fd_bincode_decode_ctx_
   for( ulong i=0; i<3; i++ ) {
     fd_bincode_uint32_decode_unsafe( self->cluster_version + i, ctx );
   }
+  fd_bincode_uint64_decode_unsafe( &self->rent_slots_per_epoch, ctx );
   fd_vote_accounts_decode_unsafe( &self->next_epoch_stakes, ctx );
 }
 int fd_epoch_bank_encode( fd_epoch_bank_t const * self, fd_bincode_encode_ctx_t * ctx ) {
@@ -13601,6 +13605,8 @@ int fd_epoch_bank_encode( fd_epoch_bank_t const * self, fd_bincode_encode_ctx_t 
   }
   err = fd_vote_accounts_encode( &self->next_epoch_stakes, ctx );
   if( FD_UNLIKELY( err ) ) return err;
+  err = fd_bincode_uint64_encode( self->rent_slots_per_epoch, ctx );
+  if( FD_UNLIKELY( err ) ) return err;
   return FD_BINCODE_SUCCESS;
 }
 enum {
@@ -13621,6 +13627,7 @@ enum {
   fd_epoch_bank_cluster_type_TAG = (14 << 6) | FD_ARCHIVE_META_UINT,
   fd_epoch_bank_cluster_version_TAG = (15 << 6) | FD_ARCHIVE_META_ARRAY,
   fd_epoch_bank_next_epoch_stakes_TAG = (16 << 6) | FD_ARCHIVE_META_STRUCT,
+  fd_epoch_bank_rent_slots_per_epoch_TAG = (17 << 6) | FD_ARCHIVE_META_ULONG,
 };
 int fd_epoch_bank_decode_archival( fd_epoch_bank_t * self, fd_bincode_decode_ctx_t * ctx ) {
   void const * data = ctx->data;
@@ -13847,6 +13854,10 @@ void fd_epoch_bank_decode_archival_unsafe( fd_epoch_bank_t * self, fd_bincode_de
   case (ushort)fd_epoch_bank_next_epoch_stakes_TAG: {
   fd_archive_decode_setup_length( ctx, &offset );
   fd_vote_accounts_decode_archival_unsafe( &self->next_epoch_stakes, ctx );
+  break;
+  }
+  case (ushort)fd_epoch_bank_rent_slots_per_epoch_TAG: {
+  fd_bincode_uint64_decode_unsafe( &self->rent_slots_per_epoch, ctx );
   break;
   }
   default:

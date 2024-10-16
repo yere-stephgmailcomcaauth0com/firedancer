@@ -454,6 +454,7 @@ struct __attribute__((packed)) fd_account_meta {
   ulong dlen;
   uchar hash[32];
   ulong slot;
+  uchar buf[4];
   fd_solana_account_meta_t info;
 };
 typedef struct fd_account_meta fd_account_meta_t;
@@ -2407,6 +2408,7 @@ struct __attribute__((aligned(16UL))) fd_epoch_bank {
   uint cluster_type;
   uint cluster_version[3];
   fd_vote_accounts_t next_epoch_stakes;
+  ulong rent_slots_per_epoch;
 };
 typedef struct fd_epoch_bank fd_epoch_bank_t;
 #define FD_EPOCH_BANK_FOOTPRINT sizeof(fd_epoch_bank_t)

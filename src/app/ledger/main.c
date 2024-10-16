@@ -136,6 +136,7 @@ init_tpool( fd_ledger_args_t * ledger_args ) {
 
 int
 runtime_replay( fd_ledger_args_t * ledger_args ) {
+
   fd_features_restore( ledger_args->slot_ctx );
 
   fd_runtime_update_leaders( ledger_args->slot_ctx, ledger_args->slot_ctx->slot_bank.slot );
@@ -1008,7 +1009,11 @@ replay( fd_ledger_args_t * args ) {
     FD_LOG_NOTICE(( "found funk with %lu records", rec_cnt ));
   }
 
+  FD_LOG_WARNING(("ASDF ASDF ASDF SLOTS PER EPOCH %lu", args->slot_ctx->epoch_ctx->epoch_bank.rent_slots_per_epoch));;
+
   fd_ledger_main_setup( args );
+
+  FD_LOG_WARNING(("ASDF ASDF ASDF SLOTS PER EPOCH 2 %lu", args->slot_ctx->epoch_ctx->epoch_bank.rent_slots_per_epoch));;
 
   if( !args->on_demand_block_ingest ) {
     ingest_rocksdb( args->alloc, args->rocksdb_list[ 0UL ], args->start_slot, args->end_slot, args->blockstore, 0, args->trash_hash );
