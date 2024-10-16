@@ -49,7 +49,10 @@ write_clock( fd_exec_slot_ctx_t *    slot_ctx,
 
 fd_sol_sysvar_clock_t *
 fd_sysvar_clock_read( fd_sol_sysvar_clock_t * result,
-                      fd_exec_slot_ctx_t *    slot_ctx  ) {
+                      fd_exec_slot_ctx_t *    slot_ctx ) {
+
+  FD_LOG_WARNING(("SYSVAR CLOCK READ"));
+
   fd_sol_sysvar_clock_t const * ret = fd_sysvar_cache_clock( slot_ctx->sysvar_cache );
   if( NULL != ret ) {
     fd_memcpy(result, ret, sizeof(fd_sol_sysvar_clock_t));
@@ -73,6 +76,7 @@ fd_sysvar_clock_read( fd_sol_sysvar_clock_t * result,
 
 void
 fd_sysvar_clock_init( fd_exec_slot_ctx_t * slot_ctx ) {
+  FD_LOG_WARNING(("SYSVAR CLOCK INIT"));
   long timestamp = timestamp_from_genesis( slot_ctx );
 
   fd_sol_sysvar_clock_t clock = {
@@ -176,15 +180,15 @@ FD_FN_CONST static inline int valcmp (VAL_T a, VAL_T b) {
 
 /* https://github.com/solana-labs/solana/blob/c091fd3da8014c0ef83b626318018f238f506435/runtime/src/bank.rs#L3600 */
 static void
-fd_calculate_stake_weighted_timestamp(
-  fd_exec_slot_ctx_t * slot_ctx,
-  long * result_timestamp,
-  uint fix_estimate_into_u64
- ) {
+fd_calculate_stake_weighted_timestamp( fd_exec_slot_ctx_t * slot_ctx, 
+                                        long *              result_timestamp, 
+                                        uint                fix_estimate_into_u64 ) {
+
+  (void)fix_estimate_into_u64;
   FD_SCRATCH_SCOPE_BEGIN {
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
   ulong slot_duration = (ulong)( epoch_bank->ns_per_slot );
-  fd_sol_sysvar_clock_t clock;
+  fd_sol_sysvar_clock_t clock = {0};
   fd_sysvar_clock_read( &clock, slot_ctx );
   // get the unique timestamps
   /* stake per timestamp */
@@ -273,13 +277,13 @@ fd_calculate_stake_weighted_timestamp(
     }
   }
 
-  FD_LOG_DEBUG(( "stake weighted timestamp: %lu total stake %lu", *result_timestamp, total_stake ));
+  FD_LOG_WARNING(( "stake weighted timestamp: %lu total stake %lu", *result_timestamp, total_stake ));
 
   // Bound estimate by `max_allowable_drift` since the start of the epoch
   fd_epoch_schedule_t schedule;
   fd_sysvar_epoch_schedule_read( &schedule, slot_ctx );
   ulong epoch_start_slot = fd_epoch_slot0( &schedule, clock.epoch );
-  FD_LOG_DEBUG(("Epoch start slot %lu", epoch_start_slot));
+  FD_LOG_WARNING(("Epoch start slot %lu", epoch_start_slot));
   ulong poh_estimate_offset = fd_ulong_sat_mul(slot_duration, fd_ulong_sat_sub(slot_ctx->slot_bank.slot, epoch_start_slot));
   ulong estimate_offset = fd_ulong_sat_mul(NS_IN_S, (fix_estimate_into_u64) ? fd_ulong_sat_sub((ulong)*result_timestamp, (ulong)clock.epoch_start_timestamp) : (ulong)(*result_timestamp - clock.epoch_start_timestamp));
   ulong max_delta_fast = fd_ulong_sat_mul(poh_estimate_offset, MAX_ALLOWABLE_DRIFT_FAST) / 100;
@@ -323,9 +327,13 @@ fd_sysvar_clock_update( fd_exec_slot_ctx_t * slot_ctx ) {
 
   long ancestor_timestamp = clock.unix_timestamp;
 
+  FD_LOG_WARNING(( "CLOCK 0 TIMESTAMP %lu", clock.unix_timestamp ));
+
   if (slot_ctx->slot_bank.slot != 0) {
     fd_calculate_stake_weighted_timestamp(slot_ctx, &clock.unix_timestamp, FD_FEATURE_ACTIVE( slot_ctx, warp_timestamp_again ) );
   }
+
+  FD_LOG_WARNING(( "CLOCK TIMESTAMP %lu", clock.unix_timestamp ));
 
   if (0 == clock.unix_timestamp) {
     /* generate timestamp for genesis */
@@ -348,6 +356,8 @@ fd_sysvar_clock_update( fd_exec_slot_ctx_t * slot_ctx ) {
     }
     clock.unix_timestamp = bounded_timestamp_estimate;
   }
+
+  FD_LOG_WARNING(( "CLOCK TIMESTAMP %lu", clock.unix_timestamp ));
 
   clock.slot  = slot_ctx->slot_bank.slot;
 

@@ -28,6 +28,7 @@
 #include "../../flamenco/shredcap/fd_shredcap.h"
 #include "../../flamenco/runtime/program/fd_bpf_program_util.h"
 #include "../../flamenco/snapshot/fd_snapshot.h"
+#include "../../flamenco/runtime/sysvar/fd_sysvar_epoch_schedule.h"
 
 extern void fd_write_builtin_bogus_account( fd_exec_slot_ctx_t * slot_ctx, uchar const pubkey[ static 32 ], char const * data, ulong sz );
 
@@ -140,7 +141,10 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
   fd_runtime_update_leaders( ledger_args->slot_ctx, ledger_args->slot_ctx->slot_bank.slot );
 
+  FD_LOG_WARNING(("EPOCH 1234 %lu", ledger_args->slot_ctx->epoch_ctx->epoch_bank.epoch_schedule.slots_per_epoch));;
+
   fd_calculate_epoch_accounts_hash_values( ledger_args->slot_ctx );
+
 
   long              replay_time = -fd_log_wallclock();
   ulong             txn_cnt     = 0;
@@ -413,16 +417,30 @@ fd_ledger_main_setup( fd_ledger_args_t * args ) {
     }
   }
 
+
+  fd_epoch_schedule_t schedule = {0};
+  fd_sysvar_epoch_schedule_read(&schedule,args->slot_ctx);
+  FD_LOG_WARNING(("EPOCH SCHEDULE %lu", schedule.slots_per_epoch));  
+
   fd_runtime_recover_banks( args->slot_ctx, 0, args->genesis==NULL );
+
+  fd_sysvar_epoch_schedule_read(&schedule,args->slot_ctx);
+  FD_LOG_WARNING(("EPOCH SCHEDULE %lu", schedule.slots_per_epoch));  
 
   /* Finish other runtime setup steps */
   fd_funk_start_write( funk );
   fd_features_restore( args->slot_ctx );
   fd_runtime_update_leaders( args->slot_ctx, args->slot_ctx->slot_bank.slot );
+
+  fd_sysvar_epoch_schedule_read(&schedule,args->slot_ctx);
+  FD_LOG_WARNING(("EPOCH SCHEDULE %lu", schedule.slots_per_epoch));  
+
   fd_calculate_epoch_accounts_hash_values( args->slot_ctx );
   fd_bpf_scan_and_create_bpf_program_cache_entry( args->slot_ctx, args->slot_ctx->funk_txn, 1 );
   fd_funk_end_write( funk );
 
+  fd_sysvar_epoch_schedule_read(&schedule,args->slot_ctx);
+  FD_LOG_WARNING(("EPOCH SCHEDULE 4 %lu", schedule.slots_per_epoch));  
 }
 
 void

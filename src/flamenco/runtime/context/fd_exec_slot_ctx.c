@@ -266,6 +266,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
   fd_memcpy( &epoch_bank->epoch_schedule, &oldbank->epoch_schedule, FD_EPOCH_SCHEDULE_FOOTPRINT );
   epoch_bank->rent = oldbank->rent_collector.rent;
   fd_memcpy( &epoch_bank->rent, &oldbank->rent_collector.rent, FD_RENT_FOOTPRINT );
+  epoch_bank->rent_slots_per_epoch = oldbank->rent_collector.epoch_schedule.slots_per_epoch;
 
   if( manifest->epoch_account_hash )
     slot_bank->epoch_account_hash = *manifest->epoch_account_hash;
@@ -413,7 +414,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
   //}
   //
   //return fd_runtime_save_slot_bank(slot_ctx);
-
+  FD_LOG_WARNING(("MAKE IT HERE"));
   return slot_ctx;
 }
 

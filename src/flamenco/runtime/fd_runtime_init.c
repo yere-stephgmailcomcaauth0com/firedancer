@@ -185,8 +185,9 @@ fd_runtime_recover_banks( fd_exec_slot_ctx_t * slot_ctx, int delete_first, int c
     } else {
       FD_LOG_ERR(("failed to read banks record: invalid magic number"));
     }
-
+    FD_LOG_WARNING(("ASDF ASDF %lu", epoch_bank->rent_slots_per_epoch));
     FD_LOG_NOTICE(( "recovered epoch_bank" ));
+
   }
 
   {

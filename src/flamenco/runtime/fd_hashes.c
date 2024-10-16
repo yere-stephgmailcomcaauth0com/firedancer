@@ -160,12 +160,18 @@ fd_calculate_epoch_accounts_hash_values(fd_exec_slot_ctx_t * slot_ctx) {
   if( !FD_FEATURE_ACTIVE( slot_ctx, epoch_accounts_hash ) )
     return;
 
+  fd_epoch_schedule_t schedule = {0};
+  fd_sysvar_epoch_schedule_read(&schedule,slot_ctx);
+  FD_LOG_WARNING(("EPOCH 123 %lu", schedule.slots_per_epoch));  
+
   ulong slot_idx = 0;
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
   ulong epoch = fd_slot_to_epoch( &epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot, &slot_idx );
 
   ulong slots_per_epoch = fd_epoch_slot_cnt( &epoch_bank->epoch_schedule, epoch );
   ulong first_slot_in_epoch           = fd_epoch_slot0   ( &epoch_bank->epoch_schedule, epoch );
+
+  FD_LOG_WARNING(("EPOCH 1234 %lu", slot_ctx->epoch_ctx->epoch_bank.epoch_schedule.slots_per_epoch));;
 
   ulong calculation_offset_start = slots_per_epoch / 4;
   ulong calculation_offset_stop = slots_per_epoch / 4 * 3;

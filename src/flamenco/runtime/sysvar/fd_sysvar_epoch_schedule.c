@@ -98,6 +98,8 @@ fd_epoch_slot0( fd_epoch_schedule_t const * schedule,
     return fd_ulong_sat_mul( power-1UL, FD_EPOCH_LEN_MIN );
   }
 
+  FD_LOG_WARNING(("SLOTS PER EPOCH %lu", schedule->slots_per_epoch));
+
   return fd_ulong_sat_add(
           fd_ulong_sat_mul( 
             fd_ulong_sat_sub(

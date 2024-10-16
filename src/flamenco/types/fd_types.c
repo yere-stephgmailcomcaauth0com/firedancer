@@ -13540,6 +13540,8 @@ int fd_epoch_bank_decode_preflight( fd_bincode_decode_ctx_t * ctx ) {
   }
   err = fd_vote_accounts_decode_preflight( ctx );
   if( FD_UNLIKELY( err ) ) return err;
+  err = fd_bincode_uint64_decode_preflight( ctx );
+  if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) return err;
   return FD_BINCODE_SUCCESS;
 }
 void fd_epoch_bank_decode_unsafe( fd_epoch_bank_t * self, fd_bincode_decode_ctx_t * ctx ) {
@@ -13562,6 +13564,7 @@ void fd_epoch_bank_decode_unsafe( fd_epoch_bank_t * self, fd_bincode_decode_ctx_
     fd_bincode_uint32_decode_unsafe( self->cluster_version + i, ctx );
   }
   fd_vote_accounts_decode_unsafe( &self->next_epoch_stakes, ctx );
+  fd_bincode_uint64_decode_unsafe( &self->rent_slots_per_epoch, ctx );
 }
 int fd_epoch_bank_encode( fd_epoch_bank_t const * self, fd_bincode_encode_ctx_t * ctx ) {
   int err;
@@ -13601,6 +13604,8 @@ int fd_epoch_bank_encode( fd_epoch_bank_t const * self, fd_bincode_encode_ctx_t 
   }
   err = fd_vote_accounts_encode( &self->next_epoch_stakes, ctx );
   if( FD_UNLIKELY( err ) ) return err;
+  err = fd_bincode_uint64_encode( self->rent_slots_per_epoch, ctx );
+  if( FD_UNLIKELY( err ) ) return err;
   return FD_BINCODE_SUCCESS;
 }
 enum {
@@ -13621,6 +13626,7 @@ enum {
   fd_epoch_bank_cluster_type_TAG = (14 << 6) | FD_ARCHIVE_META_UINT,
   fd_epoch_bank_cluster_version_TAG = (15 << 6) | FD_ARCHIVE_META_ARRAY,
   fd_epoch_bank_next_epoch_stakes_TAG = (16 << 6) | FD_ARCHIVE_META_STRUCT,
+  fd_epoch_bank_rent_slots_per_epoch_TAG = (17 << 6) | FD_ARCHIVE_META_ULONG,
 };
 int fd_epoch_bank_decode_archival( fd_epoch_bank_t * self, fd_bincode_decode_ctx_t * ctx ) {
   void const * data = ctx->data;
@@ -13757,6 +13763,11 @@ int fd_epoch_bank_decode_archival_preflight( fd_bincode_decode_ctx_t * ctx ) {
   if( FD_UNLIKELY( err ) ) return err;
   break;
   }
+  case (ushort)fd_epoch_bank_rent_slots_per_epoch_TAG: {
+  err = fd_bincode_uint64_decode_preflight( ctx );
+  if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) return err;
+  break;
+  }
   default:
     err = fd_archive_decode_skip_field( ctx, tag );
     if( FD_UNLIKELY( err ) ) return err;
@@ -13847,6 +13858,10 @@ void fd_epoch_bank_decode_archival_unsafe( fd_epoch_bank_t * self, fd_bincode_de
   case (ushort)fd_epoch_bank_next_epoch_stakes_TAG: {
   fd_archive_decode_setup_length( ctx, &offset );
   fd_vote_accounts_decode_archival_unsafe( &self->next_epoch_stakes, ctx );
+  break;
+  }
+  case (ushort)fd_epoch_bank_rent_slots_per_epoch_TAG: {
+  fd_bincode_uint64_decode_unsafe( &self->rent_slots_per_epoch, ctx );
   break;
   }
   default:
@@ -13956,6 +13971,10 @@ int fd_epoch_bank_encode_archival( fd_epoch_bank_t const * self, fd_bincode_enco
   if( FD_UNLIKELY( err ) ) return err;
   err = fd_archive_encode_set_length( ctx, offset );
   if( FD_UNLIKELY( err ) ) return err;
+  err = fd_bincode_uint16_encode( (ushort)fd_epoch_bank_rent_slots_per_epoch_TAG, ctx );
+  if( FD_UNLIKELY( err ) ) return err;
+  err = fd_bincode_uint64_encode( self->rent_slots_per_epoch, ctx );
+  if( FD_UNLIKELY( err ) ) return err;
   err = fd_bincode_uint16_encode( FD_ARCHIVE_META_SENTINAL, ctx );
   if( FD_UNLIKELY( err ) ) return err;
   return FD_BINCODE_SUCCESS;
@@ -14016,6 +14035,9 @@ int fd_epoch_bank_decode_offsets( fd_epoch_bank_off_t * self, fd_bincode_decode_
   self->next_epoch_stakes_off = (uint)( (ulong)ctx->data - (ulong)data );
   err = fd_vote_accounts_decode_preflight( ctx );
   if( FD_UNLIKELY( err ) ) return err;
+  self->rent_slots_per_epoch_off = (uint)( (ulong)ctx->data - (ulong)data );
+  err = fd_bincode_uint64_decode_preflight( ctx );
+  if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) return err;
   return FD_BINCODE_SUCCESS;
 }
 void fd_epoch_bank_new(fd_epoch_bank_t * self) {
@@ -14061,6 +14083,7 @@ void fd_epoch_bank_walk( void * w, fd_epoch_bank_t const * self, fd_types_walk_f
     fun( w, self->cluster_version + i, "cluster_version", FD_FLAMENCO_TYPE_UINT,    "uint",    level );
   fun( w, NULL, "cluster_version", FD_FLAMENCO_TYPE_ARR_END, "uint[]", level-- );
   fd_vote_accounts_walk( w, &self->next_epoch_stakes, fun, "next_epoch_stakes", level );
+  fun( w, &self->rent_slots_per_epoch, "rent_slots_per_epoch", FD_FLAMENCO_TYPE_ULONG, "ulong", level );
   fun( w, self, name, FD_FLAMENCO_TYPE_MAP_END, "fd_epoch_bank", level-- );
 }
 ulong fd_epoch_bank_size( fd_epoch_bank_t const * self ) {
@@ -14082,6 +14105,7 @@ ulong fd_epoch_bank_size( fd_epoch_bank_t const * self ) {
   size += sizeof(uint);
   size += 3 * sizeof(uint);
   size += fd_vote_accounts_size( &self->next_epoch_stakes );
+  size += sizeof(ulong);
   return size;
 }
 

@@ -24,6 +24,7 @@
 #include "sysvar/fd_sysvar_slot_history.h"
 #include "sysvar/fd_sysvar_epoch_schedule.h"
 #include "sysvar/fd_sysvar_instructions.h"
+#include "sysvar/fd_sysvar_clock.h"
 
 #include "../../ballet/base58/fd_base58.h"
 #include "../../ballet/pack/fd_pack.h"
@@ -1113,6 +1114,11 @@ int
 fd_execute_instr( fd_exec_txn_ctx_t * txn_ctx,
                   fd_instr_info_t *   instr ) {
   FD_SCRATCH_SCOPE_BEGIN {
+
+    fd_sol_sysvar_clock_t clock;
+    fd_sysvar_clock_read( &clock, txn_ctx->slot_ctx );
+    FD_LOG_WARNING(("ASDF ASDF ASDF %lu", clock.unix_timestamp));
+
     fd_exec_instr_ctx_t * parent = NULL;
     if( txn_ctx->instr_stack_sz ) {
       parent = &txn_ctx->instr_stack[ txn_ctx->instr_stack_sz - 1 ];
@@ -1833,11 +1839,11 @@ fd_execute_txn( fd_exec_txn_ctx_t * txn_ctx ) {
       }
     }
 
-#ifdef VLOG
+//#ifdef VLOG
     fd_txn_t const *txn = txn_ctx->txn_descriptor;
     fd_rawtxn_b_t const *raw_txn = txn_ctx->_txn_raw;
     uchar * sig = (uchar *)raw_txn->raw + txn->signature_off;
-#endif
+//#endif
 
     bool dump_insn = txn_ctx->capture_ctx && txn_ctx->slot_ctx->slot_bank.slot >= txn_ctx->capture_ctx->dump_proto_start_slot && txn_ctx->capture_ctx->dump_insn_to_pb;
 
@@ -1845,9 +1851,9 @@ fd_execute_txn( fd_exec_txn_ctx_t * txn_ctx ) {
     fd_log_collector_init( &txn_ctx->log_collector, txn_ctx->slot_ctx->enable_exec_recording );
 
     for ( ushort i = 0; i < txn_ctx->txn_descriptor->instr_cnt; i++ ) {
-#ifdef VLOG
+//#ifdef VLOG
       FD_LOG_WARNING(( "Start of transaction for %d for %s", i, FD_BASE58_ENC_64_ALLOCA( sig ) ));
-#endif
+//#endif
 
       if ( FD_UNLIKELY( use_sysvar_instructions ) ) {
         ret = fd_sysvar_instructions_update_current_instr_idx( txn_ctx, i );

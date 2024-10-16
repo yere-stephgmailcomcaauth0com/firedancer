@@ -80,6 +80,9 @@ write_account( fd_exec_instr_ctx_t *     instr_ctx,
   uchar const * data = account ? account->const_data       : NULL;
   ulong         dlen = account ? account->const_meta->dlen : 0UL;
 
+  FD_LOG_WARNING(("pubkey %s", FD_BASE58_ENC_32_ALLOCA(account->pubkey)));
+  //FD_LOG_HEXDUMP_WARNING(("account data", data, dlen));
+
   if( copy_account_data ) {
     /* Copy the account data into input region buffer */
     fd_memcpy( *serialized_params, data, dlen );
@@ -213,6 +216,7 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t       ctx,
 
   /* Second pass over the account is to serialize into the buffer. */
   for( ushort i=0; i<ctx.instr->acct_cnt; i++ ) {
+    FD_LOG_WARNING(("START OF AN ACCOUNT 0x%lx", serialized_params - serialized_params_start));
     uchar         acc_idx = instr_acc_idxs[i];
     fd_pubkey_t * acc     = &txn_accs[acc_idx];
 
@@ -315,8 +319,9 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t       ctx,
       FD_STORE( ulong, serialized_params, rent_epoch );
       serialized_params += sizeof(ulong);
     }
-
   }
+
+  FD_LOG_WARNING(("END OF ACCS 0x%lx", serialized_params - serialized_params_start));
 
   ulong instr_data_len = ctx.instr->data_sz;
   FD_STORE( ulong, serialized_params, instr_data_len );
@@ -328,6 +333,8 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t       ctx,
 
   FD_STORE( fd_pubkey_t, serialized_params, txn_accs[ctx.instr->program_id] );
   serialized_params += sizeof(fd_pubkey_t);
+
+  FD_LOG_WARNING(("END OF BUFFER 0x%lx", serialized_params - serialized_params_start));
 
   if( FD_UNLIKELY( serialized_params!=serialized_params_start+serialized_size ) ) {
     FD_LOG_ERR(( "Serializing error" )); /* TODO: we can likely get rid of this check altogether */
@@ -416,6 +423,9 @@ fd_bpf_loader_input_deserialize_aligned( fd_exec_instr_ctx_t ctx,
         int err = 0;
         if( fd_account_can_data_be_resized( &ctx, view_acc->const_meta, post_len, &err ) && 
             fd_account_can_data_be_changed( ctx.instr, i, &err ) ) {
+
+          //FD_LOG_WARNING(("deserial pubkey %s", FD_BASE58_ENC_32_ALLOCA(view_acc->pubkey)));
+          //FD_LOG_HEXDUMP_WARNING(("account data", post_data, post_len));
 
           int err = fd_account_set_data_from_slice( &ctx, i, post_data, post_len );
           if( FD_UNLIKELY( err ) ) {

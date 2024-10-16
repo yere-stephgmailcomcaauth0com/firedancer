@@ -2244,6 +2244,11 @@ fd_runtime_block_execute_prepare( fd_exec_slot_ctx_t * slot_ctx ) {
     }
   }
 
+
+  fd_sol_sysvar_clock_t clock;
+  fd_sysvar_clock_read( &clock, slot_ctx );
+  FD_LOG_WARNING(("START OF BLOCK %lu", clock.unix_timestamp));
+
   slot_ctx->slot_bank.collected_execution_fees = 0;
   slot_ctx->slot_bank.collected_priority_fees = 0;
   slot_ctx->slot_bank.collected_rent = 0;
@@ -2263,6 +2268,9 @@ fd_runtime_block_execute_prepare( fd_exec_slot_ctx_t * slot_ctx ) {
     return result;
   }
 
+  fd_sysvar_clock_read( &clock, slot_ctx );
+  FD_LOG_WARNING(("START OF BLOCK 2 %lu", clock.unix_timestamp));
+
   fd_funk_start_write( slot_ctx->acc_mgr->funk );
   result = fd_runtime_block_sysvar_update_pre_execute( slot_ctx );
   fd_funk_end_write( slot_ctx->acc_mgr->funk );
@@ -2271,11 +2279,17 @@ fd_runtime_block_execute_prepare( fd_exec_slot_ctx_t * slot_ctx ) {
     return result;
   }
 
+  fd_sysvar_clock_read( &clock, slot_ctx );
+  FD_LOG_WARNING(("START OF BLOCK 3 %lu", clock.unix_timestamp));
+
   /* Load sysvars into cache */
   if( FD_UNLIKELY( result = fd_runtime_sysvar_cache_load( slot_ctx ) ) ) {
     /* non-zero error */
     return result;
   }
+
+  fd_sysvar_clock_read( &clock, slot_ctx );
+  FD_LOG_WARNING(("ASDF ASDF ASDF asdfasdfa %lu", clock.unix_timestamp));
 
   return FD_RUNTIME_EXECUTE_SUCCESS;
 }
@@ -2379,6 +2393,7 @@ fd_runtime_block_execute_finalize_tpool( fd_exec_slot_ctx_t * slot_ctx,
   }
   return FD_RUNTIME_EXECUTE_SUCCESS;
 }
+
 
 int fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
                                        fd_capture_ctx_t * capture_ctx,
@@ -2876,6 +2891,11 @@ fd_runtime_block_eval_tpool(fd_exec_slot_ctx_t *slot_ctx,
                                 ulong * txn_cnt ) {
   (void)scheduler;
 
+
+  fd_epoch_schedule_t schedule = {0};
+  fd_sysvar_epoch_schedule_read(&schedule,slot_ctx);
+  FD_LOG_WARNING(("EPOCH SCHEDULE %lu", schedule.slots_per_epoch));
+
   int err = fd_runtime_publish_old_txns( slot_ctx, capture_ctx, tpool );
   if( err != 0 ) {
     return err;
@@ -3201,7 +3221,7 @@ fd_runtime_get_rent_due( fd_exec_slot_ctx_t * slot_ctx, fd_account_meta_t * acc,
   }
 
   /* Count the number of slots that have passed since last collection. This
-     inlines the agave function get_slots_in_peohc
+     inlines the agave function get_slots_in_epoch
      https://github.com/anza-xyz/agave/blob/v2.0.10/sdk/src/rent_collector.rs#L93-L98 */
   ulong slots_elapsed = 0UL;
   if( FD_UNLIKELY( info->rent_epoch<schedule->first_normal_epoch ) ) {
@@ -3209,12 +3229,15 @@ fd_runtime_get_rent_due( fd_exec_slot_ctx_t * slot_ctx, fd_account_meta_t * acc,
     for( ulong i=info->rent_epoch; i<schedule->first_normal_epoch && i<=epoch; i++ ) {
       slots_elapsed += fd_epoch_slot_cnt( schedule, i+1UL );
     }
-    slots_elapsed += fd_ulong_sat_sub( epoch+1UL, schedule->first_normal_epoch ) * schedule->slots_per_epoch;
+    slots_elapsed += fd_ulong_sat_sub( epoch+1UL, schedule->first_normal_epoch ) * epoch_bank->rent_slots_per_epoch;
   }
   else {
-    slots_elapsed = (epoch - info->rent_epoch + 1UL) * schedule->slots_per_epoch;
+    FD_LOG_WARNING(("SLOTS PER EPOCH %lu", epoch_bank->rent_slots_per_epoch));
+    slots_elapsed = (epoch - info->rent_epoch + 1UL) * epoch_bank->rent_slots_per_epoch;
   }
   /* Consensus-critical use of doubles :( */
+
+  FD_LOG_WARNING(("RENT TO BE COLLECTED %lu %f", slots_elapsed, slots_per_year));
 
   double years_elapsed;
   if( FD_LIKELY( slots_per_year!=0.0 ) ) {
@@ -3224,6 +3247,7 @@ fd_runtime_get_rent_due( fd_exec_slot_ctx_t * slot_ctx, fd_account_meta_t * acc,
   }
 
   ulong lamports_per_year = rent->lamports_per_uint8_year * (acc->dlen + 128UL);
+  FD_LOG_NOTICE(("LAMPORTS PER YEAR %lu %lu", rent->lamports_per_uint8_year, lamports_per_year));
   /* https://github.com/anza-xyz/agave/blob/d2124a995f89e33c54f41da76bfd5b0bd5820898/sdk/src/rent_collector.rs#L108 */
   /* https://github.com/anza-xyz/agave/blob/d2124a995f89e33c54f41da76bfd5b0bd5820898/sdk/program/src/rent.rs#L95 */
   return (long)fd_rust_cast_double_to_ulong(years_elapsed * (double)lamports_per_year);
@@ -3261,7 +3285,9 @@ fd_runtime_collect_from_existing_account( fd_exec_slot_ctx_t * slot_ctx,
   }
 
   /* https://github.com/anza-xyz/agave/blob/v2.0.10/sdk/src/rent_collector.rs#L167-180 */
+  FD_LOG_WARNING(("ACCOUNT GET RENT %s", FD_BASE58_ENC_32_ALLOCA(pubkey) ));
   long rent_due = fd_runtime_get_rent_due( slot_ctx, acc, epoch );
+  FD_LOG_WARNING(("ACCOUNT GET RENT DUE %s %lu", FD_BASE58_ENC_32_ALLOCA(pubkey), rent_due ));
   if( rent_due==FD_RENT_EXEMPT ) {
     calculate_rent_result = EXEMPT;
   } else if( rent_due==0L ) {

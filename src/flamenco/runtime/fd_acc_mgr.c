@@ -77,6 +77,9 @@ fd_rent_lists_cb( fd_funk_rec_t * rec,
 void
 fd_acc_mgr_set_slots_per_epoch( fd_exec_slot_ctx_t * slot_ctx,
                                 ulong                slots_per_epoch ) {
+
+
+  FD_LOG_WARNING(("SLOTS PER EPOCH SET IN AC MGR %lu", slots_per_epoch));
   fd_acc_mgr_t * acc_mgr = slot_ctx->acc_mgr;
 
   /* Handle feature activation of 'skip_rent_rewrites' or change of

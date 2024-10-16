@@ -454,6 +454,8 @@ common_close_account( fd_pubkey_t * authority_address,
 int
 execute( fd_exec_instr_ctx_t * instr_ctx, fd_sbpf_validated_program_t * prog, uchar is_deprecated ) {
 
+  FD_LOG_WARNING(("EXECUTING"));
+
   fd_sbpf_syscalls_t * syscalls = fd_sbpf_syscalls_new( fd_valloc_malloc( instr_ctx->valloc,
                                                                           fd_sbpf_syscalls_align(),
                                                                           fd_sbpf_syscalls_footprint() ) );
@@ -522,7 +524,7 @@ execute( fd_exec_instr_ctx_t * instr_ctx, fd_sbpf_validated_program_t * prog, uc
   uchar * signature = (uchar*)vm->instr_ctx->txn_ctx->_txn_raw->raw + vm->instr_ctx->txn_ctx->txn_descriptor->signature_off;
   uchar sig[64];
   /* TODO (topointon): make this run-time configurable, no need for this ifdef */
-  fd_base58_decode_64( "tkacc4VCh2z9cLsQowCnKqX14DmUUxpRyES755FhUzrFxSFvo8kVk444kNTL7kJxYnnANYwRWAdHCgBJupftZrz", sig );
+  fd_base58_decode_64( "5nTAkEGy5iT4pvSaHJSGm34KpRkriXP9HW65ihmBVGQipBcbHzk8xUZ3NWJKeV4xQggCeM8ZaMr37MZn6CX8s3Bx", sig );
   if( FD_UNLIKELY( !memcmp( signature, sig, 64UL ) ) ) {
     ulong event_max = 1UL<<30;
     ulong event_data_max = 2048UL;
