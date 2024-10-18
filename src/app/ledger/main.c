@@ -28,6 +28,7 @@
 #include "../../flamenco/shredcap/fd_shredcap.h"
 #include "../../flamenco/runtime/program/fd_bpf_program_util.h"
 #include "../../flamenco/snapshot/fd_snapshot.h"
+#include "../../flamenco/snapshot/fd_snapshot_create.h"
 
 extern void fd_write_builtin_bogus_account( fd_exec_slot_ctx_t * slot_ctx, uchar const pubkey[ static 32 ], char const * data, ulong sz );
 
@@ -215,6 +216,10 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     uchar * val = fd_blockstore_block_data_laddr( blockstore, blk );
     ulong   sz  = blk->data_sz;
     fd_blockstore_end_read( blockstore );
+
+    /* TODO:FIXME: This is where we want to do all of the snapshot related testing */
+    fd_snapshot_create_manifest( ledger_args->slot_ctx );
+
 
     ulong blk_txn_cnt = 0;
     FD_TEST( fd_runtime_block_eval_tpool( ledger_args->slot_ctx,
@@ -855,6 +860,7 @@ ingest( fd_ledger_args_t * args ) {
 
   init_tpool( args );
 
+
   /* Load in snapshot(s) */
   if( args->snapshot ) {
     fd_snapshot_load( args->snapshot, slot_ctx, args->tpool, args->verify_acc_hash, args->check_acc_hash , FD_SNAPSHOT_TYPE_FULL );
@@ -996,6 +1002,9 @@ replay( fd_ledger_args_t * args ) {
 
   /* Check number of records in funk. If rec_cnt == 0, then it can be assumed
      that you need to load in snapshot(s). */
+
+  FD_LOG_ERR(("VALUE WE CARE ABOUT %lu", FD_VOTE_STATE_VERSIONED_FOOTPRINT));
+
   ulong rec_cnt = fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) );
   if( !rec_cnt ) {
     /* Load in snapshot(s) */

@@ -118,17 +118,27 @@ recover_clock( fd_exec_slot_ctx_t * slot_ctx ) {
   for( fd_vote_accounts_pair_t_mapnode_t * n = fd_vote_accounts_pair_t_map_minimum(vote_accounts_pool, vote_accounts_root);
        n;
        n = fd_vote_accounts_pair_t_map_successor( vote_accounts_pool, n ) ) {
-    /* Extract vote timestamp of account */
+
+    fd_bincode_decode_ctx_t decode = {
+      .data    = n->elem.value.data,
+      .dataend = n->elem.value.data + n->elem.value.data_len,
+      .valloc  = slot_ctx->valloc
+    };
+    fd_vote_state_versioned_t vote_state = {0};
+    fd_vote_state_versioned_decode( &vote_state, &decode );
 
     fd_vote_block_timestamp_t vote_state_timestamp = {
-      .timestamp = n->elem.value.last_timestamp_ts,
-      .slot      = n->elem.value.last_timestamp_slot
+      .timestamp = vote_state.inner.current.last_timestamp.timestamp,
+      .slot      = vote_state.inner.current.last_timestamp.slot
     };
 
     /* Record timestamp */
     if( vote_state_timestamp.slot != 0 || n->elem.stake != 0 ) {
-      fd_vote_record_timestamp_vote_with_slot(slot_ctx, &n->elem.key, vote_state_timestamp.timestamp, vote_state_timestamp.slot);
+      fd_vote_record_timestamp_vote_with_slot( slot_ctx, &n->elem.key, vote_state_timestamp.timestamp, vote_state_timestamp.slot );
     }
+
+    fd_bincode_destroy_ctx_t destroy = { .valloc = slot_ctx->valloc };
+    fd_vote_state_versioned_destroy( &vote_state, &destroy );
   }
 
   return 1;
@@ -239,7 +249,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
     );
   }
 
-  fd_stakes_destroy( &oldbank->stakes, &destroy );
+  //fd_stakes_destroy( &oldbank->stakes, &destroy );
 
   /* Index vote accounts */
 
@@ -378,7 +388,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
           elem );
     }
 
-    fd_vote_accounts_destroy( &stakes0->stakes.vote_accounts, &destroy );
+    //fd_vote_accounts_destroy( &stakes0->stakes.vote_accounts, &destroy );
 
     /* Move next EpochStakes
        TODO Can we derive this instead of trusting the snapshot? */
@@ -403,7 +413,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
 
     }
 
-    fd_vote_accounts_destroy( &stakes1->stakes.vote_accounts, &destroy );
+    //fd_vote_accounts_destroy( &stakes1->stakes.vote_accounts, &destroy );
   } while(0);
 
   // TODO Backup to database
@@ -424,10 +434,10 @@ fd_exec_slot_ctx_recover( fd_exec_slot_ctx_t *   slot_ctx,
 
   fd_exec_slot_ctx_t * res = fd_exec_slot_ctx_recover_( slot_ctx, manifest );
 
-  /* Regardless of result, always destroy manifest */
-  fd_bincode_destroy_ctx_t destroy = { .valloc = slot_ctx->valloc };
-  fd_solana_manifest_destroy( manifest, &destroy );
-  fd_memset( manifest, 0, sizeof(fd_solana_manifest_t) );
+  // /* Regardless of result, always destroy manifest */
+  // fd_bincode_destroy_ctx_t destroy = { .valloc = slot_ctx->valloc };
+  // fd_solana_manifest_destroy( manifest, &destroy );
+  // fd_memset( manifest, 0, sizeof(fd_solana_manifest_t) );
 
   return res;
 }

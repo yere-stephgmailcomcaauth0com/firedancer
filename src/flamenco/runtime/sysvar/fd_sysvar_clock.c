@@ -210,6 +210,15 @@ fd_calculate_stake_weighted_timestamp(
     n = fd_vote_accounts_pair_t_map_successor(vote_acc_pool, n)
   ) {
 
+    fd_bincode_decode_ctx_t ctx = {
+      .data    = n->elem.value.data,
+      .dataend = n->elem.value.data + n->elem.value.data_len,
+      .valloc  = fd_scratch_virtual()
+    };
+
+    fd_vote_state_versioned_t vote_state = {0};
+    fd_vote_state_versioned_decode( &vote_state, &ctx );
+
     /* get timestamp */
     fd_pubkey_t const * vote_pubkey = &n->elem.key;
 
@@ -222,8 +231,8 @@ fd_calculate_stake_weighted_timestamp(
       ulong vote_timestamp;
       ulong vote_slot;
       if( vote_acc_node == NULL ) {
-        vote_timestamp = (ulong)n->elem.value.last_timestamp_ts;
-        vote_slot = n->elem.value.last_timestamp_slot;
+        vote_timestamp = vote_state.inner.current.last_timestamp.slot;
+        vote_slot = vote_state.inner.current.last_timestamp.slot;
       } else {
         vote_timestamp = (ulong)vote_acc_node->elem.timestamp;
         vote_slot = vote_acc_node->elem.slot;

@@ -244,7 +244,7 @@
       "fields": [
         { "name": "key", "type": "pubkey" },
         { "name": "stake", "type": "ulong" },
-        { "name": "value", "type": "solana_vote_account" }
+        { "name": "value", "type": "solana_account" }
       ]
     },
     {
@@ -1054,7 +1054,7 @@
     {
       "name": "epoch_bank",
       "type": "struct",
-      "archival": "true",
+      "archival": "false",
       "alignment": "16",
       "fields": [
         { "name": "stakes",                "type": "stakes" },
@@ -1080,7 +1080,7 @@
     {
       "name": "slot_bank",
       "type": "struct",
-      "archival": "true",
+      "archival": "false",
       "alignment": "16",
       "fields": [
         { "name": "recent_block_hashes",         "type": "recent_block_hashes" },
