@@ -119,26 +119,17 @@ recover_clock( fd_exec_slot_ctx_t * slot_ctx ) {
        n;
        n = fd_vote_accounts_pair_t_map_successor( vote_accounts_pool, n ) ) {
 
-    fd_bincode_decode_ctx_t decode = {
-      .data    = n->elem.value.data,
-      .dataend = n->elem.value.data + n->elem.value.data_len,
-      .valloc  = slot_ctx->valloc
-    };
-    fd_vote_state_versioned_t vote_state = {0};
-    fd_vote_state_versioned_decode( &vote_state, &decode );
+   /* Extract vote timestamp of account */
 
     fd_vote_block_timestamp_t vote_state_timestamp = {
-      .timestamp = vote_state.inner.current.last_timestamp.timestamp,
-      .slot      = vote_state.inner.current.last_timestamp.slot
+      .timestamp = n->elem.value.last_timestamp_ts,
+      .slot      = n->elem.value.last_timestamp_slot
     };
 
     /* Record timestamp */
     if( vote_state_timestamp.slot != 0 || n->elem.stake != 0 ) {
-      fd_vote_record_timestamp_vote_with_slot( slot_ctx, &n->elem.key, vote_state_timestamp.timestamp, vote_state_timestamp.slot );
+      fd_vote_record_timestamp_vote_with_slot(slot_ctx, &n->elem.key, vote_state_timestamp.timestamp, vote_state_timestamp.slot);
     }
-
-    fd_bincode_destroy_ctx_t destroy = { .valloc = slot_ctx->valloc };
-    fd_vote_state_versioned_destroy( &vote_state, &destroy );
   }
 
   return 1;
@@ -181,6 +172,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
   epoch_bank->stakes.epoch = oldbank->stakes.epoch;
 
   /* Copy stakes->vote_accounts */
+  ulong i =0UL;
   for ( fd_vote_accounts_pair_t_mapnode_t * n = fd_vote_accounts_pair_t_map_minimum(
           oldbank->stakes.vote_accounts.vote_accounts_pool,
           oldbank->stakes.vote_accounts.vote_accounts_root );
@@ -201,7 +193,9 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
         &epoch_bank->stakes.vote_accounts.vote_accounts_root,
         new_node
       );
+      i++;
   }
+  FD_LOG_WARNING(("NUMBER OF VOTE ACCOUNTS %lu", i));
 
   /* Copy stakes->stake_delegations */
   for ( fd_delegation_pair_t_mapnode_t * n = fd_delegation_pair_t_map_minimum(

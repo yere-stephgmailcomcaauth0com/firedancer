@@ -149,7 +149,6 @@ get_state( fd_borrowed_account_t const * self,
            fd_valloc_t                   valloc,
            fd_vote_state_versioned_t *   versioned /* out */ ) {
 
-  FD_LOG_WARNING(("self %lu", self->const_meta->dlen));
   int rc;
 
   fd_bincode_decode_ctx_t decode_ctx;
@@ -2896,42 +2895,37 @@ upsert_vote_account( fd_exec_slot_ctx_t * slot_ctx, fd_borrowed_account_t * vote
             FD_LOG_ERR(("Map full"));
           }
 
-          fd_memcpy( &new_node->elem.key, vote_account->pubkey, sizeof(fd_pubkey_t) );
-          new_node->elem.stake = 0UL;
+          fd_vote_block_timestamp_t last_timestamp;
+          fd_pubkey_t node_pubkey;
+
+          switch( vote_state->discriminant ) {
+            case fd_vote_state_versioned_enum_current:
+              last_timestamp = vote_state->inner.current.last_timestamp;
+              node_pubkey    = vote_state->inner.current.node_pubkey;
+              break;
+            case fd_vote_state_versioned_enum_v0_23_5:
+              last_timestamp = vote_state->inner.v0_23_5.last_timestamp;
+              node_pubkey    = vote_state->inner.v0_23_5.node_pubkey;
+              break;
+            case fd_vote_state_versioned_enum_v1_14_11:
+              last_timestamp = vote_state->inner.v1_14_11.last_timestamp;
+              node_pubkey    = vote_state->inner.v1_14_11.node_pubkey;
+              break;
+            default:
+              __builtin_unreachable();
+          }
+
+          fd_memcpy( &new_node->elem.key, vote_account->pubkey, sizeof(fd_pubkey_t));
           new_node->elem.value.lamports = vote_account->const_meta->info.lamports;
-          new_node->elem.
 
-          // fd_vote_block_timestamp_t last_timestamp;
-          // fd_pubkey_t node_pubkey;
+          fd_memcpy(new_node->elem.value.node_pubkey.uc, node_pubkey.uc, sizeof(fd_pubkey_t));
+          new_node->elem.value.last_timestamp_ts   = last_timestamp.timestamp;
+          new_node->elem.value.last_timestamp_slot = last_timestamp.slot;
 
-          // switch( vote_state->discriminant ) {
-          //   case fd_vote_state_versioned_enum_current:
-          //     last_timestamp = vote_state->inner.current.last_timestamp;
-          //     node_pubkey    = vote_state->inner.current.node_pubkey;
-          //     break;
-          //   case fd_vote_state_versioned_enum_v0_23_5:
-          //     last_timestamp = vote_state->inner.v0_23_5.last_timestamp;
-          //     node_pubkey    = vote_state->inner.v0_23_5.node_pubkey;
-          //     break;
-          //   case fd_vote_state_versioned_enum_v1_14_11:
-          //     last_timestamp = vote_state->inner.v1_14_11.last_timestamp;
-          //     node_pubkey    = vote_state->inner.v1_14_11.node_pubkey;
-          //     break;
-          //   default:
-          //     __builtin_unreachable();
-          // }
-
-          // fd_memcpy( &new_node->elem.key, vote_account->pubkey, sizeof(fd_pubkey_t));
-          // new_node->elem.value.lamports = vote_account->const_meta->info.lamports;
-
-          // fd_memcpy(new_node->elem.value.node_pubkey.uc, node_pubkey.uc, sizeof(fd_pubkey_t));
-          // new_node->elem.value.last_timestamp_ts   = last_timestamp.timestamp;
-          // new_node->elem.value.last_timestamp_slot = last_timestamp.slot;
-
-          // fd_memcpy( &new_node->elem.value.owner, vote_account->const_meta->info.owner, sizeof(fd_pubkey_t) );
-          // new_node->elem.value.executable = (uchar)vote_account->const_meta->info.executable;
-          // new_node->elem.value.rent_epoch = vote_account->const_meta->info.rent_epoch;
-          // new_node->elem.stake            = 0UL;
+          fd_memcpy( &new_node->elem.value.owner, vote_account->const_meta->info.owner, sizeof(fd_pubkey_t) );
+          new_node->elem.value.executable = (uchar)vote_account->const_meta->info.executable;
+          new_node->elem.value.rent_epoch = vote_account->const_meta->info.rent_epoch;
+          new_node->elem.stake            = 0UL;
           fd_vote_accounts_pair_t_map_insert( slot_ctx->slot_bank.vote_account_keys.vote_accounts_pool, &slot_ctx->slot_bank.vote_account_keys.vote_accounts_root, new_node );
         } else {
           existing->elem.value.lamports = vote_account->const_meta->info.lamports;

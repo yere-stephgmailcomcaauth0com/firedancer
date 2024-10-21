@@ -141,6 +141,9 @@ fd_runtime_init_bank_from_genesis( fd_exec_slot_ctx_t *  slot_ctx,
           fd_vote_accounts_pair_t_map_acquire(vacc_pool);
       FD_TEST(node);
 
+
+      fd_vote_block_timestamp_t last_timestamp;
+      fd_pubkey_t node_pubkey;
       FD_SCRATCH_SCOPE_BEGIN {
         /* Deserialize content */
         fd_vote_state_versioned_t vs[1];
@@ -154,19 +157,36 @@ fd_runtime_init_bank_from_genesis( fd_exec_slot_ctx_t *  slot_ctx,
           return;
         }
 
-        fd_memcpy(node->elem.key.key, acc->key.key, sizeof(fd_pubkey_t));
-        node->elem.stake = acc->account.lamports;
-        fd_solana_account_t account = {
-            .lamports = acc->account.lamports,
-            .data_len = acc->account.data_len,
-            .owner = acc->account.owner,
-            .executable = acc->account.executable,
-            .rent_epoch = acc->account.rent_epoch };
-        account.data = fd_valloc_malloc( slot_ctx->valloc, 1UL, acc->account.data_len );
-        fd_memcpy( account.data, acc->account.data, acc->account.data_len );
-        node->elem.value = account;
+        switch( vs->discriminant )
+        {
+        case fd_vote_state_versioned_enum_current:
+          last_timestamp = vs->inner.current.last_timestamp;
+          node_pubkey    = vs->inner.current.node_pubkey;
+          break;
+        case fd_vote_state_versioned_enum_v0_23_5:
+          last_timestamp = vs->inner.v0_23_5.last_timestamp;
+          node_pubkey    = vs->inner.v0_23_5.node_pubkey;
+          break;
+        case fd_vote_state_versioned_enum_v1_14_11:
+          last_timestamp = vs->inner.v1_14_11.last_timestamp;
+          node_pubkey    = vs->inner.v1_14_11.node_pubkey;
+          break;
+        default:
+          __builtin_unreachable();
+        }
 
       } FD_SCRATCH_SCOPE_END;
+
+      fd_memcpy(node->elem.key.key, acc->key.key, sizeof(fd_pubkey_t));
+      node->elem.stake = acc->account.lamports;
+      node->elem.value = (fd_solana_vote_account_t){
+          .lamports = acc->account.lamports,
+          .node_pubkey = node_pubkey,
+          .last_timestamp_ts = last_timestamp.timestamp,
+          .last_timestamp_slot = last_timestamp.slot,
+          .owner = acc->account.owner,
+          .executable = acc->account.executable,
+          .rent_epoch = acc->account.rent_epoch};
 
       fd_vote_accounts_pair_t_map_insert(vacc_pool, &vacc_root, node);
 

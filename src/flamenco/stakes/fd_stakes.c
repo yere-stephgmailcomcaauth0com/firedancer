@@ -32,17 +32,8 @@ fd_stakes_accum_by_node( fd_vote_accounts_t const * in,
     /* ... filter(|(stake, _)| *stake != 0u64) */
     if( n->elem.stake == 0UL ) continue;
 
-    fd_bincode_decode_ctx_t ctx = {
-      .data    = n->elem.value.data,
-      .dataend = n->elem.value.data + n->elem.value.data_len,
-      .valloc  = fd_scratch_virtual()
-    };
-
-    fd_vote_state_versioned_t vote_state = {0};
-    fd_vote_state_versioned_decode( &vote_state, &ctx );
-
     /* Extract node pubkey */
-    fd_pubkey_t const * node_pubkey = &vote_state.inner.current.node_pubkey;
+    fd_pubkey_t const * node_pubkey = &n->elem.value.node_pubkey;
 
     fd_pubkey_t null_key = {0};
     if( memcmp( node_pubkey, null_key.uc, sizeof(fd_pubkey_t) ) == 0 ) {

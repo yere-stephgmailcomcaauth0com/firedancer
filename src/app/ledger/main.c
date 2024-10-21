@@ -181,6 +181,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
   /* Setup trash_hash */
   uchar trash_hash_buf[32];
   memset( trash_hash_buf, 0xFE, sizeof(trash_hash_buf) );
+  int first_create = 0;
 
   for( ulong slot = start_slot; slot <= ledger_args->end_slot; ++slot ) {
     ledger_args->slot_ctx->slot_bank.prev_slot = prev_slot;
@@ -218,7 +219,10 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     fd_blockstore_end_read( blockstore );
 
     /* TODO:FIXME: This is where we want to do all of the snapshot related testing */
-    fd_snapshot_create_manifest( ledger_args->slot_ctx );
+    if( !first_create ) {
+      fd_snapshot_create_manifest( ledger_args->slot_ctx );
+      first_create = 1;
+    }
 
 
     ulong blk_txn_cnt = 0;
@@ -1002,8 +1006,6 @@ replay( fd_ledger_args_t * args ) {
 
   /* Check number of records in funk. If rec_cnt == 0, then it can be assumed
      that you need to load in snapshot(s). */
-
-  FD_LOG_ERR(("VALUE WE CARE ABOUT %lu", FD_VOTE_STATE_VERSIONED_FOOTPRINT));
 
   ulong rec_cnt = fd_funk_rec_cnt( fd_funk_rec_map( funk, fd_funk_wksp( funk ) ) );
   if( !rec_cnt ) {
