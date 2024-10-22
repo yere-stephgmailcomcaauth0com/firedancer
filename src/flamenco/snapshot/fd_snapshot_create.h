@@ -245,22 +245,31 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.unused_accounts       = unused_accounts; /* DONE! */
 
-  /* TODO:FIXME: NEED TO DO THESE */
-
   fd_epoch_epoch_stakes_pair_t relevant_epoch_stakes[2];
 
   for( ulong i=0UL; i < old_manifest->bank.epoch_stakes_len; i++ ) {
     fd_epoch_epoch_stakes_pair_t * pair = &old_manifest->bank.epoch_stakes[i];
+    FD_LOG_NOTICE(("pair->key %lu %lu", pair->key, new_manifest.bank.epoch));
     if( pair->key==new_manifest.bank.epoch ) {
       relevant_epoch_stakes[0] = *pair;
+      FD_LOG_NOTICE(("pair 0 %lu %lu", pair->value.node_id_to_vote_accounts_len, pair->value.epoch_authorized_voters_len));
     } else if( pair->key==new_manifest.bank.epoch+1UL ) {
       relevant_epoch_stakes[1] = *pair;
+      FD_LOG_NOTICE(("pair 1 %lu %lu", pair->value.node_id_to_vote_accounts_len, pair->value.epoch_authorized_voters_len));
     }
   }
   new_manifest.bank.epoch_stakes_len = 2UL;
   new_manifest.bank.epoch_stakes     = relevant_epoch_stakes;
+  relevant_epoch_stakes[0].value.node_id_to_vote_accounts_len = 0;
+  relevant_epoch_stakes[0].value.node_id_to_vote_accounts     = NULL;
+  relevant_epoch_stakes[0].value.epoch_authorized_voters_len = 0;
+  relevant_epoch_stakes[0].value.epoch_authorized_voters     = NULL;
 
-  /* TODO:FIXME: DONE DOING THESE */
+  relevant_epoch_stakes[1].value.node_id_to_vote_accounts_len = 0;
+  relevant_epoch_stakes[1].value.node_id_to_vote_accounts     = NULL;
+  relevant_epoch_stakes[1].value.epoch_authorized_voters_len = 0;
+  relevant_epoch_stakes[1].value.epoch_authorized_voters     = NULL;
+  relevant_epoch_stakes[1].value.total_stake = 0UL;
 
   new_manifest.bank.is_delta              = 0; /* DONE! */
 

@@ -223,7 +223,6 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
       fd_snapshot_create_manifest( ledger_args->slot_ctx );
       first_create = 1;
     }
-
   
     ulong blk_txn_cnt = 0;
     FD_TEST( fd_runtime_block_eval_tpool( ledger_args->slot_ctx,

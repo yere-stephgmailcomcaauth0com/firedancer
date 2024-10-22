@@ -4136,6 +4136,7 @@ void fd_process_new_epoch(
     fd_exec_slot_ctx_t *slot_ctx,
     ulong parent_epoch )
 {
+  FD_LOG_WARNING(("PROCESS NEW EPOCH"));
   ulong slot;
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
   ulong epoch = fd_slot_to_epoch(&epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot, &slot);
