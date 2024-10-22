@@ -6,6 +6,7 @@
 
 #include "../fd_flamenco_base.h"
 #include "../runtime/context/fd_exec_slot_ctx.h"
+#include "../runtime/context/fd_exec_epoch_ctx.h"
 #include <stdio.h>
 
 struct fd_snapshot_create_private;
@@ -76,15 +77,17 @@ fd_snapshot_create( fd_snapshot_create_t * create,
                     fd_exec_slot_ctx_t *   slot_ctx );
 
 
-static void FD_FN_UNUSED
+static void
 fd_snapshot_create_populate_stakes( fd_exec_slot_ctx_t       * slot_ctx,
-                                    fd_stakes_t              * old_stakes,
                                     fd_stakes_serializable_t * new_stakes ) {
 
   /* First populate the vote accounts using the vote accounts/stakes cache. 
      We can populate over all of the fields except we can't reserialize the
      vote account data. Instead we will copy over the raw contents of all of
      the vote accounts. */
+
+  fd_stakes_t * old_stakes = &fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx )->stakes;
+
   ulong vote_accounts_len = fd_vote_accounts_pair_t_map_size( old_stakes->vote_accounts.vote_accounts_pool, old_stakes->vote_accounts.vote_accounts_root );
   new_stakes->vote_accounts.vote_accounts_pool = fd_vote_accounts_pair_serializable_t_map_alloc( slot_ctx->valloc, fd_ulong_max(vote_accounts_len, 15000 ) );
   new_stakes->vote_accounts.vote_accounts_root = NULL;
@@ -128,6 +131,8 @@ int FD_FN_UNUSED
 fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   FD_LOG_WARNING(("Creating manifest."));
 
+  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+
   /* Populate the fields of the new manifest */
   fd_solana_manifest_serializable_t new_manifest = {0};
   //fd_solana_manifest_t              new_manifest = {0};
@@ -135,7 +140,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   
   /* Copy in all the fields of the bank */
 
-  /* blockhash_queue */
+  /* The blockhash queue can be populated */
   fd_block_hash_vec_t blockhash_queue = {0};
   blockhash_queue.last_hash_index = slot_ctx->slot_bank.block_hash_queue.last_hash_index;
   blockhash_queue.last_hash = fd_scratch_alloc( 1UL, FD_HASH_FOOTPRINT );
@@ -153,24 +158,44 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   }
 
   blockhash_queue.max_age = 300UL; /* TODO: define this as a constant */
+  new_manifest.bank.blockhash_queue       = blockhash_queue /* DONE! */;
 
-  new_manifest.bank.blockhash_queue       = blockhash_queue;
-  new_manifest.bank.ancestors_len         = old_manifest->bank.ancestors_len;
-  new_manifest.bank.ancestors             = old_manifest->bank.ancestors;
-  new_manifest.bank.hash                  = old_manifest->bank.hash;
-  new_manifest.bank.parent_hash           = old_manifest->bank.parent_hash;
+  /* Ancestor can be omitted to boot off of for both clients */
+  new_manifest.bank.ancestors_len         = 0UL; /* DONE!*/
+  new_manifest.bank.ancestors             = NULL; /* DONE! */
+  
+  // new_manifest.bank.ancestors_len         = old_manifest->bank.ancestors_len;
+  // new_manifest.bank.ancestors             = old_manifest->bank.ancestors;
+  FD_LOG_WARNING(("OLDMANIFEST ANCESTORS LENGTH %lu", old_manifest->bank.ancestors_len));
+
+  FD_LOG_WARNING(("OLD BANK HASH AND PARENT HASH %s %s", FD_BASE58_ENC_32_ALLOCA(&old_manifest->bank.hash), FD_BASE58_ENC_32_ALLOCA(&old_manifest->bank.parent_hash) ));
+  FD_LOG_WARNING(("SLOT BANK HASH AND PARENT HASH %s %s", FD_BASE58_ENC_32_ALLOCA(&slot_ctx->slot_bank.banks_hash), FD_BASE58_ENC_32_ALLOCA(&slot_ctx->prev_banks_hash) ));
+
+  new_manifest.bank.hash                  = slot_ctx->slot_bank.banks_hash; /* DONE! */
+  new_manifest.bank.parent_hash           = slot_ctx->prev_banks_hash; /* DONE! */
+
   new_manifest.bank.parent_slot           = old_manifest->bank.parent_slot;
   new_manifest.bank.hard_forks            = old_manifest->bank.hard_forks;
-  new_manifest.bank.transaction_count     = old_manifest->bank.transaction_count;
+
+  new_manifest.bank.transaction_count     = slot_ctx->slot_bank.transaction_count; /* DONE! */
+  
   new_manifest.bank.tick_height           = old_manifest->bank.tick_height;
   new_manifest.bank.signature_count       = old_manifest->bank.signature_count;
-  new_manifest.bank.capitalization        = old_manifest->bank.capitalization;
-  new_manifest.bank.max_tick_height       = old_manifest->bank.max_tick_height;
-  new_manifest.bank.hashes_per_tick       = old_manifest->bank.hashes_per_tick;
+
+  new_manifest.bank.capitalization        = slot_ctx->slot_bank.capitalization; /* DONE! */
+
+  new_manifest.bank.max_tick_height       = slot_ctx->slot_bank.max_tick_height; /* DONE! */
+
+  new_manifest.bank.hashes_per_tick       = &epoch_bank->hashes_per_tick; /* DONE */
+
   new_manifest.bank.ticks_per_slot        = old_manifest->bank.ticks_per_slot;
-  new_manifest.bank.ns_per_slot           = old_manifest->bank.ns_per_slot;
-  new_manifest.bank.genesis_creation_time = old_manifest->bank.genesis_creation_time;
-  new_manifest.bank.slots_per_year        = old_manifest->bank.slots_per_year;
+
+  new_manifest.bank.ns_per_slot           = epoch_bank->ns_per_slot; /* DONE! */
+
+  new_manifest.bank.genesis_creation_time = epoch_bank->genesis_creation_time; /* DONE! */
+
+  new_manifest.bank.slots_per_year        = epoch_bank->slots_per_year; /* DONE! */
+
   new_manifest.bank.accounts_data_len     = old_manifest->bank.accounts_data_len;
   new_manifest.bank.slot                  = old_manifest->bank.slot;
   new_manifest.bank.epoch                 = old_manifest->bank.epoch;
@@ -183,7 +208,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   new_manifest.bank.rent_collector        = old_manifest->bank.rent_collector;
   new_manifest.bank.epoch_schedule        = old_manifest->bank.epoch_schedule;
   new_manifest.bank.inflation             = old_manifest->bank.inflation;
-  //new_manifest.bank.stakes                = old_manifest->bank.stakes;
+
   new_manifest.bank.unused_accounts       = old_manifest->bank.unused_accounts;
   new_manifest.bank.epoch_stakes_len      = old_manifest->bank.epoch_stakes_len;
   new_manifest.bank.epoch_stakes          = old_manifest->bank.epoch_stakes;
@@ -191,7 +216,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   /* Deserialized stakes cache is NOT equivalent to the one that we need to
      serialize because of the way vote accounts are stored */
-  fd_snapshot_create_populate_stakes( slot_ctx, &old_manifest->bank.stakes, &new_manifest.bank.stakes );  
+  fd_snapshot_create_populate_stakes( slot_ctx, &new_manifest.bank.stakes ); /* DONE! */
 
   /* Assign the other fields of the manifest to the serializable manifest */
   new_manifest.accounts_db                           = old_manifest->accounts_db;
@@ -214,11 +239,21 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   FD_TEST( 0==fd_solana_manifest_serializable_encode( &new_manifest, &encode ) );
   //FD_TEST( 0==fd_solana_manifest_encode( &new_manifest, &encode ) );
 
+  
+  // fd_solana_manifest_t newest_manifest = {0};
+  // fd_bincode_decode_ctx_t decode =
+  //   { .data    = out_manifest,
+  //     .dataend = out_manifest + new_manifest_sz,
+  //     .valloc  = slot_ctx->valloc };
+  // FD_TEST( 0==fd_solana_manifest_decode( &newest_manifest, &decode ) );
+  // FD_LOG_WARNING(("SIZE %lu", fd_solana_manifest_size( &newest_manifest ) ));
+
   FILE * file = fopen( "/data/ibhatt/manifest", "wb" );
   ulong  bytes_written= fwrite( out_manifest, 1, new_manifest_sz, file );
   if( bytes_written != new_manifest_sz ) {
     FD_LOG_ERR(("FAILED TO WRITE OUT"));
   }
+  fclose(file);
 
   return 0;
 }

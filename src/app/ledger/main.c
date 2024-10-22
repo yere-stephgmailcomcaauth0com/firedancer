@@ -227,7 +227,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
       first_create = 1;
     }
 
-
+  
     ulong blk_txn_cnt = 0;
     FD_TEST( fd_runtime_block_eval_tpool( ledger_args->slot_ctx,
                                           ledger_args->capture_ctx,
@@ -240,6 +240,9 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
                                           ledger_args->spad_cnt ) == FD_RUNTIME_EXECUTE_SUCCESS );
     txn_cnt += blk_txn_cnt;
     slot_cnt++;
+
+    FD_LOG_WARNING(("BANK HASH AND PARENT HASH %s %s", FD_BASE58_ENC_32_ALLOCA(&ledger_args->slot_ctx->slot_bank.banks_hash), FD_BASE58_ENC_32_ALLOCA(&ledger_args->slot_ctx->prev_banks_hash) ));
+    FD_LOG_WARNING(("PREV SLOT %lu", ledger_args->slot_ctx->slot_bank.prev_slot));
 
     fd_blockstore_start_read( blockstore );
     fd_hash_t const * expected = fd_blockstore_block_hash_query( blockstore, slot );
