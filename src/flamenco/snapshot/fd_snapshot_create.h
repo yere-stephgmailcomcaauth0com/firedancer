@@ -246,8 +246,20 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   new_manifest.bank.unused_accounts       = unused_accounts; /* DONE! */
 
   /* TODO:FIXME: NEED TO DO THESE */
-  new_manifest.bank.epoch_stakes_len      = old_manifest->bank.epoch_stakes_len;
-  new_manifest.bank.epoch_stakes          = old_manifest->bank.epoch_stakes;
+
+  fd_epoch_epoch_stakes_pair_t relevant_epoch_stakes[2];
+
+  for( ulong i=0UL; i < old_manifest->bank.epoch_stakes_len; i++ ) {
+    fd_epoch_epoch_stakes_pair_t * pair = &old_manifest->bank.epoch_stakes[i];
+    if( pair->key==new_manifest.bank.epoch ) {
+      relevant_epoch_stakes[0] = *pair;
+    } else if( pair->key==new_manifest.bank.epoch+1UL ) {
+      relevant_epoch_stakes[1] = *pair;
+    }
+  }
+  new_manifest.bank.epoch_stakes_len = 2UL;
+  new_manifest.bank.epoch_stakes     = relevant_epoch_stakes;
+
   /* TODO:FIXME: DONE DOING THESE */
 
   new_manifest.bank.is_delta              = 0; /* DONE! */
@@ -267,7 +279,6 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   // /* Encode and output the manifest to a file */
   ulong old_manifest_sz = fd_solana_manifest_size( old_manifest );
   ulong new_manifest_sz = fd_solana_manifest_serializable_size( &new_manifest ); 
-  //ulong new_manifest_sz = fd_solana_manifest_size( &new_manifest );
   FD_LOG_WARNING(("OLD MANIFEST SIZE %lu", old_manifest_sz));
   FD_LOG_WARNING(("NEW MANIFEST SIZE %lu", new_manifest_sz));
   uchar * out_manifest = fd_scratch_alloc( 1UL, new_manifest_sz );
@@ -302,36 +313,3 @@ fd_snapshot_create_acc_vecs( void ) {
 FD_PROTOTYPES_END
 
 #endif /* HEADER_fd_src_flamenco_snapshot_fd_snapshot_create_h */
-
-// /*
-//   // blockhash_queue 
-//   // fd_block_hash_vec_t blockhash_queue = {0};
-//   // blockhash_queue.last_hash_index = slot_ctx->slot_bank.block_hash_queue.last_hash_index;
-//   // blockhash_queue.last_hash = fd_scratch_alloc( 1UL, FD_HASH_FOOTPRINT );
-//   // fd_memcpy( blockhash_queue.last_hash ,slot_ctx->slot_bank.block_hash_queue.last_hash, sizeof(fd_hash_t) );
-//   // blockhash_queue.ages_len = 301UL;  TODO: This should also be a constant 
-
-//   // blockhash_queue.ages = fd_scratch_alloc( 1UL, blockhash_queue.ages_len * sizeof(fd_hash_hash_age_pair_t) );
-//   // fd_block_hash_queue_t * queue = &slot_ctx->slot_bank.block_hash_queue;
-//   // fd_hash_hash_age_pair_t_mapnode_t * nn;
-//   // ulong blockhash_queue_idx = 0UL;
-//   // for( fd_hash_hash_age_pair_t_mapnode_t * n = fd_hash_hash_age_pair_t_map_minimum( queue->ages_pool, queue->ages_root ); n; n = nn ) {
-//   //   nn = fd_hash_hash_age_pair_t_map_successor( queue->ages_pool, n );
-//   //   fd_hash_hash_age_pair_t elem = n->elem;
-//   //   fd_memcpy( &blockhash_queue.ages[ blockhash_queue_idx++ ], &elem, sizeof(fd_hash_hash_age_pair_t) );
-//   // }
-
-//   // blockhash_queue.max_age = 300UL;  TODO: define this as a constant 
-//   // //slot_ctx->solana_manifest->bank.blockhash_queue = blockhash_queue;
-
-//   // // /* ancestors */
-//   // FD_LOG_WARNING(("ANCESTOR LEN %lu", slot_ctx->solana_manifest->bank.ancestors_len));
-//   // // for( ulong i=0UL; i<slot_ctx->solana_manifest->bank.ancestors_len; i++ ) {
-//   // //   FD_LOG_WARNING(("ANCESTOR SLOT %lu val %lu", slot_ctx->solana_manifest->bank.ancestors[i].slot, slot_ctx->solana_manifest->bank.ancestors[i].val));
-//   // // }
-//   // // slot_ctx->solana_manifest->bank.ancestors_len = 0UL;
-//   // // slot_ctx->solana_manifest->bank.ancestors     = NULL;
-
-//   // /* hash */
-
-//   // /* parent_hash */
