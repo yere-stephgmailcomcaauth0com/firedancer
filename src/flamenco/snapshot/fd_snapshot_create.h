@@ -7,6 +7,7 @@
 #include "../fd_flamenco_base.h"
 #include "../runtime/context/fd_exec_slot_ctx.h"
 #include "../runtime/context/fd_exec_epoch_ctx.h"
+#include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
 #include <stdio.h>
 
 struct fd_snapshot_create_private;
@@ -166,21 +167,37 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   
   // new_manifest.bank.ancestors_len         = old_manifest->bank.ancestors_len;
   // new_manifest.bank.ancestors             = old_manifest->bank.ancestors;
-  FD_LOG_WARNING(("OLDMANIFEST ANCESTORS LENGTH %lu", old_manifest->bank.ancestors_len));
 
-  FD_LOG_WARNING(("OLD BANK HASH AND PARENT HASH %s %s", FD_BASE58_ENC_32_ALLOCA(&old_manifest->bank.hash), FD_BASE58_ENC_32_ALLOCA(&old_manifest->bank.parent_hash) ));
-  FD_LOG_WARNING(("SLOT BANK HASH AND PARENT HASH %s %s", FD_BASE58_ENC_32_ALLOCA(&slot_ctx->slot_bank.banks_hash), FD_BASE58_ENC_32_ALLOCA(&slot_ctx->prev_banks_hash) ));
+  fd_pubkey_t pubkey_empty = {0};
+  fd_unused_accounts_t unused_accounts = {0};
+
+  // FD_LOG_WARNING(("FIREDANCER slot, epoch %lu %lu", slot_ctx->slot_bank.slot, fd_slot_to_epoch( &epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot, NULL)));
+  // FD_LOG_WARNING(("AGAVE slot, epoch %lu %lu", old_manifest->bank.slot, old_manifest->bank.epoch));
+  // FD_LOG_WARNING(("BLOCK HEIGHT %lu %lu", slot_ctx->slot_bank.block_height, old_manifest->bank.block_height));
+  // FD_LOG_WARNING(("ACCOUNTS DATA LEN %lu", old_manifest->bank.accounts_data_len));
+  // FD_LOG_WARNING(("PREVIOUS SLOT %lu %lu", slot_ctx->slot_bank.prev_slot, old_manifest->bank.parent_slot));
+  // FD_LOG_WARNING(("signature count %lu %lu %lu", slot_ctx->signature_cnt, slot_ctx->parent_signature_cnt, old_manifest->bank.signature_count));
+
+  /* TODO:FIXME: Will likely need to adjust how we calculate the slot and prev slot. Maybe
+     we have to get forks into play? We currently generate the snapshot before the start of
+     a new slot. I think that this is mostly okay for now. See parent_signature_cnt too */
+
+  FD_LOG_WARNING(("TICKS PER SLOT %lu %lu", epoch_bank->ticks_per_slot, old_manifest->bank.ticks_per_slot));
+  FD_LOG_WARNING(("MAX BANK TICK HEIGHT %lu %lu", slot_ctx->slot_bank.max_tick_height, old_manifest->bank.max_tick_height));
+  FD_LOG_WARNING(("MAX BANK TICK HEIGHT %lu %lu", slot_ctx->slot_bank.max_tick_height, old_manifest->bank.max_tick_height));
+  FD_LOG_WARNING(("TICK HEIGHT %lu", old_manifest->bank.tick_height));
 
   new_manifest.bank.hash                  = slot_ctx->slot_bank.banks_hash; /* DONE! */
   new_manifest.bank.parent_hash           = slot_ctx->prev_banks_hash; /* DONE! */
 
-  new_manifest.bank.parent_slot           = old_manifest->bank.parent_slot;
-  new_manifest.bank.hard_forks            = old_manifest->bank.hard_forks;
+  new_manifest.bank.parent_slot           = slot_ctx->slot_bank.prev_slot - 1UL; /* DONE! Need to subtract 1 here because of how agave does accounting. */
+
+  new_manifest.bank.hard_forks.hard_forks     = NULL; /* DONE! */
+  new_manifest.bank.hard_forks.hard_forks_len = 0UL;
 
   new_manifest.bank.transaction_count     = slot_ctx->slot_bank.transaction_count; /* DONE! */
-  
-  new_manifest.bank.tick_height           = old_manifest->bank.tick_height;
-  new_manifest.bank.signature_count       = old_manifest->bank.signature_count;
+  new_manifest.bank.tick_height           = slot_ctx->tick_height; /* DONE! */
+  new_manifest.bank.signature_count       = slot_ctx->parent_signature_cnt; /* DONE! */
 
   new_manifest.bank.capitalization        = slot_ctx->slot_bank.capitalization; /* DONE! */
 
@@ -196,23 +213,44 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.slots_per_year        = epoch_bank->slots_per_year; /* DONE! */
 
-  new_manifest.bank.accounts_data_len     = old_manifest->bank.accounts_data_len;
-  new_manifest.bank.slot                  = old_manifest->bank.slot;
-  new_manifest.bank.epoch                 = old_manifest->bank.epoch;
-  new_manifest.bank.block_height          = old_manifest->bank.block_height;
-  new_manifest.bank.collector_id          = old_manifest->bank.collector_id;
-  new_manifest.bank.collector_fees        = old_manifest->bank.collector_fees;
-  new_manifest.bank.fee_calculator        = old_manifest->bank.fee_calculator;
-  new_manifest.bank.fee_rate_governor     = old_manifest->bank.fee_rate_governor;
-  new_manifest.bank.collected_rent        = old_manifest->bank.collected_rent;
-  new_manifest.bank.rent_collector        = old_manifest->bank.rent_collector;
-  new_manifest.bank.epoch_schedule        = old_manifest->bank.epoch_schedule;
-  new_manifest.bank.inflation             = old_manifest->bank.inflation;
+  new_manifest.bank.accounts_data_len     = 0UL; /* DONE! Agave recomputes this value from the accounts db that is loaded in anyway  */
 
-  new_manifest.bank.unused_accounts       = old_manifest->bank.unused_accounts;
+  new_manifest.bank.slot                  = slot_ctx->slot_bank.slot - 1UL; /* DONE! Need to subtract 1 here because of how agave does accounting */
+
+  new_manifest.bank.epoch                 = fd_slot_to_epoch( &epoch_bank->epoch_schedule, 
+                                                              new_manifest.bank.slot,
+                                                              NULL ); /* DONE! */
+
+  new_manifest.bank.block_height          = slot_ctx->slot_bank.block_height; /* DONE! */
+
+  new_manifest.bank.collector_id          = pubkey_empty; /* DONE! Can be omitted for both clients */
+
+  new_manifest.bank.collector_fees        = slot_ctx->slot_bank.collected_execution_fees + 
+                                            slot_ctx->slot_bank.collected_priority_fees; /* DONE! */
+
+  new_manifest.bank.fee_calculator.lamports_per_signature = slot_ctx->slot_bank.lamports_per_signature; /* DONE! */
+
+  new_manifest.bank.fee_rate_governor     = slot_ctx->slot_bank.fee_rate_governor; /* DONE! */
+  new_manifest.bank.collected_rent        = slot_ctx->slot_bank.collected_rent; /* DONE! */
+
+  /* TODO: This needs to get tested on testnet/devnet where rent is real */
+  new_manifest.bank.rent_collector.epoch          = new_manifest.bank.epoch; /* DONE! */
+  new_manifest.bank.rent_collector.epoch_schedule = epoch_bank->rent_epoch_schedule;
+  new_manifest.bank.rent_collector.slots_per_year = epoch_bank->slots_per_year;
+  new_manifest.bank.rent_collector.rent           = epoch_bank->rent;
+
+  new_manifest.bank.epoch_schedule        = epoch_bank->epoch_schedule; /* DONE! */
+
+  new_manifest.bank.inflation             = epoch_bank->inflation; /* DONE! */
+
+  new_manifest.bank.unused_accounts       = unused_accounts; /* DONE! */
+
+  /* TODO:FIXME: NEED TO DO THESE */
   new_manifest.bank.epoch_stakes_len      = old_manifest->bank.epoch_stakes_len;
   new_manifest.bank.epoch_stakes          = old_manifest->bank.epoch_stakes;
-  new_manifest.bank.is_delta              = old_manifest->bank.is_delta;
+  /* TODO:FIXME: DONE DOING THESE */
+
+  new_manifest.bank.is_delta              = 0; /* DONE! */
 
   /* Deserialized stakes cache is NOT equivalent to the one that we need to
      serialize because of the way vote accounts are stored */
@@ -237,16 +275,6 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
     { .data    = out_manifest,
       .dataend = out_manifest + new_manifest_sz + 1 };
   FD_TEST( 0==fd_solana_manifest_serializable_encode( &new_manifest, &encode ) );
-  //FD_TEST( 0==fd_solana_manifest_encode( &new_manifest, &encode ) );
-
-  
-  // fd_solana_manifest_t newest_manifest = {0};
-  // fd_bincode_decode_ctx_t decode =
-  //   { .data    = out_manifest,
-  //     .dataend = out_manifest + new_manifest_sz,
-  //     .valloc  = slot_ctx->valloc };
-  // FD_TEST( 0==fd_solana_manifest_decode( &newest_manifest, &decode ) );
-  // FD_LOG_WARNING(("SIZE %lu", fd_solana_manifest_size( &newest_manifest ) ));
 
   FILE * file = fopen( "/data/ibhatt/manifest", "wb" );
   ulong  bytes_written= fwrite( out_manifest, 1, new_manifest_sz, file );

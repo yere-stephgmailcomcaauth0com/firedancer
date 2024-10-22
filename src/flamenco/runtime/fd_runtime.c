@@ -684,21 +684,28 @@ fd_runtime_microblock_collect_txns( fd_microblock_info_t const * microblock_info
 }
 
 ulong
-fd_runtime_microblock_batch_collect_txns( fd_microblock_batch_info_t const * microblock_batch_info,
+fd_runtime_microblock_batch_collect_txns( fd_exec_slot_ctx_t * slot_ctx,
+                                          fd_microblock_batch_info_t const * microblock_batch_info,
                                           fd_txn_p_t * out_txns ) {
   for( ulong i = 0; i < microblock_batch_info->microblock_cnt; i++ ) {
     ulong txns_collected = fd_runtime_microblock_collect_txns( &microblock_batch_info->microblock_infos[i], out_txns );
     out_txns += txns_collected;
-  }
+    fd_microblock_info_t const * microblock_info = &microblock_batch_info->microblock_infos[ i ];
+    if( microblock_info->microblock_hdr.txn_cnt == 0UL ) {
+      /* TODO: This check is wrong because sometimes there are > 64 ticks. If this mblk is a tick */
+      slot_ctx->tick_count++;
+    }
+}
 
   return microblock_batch_info->txn_cnt;
 }
 
 ulong
-fd_runtime_block_collect_txns( fd_block_info_t const * block_info,
+fd_runtime_block_collect_txns( fd_exec_slot_ctx_t * slot_ctx,
+                               fd_block_info_t const * block_info,
                                fd_txn_p_t * out_txns ) {
   for( ulong i = 0; i < block_info->microblock_batch_cnt; i++ ) {
-    ulong txns_collected = fd_runtime_microblock_batch_collect_txns( &block_info->microblock_batch_infos[i], out_txns );
+    ulong txns_collected = fd_runtime_microblock_batch_collect_txns( slot_ctx, &block_info->microblock_batch_infos[i], out_txns );
     out_txns += txns_collected;
   }
 
@@ -2391,6 +2398,9 @@ fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
       fd_solcap_writer_set_slot( capture_ctx->capture, slot_ctx->slot_bank.slot );
     }
 
+    FD_LOG_WARNING(("TICK COUNT %lu %lu", slot_ctx->tick_count, slot_ctx->tick_height));
+    slot_ctx->tick_count = 0UL;
+
     long block_execute_time = -fd_log_wallclock();
 
     int res = fd_runtime_block_execute_prepare( slot_ctx );
@@ -2401,7 +2411,12 @@ fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
     ulong txn_cnt = block_info->txn_cnt;
     fd_txn_p_t * txn_ptrs = fd_scratch_alloc( alignof(fd_txn_p_t), txn_cnt * sizeof(fd_txn_p_t) );
 
-    fd_runtime_block_collect_txns( block_info, txn_ptrs );
+    /* This now collects the tick entries in a block */
+    fd_runtime_block_collect_txns( slot_ctx, block_info, txn_ptrs );
+
+    /* TODO: We need to call verify_ticks here. */
+
+    slot_ctx->tick_height += 64UL; /* TODO: We should be using hte computed quantity of ticks here.*/
 
     res = fd_runtime_execute_txns_in_waves_tpool( slot_ctx, capture_ctx, txn_ptrs, txn_cnt, tpool, spads, spad_cnt );
     if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {

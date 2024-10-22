@@ -249,6 +249,9 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
 
   /* Copy over fields */
 
+  slot_ctx->parent_signature_cnt = oldbank->signature_count;
+  slot_ctx->tick_height = oldbank->tick_height;
+
   if( oldbank->blockhash_queue.last_hash )
     slot_bank->poh = *oldbank->blockhash_queue.last_hash;
   slot_bank->slot = oldbank->slot;
