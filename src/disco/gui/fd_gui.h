@@ -12,6 +12,7 @@
 #define FD_GUI_SLOTS_CNT (864000UL)
 #define FD_GUI_TPS_HISTORY_WINDOW_DURATION_SECONDS (10L) /* 10 second moving average */
 #define FD_GUI_TPS_HISTORY_SAMPLE_CNT              (150UL)
+#define FD_GUI_TILE_TIMER_TILE_CNT                 (128UL)
 
 #define FD_GUI_SLOT_LEVEL_INCOMPLETE               (0)
 #define FD_GUI_SLOT_LEVEL_COMPLETED                (1)
@@ -89,6 +90,7 @@ struct fd_gui_txn_waterfall {
   } in;
 
   struct {
+    ulong net_overrun;
     ulong quic_overrun;
     ulong quic_quic_invalid;
     ulong quic_udp_invalid;
@@ -158,7 +160,8 @@ struct fd_gui_slot {
   ulong failed_txn_cnt;
   ulong nonvote_failed_txn_cnt;
   ulong compute_units;
-  ulong fees;
+  ulong transaction_fee;
+  ulong priority_fee;
 
   int leader_state;
 
@@ -172,12 +175,12 @@ struct fd_gui_slot {
      Points to first sample after slot start sample. */
   ulong                  tile_timers_begin_snap_idx;
   /* Snapshot at slot start. */
-  fd_gui_tile_timers_t   tile_timers_begin[ 64 ];
+  fd_gui_tile_timers_t   tile_timers_begin[ FD_GUI_TILE_TIMER_TILE_CNT ];
   /* Index into periodic sample array. Exclusive.
      Points to one past last sample before slot end sample. */
   ulong                  tile_timers_end_snap_idx;
   /* Snapshot at slot end. */
-  fd_gui_tile_timers_t   tile_timers_end[ 64 ];
+  fd_gui_tile_timers_t   tile_timers_end[ FD_GUI_TILE_TIMER_TILE_CNT ];
 };
 
 typedef struct fd_gui_slot fd_gui_slot_t;
@@ -256,7 +259,7 @@ struct fd_gui {
     fd_gui_tile_prime_metric_t tile_prime_metric_cur[ 1 ];
 
     ulong                tile_timers_snap_idx;
-    fd_gui_tile_timers_t tile_timers_snap[ 432000UL ][ 64 ]; /* TODO: This can only store about 1 hour of samples */
+    fd_gui_tile_timers_t tile_timers_snap[ 432000UL ][ FD_GUI_TILE_TIMER_TILE_CNT ]; /* TODO: This can only store about 1 hour of samples */
   } summary;
 
   fd_gui_slot_t slots[ FD_GUI_SLOTS_CNT ][ 1 ];

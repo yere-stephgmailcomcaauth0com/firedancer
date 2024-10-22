@@ -134,7 +134,7 @@ _load_account( fd_borrowed_account_t *           acc,
   fd_pubkey_t pubkey[1];  memcpy( pubkey, state->address, sizeof(fd_pubkey_t) );
 
   /* Account must not yet exist */
-  if( FD_UNLIKELY( fd_acc_mgr_view_raw( acc_mgr, funk_txn, pubkey, NULL, NULL ) ) )
+  if( FD_UNLIKELY( fd_acc_mgr_view_raw( acc_mgr, funk_txn, pubkey, NULL, NULL, NULL) ) )
     return 0;
 
   assert( acc_mgr->funk );
@@ -175,7 +175,7 @@ _load_txn_account( fd_borrowed_account_t *           acc,
   // When they are fetched for transactions, the fields of the account are 0-set.
   fd_exec_test_acct_state_t account_state_to_save = FD_EXEC_TEST_ACCT_STATE_INIT_ZERO;
   memcpy( account_state_to_save.address, state->address, sizeof(fd_pubkey_t) );
-  
+
   // Restore the account state if it has lamports
   if( state->lamports ) {
     account_state_to_save = *state;
@@ -687,15 +687,18 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
                                                 .exemption_threshold         = 2.0,
                                                 .burn_percent                = 50
                                                };
-  epoch_bank->epoch_schedule = default_epoch_schedule;
-  epoch_bank->rent           = default_rent;
-  epoch_bank->ticks_per_slot = 64;
-  epoch_bank->slots_per_year = SECONDS_PER_YEAR * (1000000000.0 / (double)6250000) / (double)epoch_bank->ticks_per_slot;
+  epoch_bank->epoch_schedule      = default_epoch_schedule;
+  epoch_bank->rent_epoch_schedule = default_epoch_schedule;
+  epoch_bank->rent                = default_rent;
+  epoch_bank->ticks_per_slot      = 64;
+  epoch_bank->slots_per_year      = SECONDS_PER_YEAR * (1000000000.0 / (double)6250000) / (double)epoch_bank->ticks_per_slot;
 
   // Override default values if provided
   if( slot_ctx->sysvar_cache->has_epoch_schedule ) {
-    epoch_bank->epoch_schedule = *slot_ctx->sysvar_cache->val_epoch_schedule;
+    epoch_bank->epoch_schedule      = *slot_ctx->sysvar_cache->val_epoch_schedule;
+    epoch_bank->rent_epoch_schedule = *slot_ctx->sysvar_cache->val_epoch_schedule;
   }
+
   if( slot_ctx->sysvar_cache->has_rent ) {
     epoch_bank->rent = *slot_ctx->sysvar_cache->val_rent;
   }
@@ -729,16 +732,16 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   fd_sysvar_epoch_schedule_init( slot_ctx );
   fd_sysvar_rent_init( slot_ctx );
 
-  /* Set the epoch rewards sysvar if partition epoch rewards feature is enabled 
+  /* Set the epoch rewards sysvar if partition epoch rewards feature is enabled
 
      TODO: The init parameters are not exactly conformant with Agave's epoch rewards sysvar. We should
      be calling `fd_begin_partitioned_rewards` with the same parameters as Agave. However,
-     we just need the `active` field to be conformant due to a single Stake program check. 
+     we just need the `active` field to be conformant due to a single Stake program check.
      THIS MAY CHANGE IN THE FUTURE. If there are other parts of transaction execution that use
      the epoch rewards sysvar, we may need to update this.
   */
-  if ( ( 
-      FD_FEATURE_ACTIVE( slot_ctx, enable_partitioned_epoch_reward ) || 
+  if ( (
+      FD_FEATURE_ACTIVE( slot_ctx, enable_partitioned_epoch_reward ) ||
       FD_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature )
       ) && !slot_ctx->sysvar_cache->has_epoch_rewards ) {
     fd_point_value_t point_value = {0};
@@ -953,7 +956,7 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
 
   slot_ctx->slot_bank.collected_execution_fees += task_info->txn_ctx->execution_fee;
   slot_ctx->slot_bank.collected_priority_fees  += task_info->txn_ctx->priority_fee;
-  
+
   return task_info;
 }
 
@@ -1722,7 +1725,7 @@ fd_exec_vm_syscall_test_run( fd_exec_instr_test_runner_t * runner,
   if( FD_UNLIKELY( _l > output_end ) ) {
     goto error;
   }
-  
+
   if (input->vm_ctx.return_data.program_id && input->vm_ctx.return_data.program_id->size == sizeof(fd_pubkey_t)) {
     fd_memcpy( ctx->txn_ctx->return_data.program_id.uc, input->vm_ctx.return_data.program_id->bytes, sizeof(fd_pubkey_t) );
     ctx->txn_ctx->return_data.len = input->vm_ctx.return_data.data->size;
@@ -1795,7 +1798,8 @@ fd_exec_vm_syscall_test_run( fd_exec_instr_test_runner_t * runner,
     input_regions,
     input_regions_count,
     NULL,
-    is_deprecated );
+    is_deprecated,
+    FD_FEATURE_ACTIVE( ctx->slot_ctx, bpf_account_data_direct_mapping ) );
 
   // Setup the vm state for execution
   if( fd_vm_setup_state_for_execution( vm ) != FD_VM_SUCCESS ) {
@@ -1953,7 +1957,7 @@ fd_exec_vm_syscall_test_run( fd_exec_instr_test_runner_t * runner,
                                                         vm->input_mem_regions_cnt,
                                                         &effects->input_data_regions,
                                                         &effects->input_data_regions_count,
-                                                        (void *)tmp_end, 
+                                                        (void *)tmp_end,
                                                         fd_ulong_sat_sub( output_end, tmp_end ) );
 
   if( !!vm->input_mem_regions_cnt && !effects->input_data_regions ) {
@@ -1974,7 +1978,7 @@ error:
   return 0;
 }
 
-/* Stubs fd_execute_instr for binaries compiled with 
+/* Stubs fd_execute_instr for binaries compiled with
    `-Xlinker --wrap=fd_execute_instr` */
 int
 __wrap_fd_execute_instr( fd_exec_txn_ctx_t * txn_ctx,

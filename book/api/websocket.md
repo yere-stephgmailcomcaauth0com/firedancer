@@ -490,7 +490,8 @@ tranasactions per second.
                 "gossip": 517
             },
             "out": {
-                "quic_overrun": 45,
+                "net_overrun": 1,
+                "quic_overrun": 44,
                 "quic_quic_invalid": 12,
                 "quic_udp_invalid": 13,
                 "verify_overrun": 2059,
@@ -901,6 +902,8 @@ initially replay one but the cluster votes on the other one.
 | vote_transactions | `number\|null` | Total number of vote transactions in the block. Will always be less than or equal to `transactions`. The number of non-vote transactions is given by `transactions - vote_transactions`
 | failed_transactions | `number\|null` | Total number of failed transactions (vote and non-vote) in the block. Failed transactions are those which are included in the block and were charged fees, but failed to execute successfully. This is different from dropped transations which do not pay fees and are not included in the block |
 | compute_units | `number\|null`       | Total number of compute units used by the slot |
+| transaction_fee | `number\|null`     | Total amount of transaction fees that this slot collects in lamports after any burning |
+| priority_fee    | `number\|null`     | Total amount of priority fees that this slot collects in lamports after any burning |
 
 #### `slot.skipped_history`
 | frequency | type | example |
@@ -969,6 +972,7 @@ are skipped on the currently active fork.
                 "gossip": 4659
             },
             "out": {
+                "net_overrun": 0,
                 "quic_overrun": 0,
                 "quic_quic_invalid": 0,
                 "quic_udp_invalid": 0,
@@ -1073,6 +1077,7 @@ are skipped on the currently active fork.
 **`TxnWaterfallOut`**
 | Field             | Type     | Description |
 |-------------------|----------|-------------|
+| net_overrun       | `number` | Transactions were dropped because the net tile couldn't keep with incoming network packets. It is unclear how many transactions would have been produced by the packets that were dropped, and this counter (along with the corresponding counter for the `in` side) assumes one tranaction per dropped packet |
 | quic_overrun      | `number` | Transactions were dropped because the QUIC tile couldn't keep with incoming network packets. It is unclear how many transactions would have been produced by the fragments from net that were overrun, and this counter (along with the corresponding counter for the `in` side) assumes one tranaction per dropped packet |
 | quic_quic_invalid | `number` | Transactions were dropped because the QUIC tile decided that incoming QUIC packets were not valid. It is unclear how many transactions would have been produced by the packets that were invalid, and this counter (along with the corresponding counter for the `in` side) assumes one tranaction per invalid packet |
 | quic_udp_invalid  | `number` | Transactions were dropped because the QUIC tile decided that incoming non-QUIC (regular UDP) packets were not valid. |

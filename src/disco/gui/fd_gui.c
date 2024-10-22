@@ -38,7 +38,7 @@ fd_gui_new( void *             shmem,
     return NULL;
   }
 
-  if( FD_UNLIKELY( topo->tile_cnt>64UL ) ) {
+  if( FD_UNLIKELY( topo->tile_cnt>FD_GUI_TILE_TIMER_TILE_CNT ) ) {
     FD_LOG_WARNING(( "too many tiles" ));
     return NULL;
   }
@@ -451,8 +451,17 @@ fd_gui_txn_waterfall_snap( fd_gui_t *               gui,
     }
   }
 
+  cur->out.net_overrun = 0UL;
+  for( ulong i=0UL; i<gui->summary.net_tile_cnt; i++ ) {
+    fd_topo_tile_t const * net = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
+    volatile ulong * net_metrics = fd_metrics_tile( net->metrics );
+
+    cur->out.net_overrun += net_metrics[ MIDX( COUNTER, NET_TILE, XDP_RX_DROPPED_RING_FULL ) ];
+    cur->out.net_overrun += net_metrics[ MIDX( COUNTER, NET_TILE, XDP_RX_DROPPED_OTHER ) ];
+  }
+
   cur->in.gossip   = dedup_metrics[ MIDX( COUNTER, DEDUP, GOSSIPED_VOTES_RECEIVED ) ];
-  cur->in.quic     = cur->out.quic_quic_invalid+cur->out.quic_overrun;
+  cur->in.quic     = cur->out.quic_quic_invalid+cur->out.quic_overrun+cur->out.net_overrun;
   cur->in.udp      = cur->out.quic_udp_invalid;
   for( ulong i=0UL; i<gui->summary.quic_tile_cnt; i++ ) {
     fd_topo_tile_t const * quic = &topo->tiles[ fd_topo_find_tile( topo, "quic", i ) ];
@@ -972,13 +981,14 @@ fd_gui_clear_slot( fd_gui_t * gui,
   slot->failed_txn_cnt         = ULONG_MAX;
   slot->nonvote_failed_txn_cnt = ULONG_MAX;
   slot->compute_units          = ULONG_MAX;
-  slot->fees                   = ULONG_MAX;
+  slot->transaction_fee        = ULONG_MAX;
+  slot->priority_fee           = ULONG_MAX;
   slot->prior_leader_slot      = ULONG_MAX;
   slot->leader_state           = FD_GUI_SLOT_LEADER_UNSTARTED;
   slot->completed_time         = LONG_MAX;
 
   if( FD_LIKELY( slot->mine ) ) {
-    /* All slots start off skipped, until we see it get onto the reset
+    /* All slots start off not skipped, until we see it get off the reset
        chain. */
     gui->epoch.epochs[ epoch_idx ].my_total_slots++;
   }
@@ -1247,8 +1257,9 @@ fd_gui_handle_completed_slot( fd_gui_t * gui,
   ulong failed_txn_count = msg[ 3 ];
   ulong nonvote_failed_txn_count = msg[ 4 ];
   ulong compute_units = msg[ 5 ];
-  ulong fees = msg[ 6 ];
-  ulong _parent_slot = msg[ 7 ];
+  ulong transaction_fee = msg[ 6 ];
+  ulong priority_fee = msg[ 7 ];
+  ulong _parent_slot = msg[ 8 ];
 
   fd_gui_slot_t * slot = gui->slots[ _slot % FD_GUI_SLOTS_CNT ];
   if( FD_UNLIKELY( slot->slot!=_slot ) ) fd_gui_clear_slot( gui, _slot, _parent_slot );
@@ -1262,29 +1273,41 @@ fd_gui_handle_completed_slot( fd_gui_t * gui,
        then later we replay this one anyway to track the bank fork. */
 
     if( FD_LIKELY( _slot<gui->summary.slot_optimistically_confirmed ) ) {
-      slot->level = FD_GUI_SLOT_LEVEL_COMPLETED;
-    } else {
       /* Cluster might have already optimistically confirmed by the time
          we finish replaying it. */
       slot->level = FD_GUI_SLOT_LEVEL_OPTIMISTICALLY_CONFIRMED;
+    } else {
+      slot->level = FD_GUI_SLOT_LEVEL_COMPLETED;
     }
   }
   slot->total_txn_cnt          = total_txn_count;
   slot->vote_txn_cnt           = total_txn_count - nonvote_txn_count;
   slot->failed_txn_cnt         = failed_txn_count;
   slot->nonvote_failed_txn_cnt = nonvote_failed_txn_count;
+  slot->transaction_fee        = transaction_fee;
+  slot->priority_fee           = priority_fee;
   if( FD_LIKELY( slot->leader_state==FD_GUI_SLOT_LEADER_UNSTARTED ) ) {
     /* If we were already leader for this slot, then the poh component
        calculated the CUs used and sent them there, rather than the
        replay component which is sending this completed slot. */
-    slot->compute_units = compute_units;
-    slot->fees          = fees;
+    slot->compute_units   = compute_units;
   }
 
   if( FD_UNLIKELY( gui->epoch.has_epoch[ 0 ] && _slot==gui->epoch.epochs[ 0 ].end_slot ) ) {
     gui->epoch.epochs[ 0 ].end_time = slot->completed_time;
   } else if( FD_UNLIKELY( gui->epoch.has_epoch[ 1 ] && _slot==gui->epoch.epochs[ 1 ].end_slot ) ) {
     gui->epoch.epochs[ 1 ].end_time = slot->completed_time;
+  }
+
+  /* Broadcast new skip rate if one of our slots got completed. */
+  if( FD_LIKELY( slot->mine ) ) {
+    for( ulong i=0UL; i<2UL; i++ ) {
+      if( FD_LIKELY( _slot>=gui->epoch.epochs[ i ].start_slot && _slot<=gui->epoch.epochs[ i ].end_slot ) ) {
+        fd_gui_printf_skip_rate( gui, i );
+        fd_http_server_ws_broadcast( gui->http );
+        break;
+      }
+    }
   }
 }
 

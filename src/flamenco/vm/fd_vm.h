@@ -194,9 +194,12 @@ struct __attribute__((aligned(FD_VM_HOST_REGION_ALIGN))) fd_vm {
                                                                 current stack frame.  Aligned 16. */
   uchar                     heap  [ FD_VM_HEAP_MAX        ]; /* syscall heap, [0,heap_sz) used, [heap_sz,heap_max) free.  Aligned 8. */
 
-   fd_sha256_t * sha; /* Pre-joined SHA instance. This should be re-initialised before every use. */
+  fd_sha256_t * sha; /* Pre-joined SHA instance. This should be re-initialised before every use. */
 
-   ulong magic;    /* ==FD_VM_MAGIC */
+  ulong magic;    /* ==FD_VM_MAGIC */
+
+  int   direct_mapping;   /* If direct mapping is enabled or not */
+  ulong stack_frame_size; /* Size of a stack frame (varies depending on direct mapping being enabled or not) */
 };
 
 /* FIXME: MOVE ABOVE INTO PRIVATE WHEN CONSTRUCTORS READY */
@@ -211,7 +214,7 @@ FD_PROTOTYPES_BEGIN
    integer power of 2.  FOOTPRINT is a multiple of align. 
    These are provided to facilitate compile time declarations. */
 #define FD_VM_ALIGN     FD_VM_HOST_REGION_ALIGN
-#define FD_VM_FOOTPRINT (527264UL)
+#define FD_VM_FOOTPRINT (527280UL)
 
 /* fd_vm_{align,footprint} give the needed alignment and footprint
    of a memory region suitable to hold an fd_vm_t.
@@ -251,7 +254,10 @@ fd_vm_join( void * shmem );
 /* fd_vm_init initializes the given fd_vm_t struct, checking that it is
    not null and has the correct magic value.
 
-   It modifies the vm object and also returns the object for convenience. */
+   It modifies the vm object and also returns the object for convenience.
+   
+   FIXME: we should split out the memory mapping setup from this function 
+          to handle those errors separately. */
 fd_vm_t *
 fd_vm_init(
    fd_vm_t * vm,
@@ -272,7 +278,8 @@ fd_vm_init(
    fd_vm_input_region_t * mem_regions,
    uint mem_regions_cnt,
    fd_vm_acc_region_meta_t * acc_region_metas,
-   uchar is_deprecated );
+   uchar is_deprecated,
+   int direct_mapping );
 
 /* fd_vm_leave leaves the caller's current local join to a vm.
    Returns a pointer to the memory region holding the vm on success

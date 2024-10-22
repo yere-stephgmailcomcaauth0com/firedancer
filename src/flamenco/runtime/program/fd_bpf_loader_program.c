@@ -132,7 +132,7 @@ fd_bpf_loader_v3_is_executable( fd_exec_slot_ctx_t * slot_ctx,
                                 fd_pubkey_t const *  pubkey ) {
   int err = 0;
   fd_account_meta_t const * meta = fd_acc_mgr_view_raw( slot_ctx->acc_mgr, slot_ctx->funk_txn,
-                                                        (fd_pubkey_t *) pubkey, NULL, &err );
+                                                        (fd_pubkey_t *) pubkey, NULL, &err, NULL );
   if( FD_UNLIKELY( !fd_acc_exists( meta ) ) ) {
     return FD_EXECUTOR_INSTR_ERR_MISSING_ACC;
   }
@@ -163,7 +163,7 @@ fd_bpf_loader_v3_is_executable( fd_exec_slot_ctx_t * slot_ctx,
   /* Check if programdata account exists */
   fd_account_meta_t const * programdata_meta =
     (fd_account_meta_t const *)fd_acc_mgr_view_raw( slot_ctx->acc_mgr, slot_ctx->funk_txn,
-                                                    (fd_pubkey_t *) &loader_state.inner.program.programdata_address, NULL, &err );
+                                                    (fd_pubkey_t *) &loader_state.inner.program.programdata_address, NULL, &err, NULL );
   if( FD_UNLIKELY( !fd_acc_exists( programdata_meta ) ) ) {
     return FD_EXECUTOR_INSTR_ERR_MISSING_ACC;
   }
@@ -240,7 +240,9 @@ int
 deploy_program( fd_exec_instr_ctx_t * instr_ctx,
                 uchar * const         programdata,
                 ulong                 programdata_size ) {
-  int deploy_mode = 1;
+  int deploy_mode    = 1;
+  int direct_mapping = FD_FEATURE_ACTIVE( instr_ctx->slot_ctx, bpf_account_data_direct_mapping );
+
   fd_sbpf_syscalls_t * syscalls = fd_sbpf_syscalls_new( fd_scratch_alloc( fd_sbpf_syscalls_align(),
                                                                           fd_sbpf_syscalls_footprint() ) );
   if( FD_UNLIKELY( !syscalls ) ) {
@@ -303,9 +305,11 @@ deploy_program( fd_exec_instr_ctx_t * instr_ctx,
     /* mem_regions     */ NULL,
     /* mem_regions_cnt */ 0,
     /* mem_region_accs */ NULL,
-    /* is_deprecated   */ 0 );
+    /* is_deprecated   */ 0,
+    /* direct mapping */  direct_mapping );
   if ( FD_UNLIKELY( vm == NULL ) ) {
-    FD_LOG_ERR(( "NULL vm" ));
+    FD_LOG_WARNING(( "NULL vm" ));
+    return FD_EXECUTOR_INSTR_ERR_PROGRAM_ENVIRONMENT_SETUP_FAILURE;
   }
 
   int validate_result = fd_vm_validate( vm );
@@ -499,9 +503,9 @@ execute( fd_exec_instr_ctx_t * instr_ctx, fd_sbpf_validated_program_t * prog, uc
     /* instr_ctx             */ instr_ctx,
     /* heap_max              */ heap_max, /* TODO configure heap allocator */
     /* entry_cu              */ instr_ctx->txn_ctx->compute_meter,
-    /* rodata                */ fd_sbpf_validated_program_rodata( prog ),
+    /* rodata                */ prog->rodata,
     /* rodata_sz             */ prog->rodata_sz,
-    /* text                  */ (ulong *)((ulong)fd_sbpf_validated_program_rodata( prog ) + (ulong)prog->text_off), /* Note: text_off is byte offset */
+    /* text                  */ (ulong *)((ulong)prog->rodata + (ulong)prog->text_off), /* Note: text_off is byte offset */
     /* text_cnt              */ prog->text_cnt,
     /* text_off              */ prog->text_off,
     /* text_sz               */ prog->text_sz,
@@ -513,9 +517,15 @@ execute( fd_exec_instr_ctx_t * instr_ctx, fd_sbpf_validated_program_t * prog, uc
     /* input_mem_regions     */ input_mem_regions,
     /* input_mem_regions_cnt */ input_mem_regions_cnt,
     /* acc_region_metas      */ acc_region_metas,
-    /* is_deprecated         */ is_deprecated );
+    /* is_deprecated         */ is_deprecated,
+    /* direct_mapping        */ direct_mapping );
   if ( FD_UNLIKELY( vm == NULL ) ) {
-    FD_LOG_ERR(( "null vm" ));
+    /* We throw an error here because it could be the case that the given heap_size > HEAP_MAX.
+       In this case, Agave fails the transaction but does not error out.
+       
+       https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L1396 */
+    FD_LOG_WARNING(( "null vm" ));
+    return FD_EXECUTOR_INSTR_ERR_PROGRAM_ENVIRONMENT_SETUP_FAILURE;
   }
 
 #ifdef FD_DEBUG_SBPF_TRACES

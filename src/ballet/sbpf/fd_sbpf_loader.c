@@ -365,6 +365,10 @@ fd_sbpf_load_shdrs( fd_sbpf_elf_info_t *  info,
       REQUIRE( (info->shndx_symtab)<0 );
       info->shndx_symtab = (int)i;
     }
+    else if( 0==memcmp( name, ".strtab",   8UL /* equals     */ ) ) {
+      REQUIRE( (info->shndx_strtab)<0 );
+      info->shndx_strtab = (int)i;
+    }
     else if( 0==memcmp( name, ".dynstr",   8UL /* equals     */ ) ) {
       REQUIRE( (info->shndx_dynstr)<0 );
       info->shndx_dynstr = (int)i;
@@ -491,6 +495,7 @@ _fd_sbpf_elf_peek( fd_sbpf_elf_info_t * info,
     .rodata_sz        = 0U,
     .shndx_text       = -1,
     .shndx_symtab     = -1,
+    .shndx_strtab     = -1,
     .shndx_dyn        = -1,
     .shndx_dynstr     = -1,
     .phndx_dyn        = -1,
@@ -599,11 +604,11 @@ fd_sbpf_program_new( void *                     prog_mem,
   /* Initialize calldests map */
 
   ulong pc_max = elf_info->rodata_sz / 8UL;
-  prog->calldests =
-    fd_sbpf_calldests_join( fd_sbpf_calldests_new(
+  prog->calldests_shmem = fd_sbpf_calldests_new(
         FD_SCRATCH_ALLOC_APPEND( laddr, fd_sbpf_calldests_align(),
                                         fd_sbpf_calldests_footprint( pc_max ) ),
-        pc_max ) );
+        pc_max );
+  prog->calldests = fd_sbpf_calldests_join( prog->calldests_shmem );
 
   return prog;
 }
