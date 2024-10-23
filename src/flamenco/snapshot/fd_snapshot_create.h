@@ -129,6 +129,31 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
 
 int FD_FN_UNUSED
 fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
+
+  /****************** HACK TO GET THE ACC DB FROM THE NEWEST ***************/
+
+  FILE * ahead_manifest = fopen("/data/ibhatt/dump/mainnet-254462437/254462442", "rb");
+  FD_TEST(ahead_manifest);
+  fseek( ahead_manifest, 0, SEEK_END );
+  ulong file_sz = (ulong)ftell( ahead_manifest );
+  rewind( ahead_manifest );
+  uchar * buffer = fd_scratch_alloc( 8UL, file_sz );
+  ulong fread_res = fread( buffer, 1, file_sz, ahead_manifest );
+  FD_TEST(fread_res == file_sz);
+
+  fclose( ahead_manifest );
+
+
+  fd_bincode_decode_ctx_t decode_ctx = {
+    .data = buffer,
+    .dataend = buffer + file_sz,
+    .valloc = slot_ctx->valloc,
+  };
+  fd_solana_manifest_t newest_manifest = {0};
+  int decode_res = fd_solana_manifest_decode( &newest_manifest, &decode_ctx );
+  FD_TEST(!decode_res);
+
+
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
 
   /* Populate the fields of the new manifest */
@@ -183,6 +208,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   FD_LOG_WARNING(("MAX BANK TICK HEIGHT %lu %lu", slot_ctx->slot_bank.max_tick_height, old_manifest->bank.max_tick_height));
   FD_LOG_WARNING(("MAX BANK TICK HEIGHT %lu %lu", slot_ctx->slot_bank.max_tick_height, old_manifest->bank.max_tick_height));
   FD_LOG_WARNING(("TICK HEIGHT %lu", old_manifest->bank.tick_height));
+  FD_LOG_WARNING(("TICK HEIGHT %lu", old_manifest->bank.max_tick_height));
 
   new_manifest.bank.hash                  = slot_ctx->slot_bank.banks_hash; /* DONE! */
   new_manifest.bank.parent_hash           = slot_ctx->prev_banks_hash; /* DONE! */
@@ -198,7 +224,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.capitalization        = slot_ctx->slot_bank.capitalization; /* DONE! */
 
-  new_manifest.bank.max_tick_height       = slot_ctx->slot_bank.max_tick_height; /* DONE! */
+  new_manifest.bank.max_tick_height       = slot_ctx->tick_height; /* DONE! */
 
   new_manifest.bank.hashes_per_tick       = &epoch_bank->hashes_per_tick; /* DONE */
 
@@ -243,6 +269,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   new_manifest.bank.unused_accounts       = unused_accounts; /* DONE! */
 
   FD_LOG_WARNING(("UNVERSIONED EPOCH STAKES %lu", old_manifest->bank.epoch_stakes_len));
+  FD_LOG_WARNING(("new_manifest ticks %lu %lu", new_manifest.bank.tick_height, new_manifest.bank.max_tick_height));
   /* DONE! */
   /* We need to copy over the stakes for two epochs*/
   fd_epoch_epoch_stakes_pair_t relevant_epoch_stakes[2];
@@ -263,13 +290,13 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
      serialize because of the way vote accounts are stored */
   fd_snapshot_create_serialiable_stakes( slot_ctx, &epoch_bank->stakes, &new_manifest.bank.stakes ); /* DONE! */
 
+  /* AT THIS POINT THE BANK IS DONE *******************************************/
   /* Assign the other fields of the manifest to the serializable manifest */
-  new_manifest.accounts_db                           = old_manifest->accounts_db;
+  new_manifest.accounts_db                           = newest_manifest.accounts_db;
 
   new_manifest.lamports_per_signature                = slot_ctx->slot_bank.lamports_per_signature; /* DONE! */
 
-  new_manifest.bank_incremental_snapshot_persistence = old_manifest->bank_incremental_snapshot_persistence;
-
+  new_manifest.bank_incremental_snapshot_persistence = NULL;
   new_manifest.epoch_account_hash                    = &slot_ctx->slot_bank.epoch_account_hash; /* DONE! */
 
   /* TODO: This needs to be properly populated instead of the epoch stakes in

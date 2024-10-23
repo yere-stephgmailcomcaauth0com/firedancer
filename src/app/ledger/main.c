@@ -182,6 +182,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
   uchar trash_hash_buf[32];
   memset( trash_hash_buf, 0xFE, sizeof(trash_hash_buf) );
   int first_create = 0;
+  (void)first_create;
 
   for( ulong slot = start_slot; slot <= ledger_args->end_slot; ++slot ) {
     ledger_args->slot_ctx->slot_bank.prev_slot = prev_slot;
@@ -219,7 +220,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     fd_blockstore_end_read( blockstore );
 
     /* TODO:FIXME: This is where we want to do all of the snapshot related testing */
-    if( !first_create ) {
+    if( ledger_args->slot_ctx->slot_bank.slot == 254462443 ) {
       fd_snapshot_create_manifest( ledger_args->slot_ctx );
       first_create = 1;
     }

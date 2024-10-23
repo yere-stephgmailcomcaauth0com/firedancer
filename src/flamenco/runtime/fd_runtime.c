@@ -2417,6 +2417,7 @@ fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
     /* TODO: We need to call verify_ticks here. */
 
     slot_ctx->tick_height += 64UL; /* TODO: We should be using hte computed quantity of ticks here.*/
+    slot_ctx->slot_bank.max_tick_height = slot_ctx->tick_height;
 
     res = fd_runtime_execute_txns_in_waves_tpool( slot_ctx, capture_ctx, txn_ptrs, txn_cnt, tpool, spads, spad_cnt );
     if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
