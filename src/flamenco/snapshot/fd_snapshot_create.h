@@ -79,15 +79,14 @@ fd_snapshot_create( fd_snapshot_create_t * create,
 
 
 static void
-fd_snapshot_create_populate_stakes( fd_exec_slot_ctx_t       * slot_ctx,
-                                    fd_stakes_serializable_t * new_stakes ) {
+fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
+                                       fd_stakes_t              * old_stakes,
+                                       fd_stakes_serializable_t * new_stakes ) {
 
   /* First populate the vote accounts using the vote accounts/stakes cache. 
      We can populate over all of the fields except we can't reserialize the
      vote account data. Instead we will copy over the raw contents of all of
      the vote accounts. */
-
-  fd_stakes_t * old_stakes = &fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx )->stakes;
 
   ulong vote_accounts_len = fd_vote_accounts_pair_t_map_size( old_stakes->vote_accounts.vote_accounts_pool, old_stakes->vote_accounts.vote_accounts_root );
   new_stakes->vote_accounts.vote_accounts_pool = fd_vote_accounts_pair_serializable_t_map_alloc( slot_ctx->valloc, fd_ulong_max(vote_accounts_len, 15000 ) );
@@ -146,7 +145,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   blockhash_queue.last_hash_index = slot_ctx->slot_bank.block_hash_queue.last_hash_index;
   blockhash_queue.last_hash = fd_scratch_alloc( 1UL, FD_HASH_FOOTPRINT );
   fd_memcpy( blockhash_queue.last_hash ,slot_ctx->slot_bank.block_hash_queue.last_hash, sizeof(fd_hash_t) );
-  blockhash_queue.ages_len = 301UL; /* TODO: This should also be a constant */
+  blockhash_queue.ages_len = fd_hash_hash_age_pair_t_map_size( slot_ctx->slot_bank.block_hash_queue.ages_pool, slot_ctx->slot_bank.block_hash_queue.ages_root);
 
   blockhash_queue.ages = fd_scratch_alloc( 1UL, blockhash_queue.ages_len * sizeof(fd_hash_hash_age_pair_t) );
   fd_block_hash_queue_t * queue = &slot_ctx->slot_bank.block_hash_queue;
@@ -247,42 +246,24 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   fd_epoch_epoch_stakes_pair_t relevant_epoch_stakes[2];
 
-  for( ulong i=0UL; i < old_manifest->bank.epoch_stakes_len; i++ ) {
-    fd_epoch_epoch_stakes_pair_t * pair = &old_manifest->bank.epoch_stakes[i];
-    FD_LOG_NOTICE(("pair->key %lu %lu", pair->key, new_manifest.bank.epoch));
-    if( pair->key==new_manifest.bank.epoch ) {
-      relevant_epoch_stakes[0] = *pair;
-      FD_LOG_NOTICE(("pair 0 %lu %lu", pair->value.node_id_to_vote_accounts_len, pair->value.epoch_authorized_voters_len));
-    } else if( pair->key==new_manifest.bank.epoch+1UL ) {
-      relevant_epoch_stakes[1] = *pair;
-      FD_LOG_NOTICE(("pair 1 %lu %lu", pair->value.node_id_to_vote_accounts_len, pair->value.epoch_authorized_voters_len));
-    }
-  }
+  /* Restore the [0] stakes */
+  fd_memset( &relevant_epoch_stakes[0], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
+  relevant_epoch_stakes[0].key                                 = new_manifest.bank.epoch;
+  relevant_epoch_stakes[0].value.stakes.vote_accounts          = slot_ctx->slot_bank.epoch_stakes;
+
+  /* Restore the [1] stakes */
+  fd_memset( &relevant_epoch_stakes[1], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
+  relevant_epoch_stakes[1].key                                = new_manifest.bank.epoch+1UL;
+  relevant_epoch_stakes[1].value.stakes.vote_accounts         = epoch_bank->next_epoch_stakes;
+
   new_manifest.bank.epoch_stakes_len = 2UL;
   new_manifest.bank.epoch_stakes     = relevant_epoch_stakes;
-  relevant_epoch_stakes[0].value.node_id_to_vote_accounts_len = 0;
-  relevant_epoch_stakes[0].value.node_id_to_vote_accounts     = NULL;
-  relevant_epoch_stakes[0].value.epoch_authorized_voters_len = 0;
-  relevant_epoch_stakes[0].value.epoch_authorized_voters     = NULL;
-
-  relevant_epoch_stakes[1].value.node_id_to_vote_accounts_len = 0;
-  relevant_epoch_stakes[1].value.node_id_to_vote_accounts     = NULL;
-  relevant_epoch_stakes[1].value.epoch_authorized_voters_len = 0;
-  relevant_epoch_stakes[1].value.epoch_authorized_voters     = NULL;
-  relevant_epoch_stakes[1].value.total_stake = 0UL;
 
   new_manifest.bank.is_delta              = 0; /* DONE! */
 
   /* Deserialized stakes cache is NOT equivalent to the one that we need to
      serialize because of the way vote accounts are stored */
-  fd_snapshot_create_populate_stakes( slot_ctx, &new_manifest.bank.stakes ); /* DONE! */
-
-  fd_stakes_t *        old_stakes    = &fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx )->stakes;
-  ulong bank_sz = fd_stake_history_treap_ele_cnt( old_stakes->stake_history.treap );
-  ulong old_manifest_sh_sz = fd_stake_history_treap_ele_cnt( old_manifest->bank.stakes.stake_history.treap );
-  ulong new_manifest_sh_sz = fd_stake_history_treap_ele_cnt( new_manifest.bank.stakes.stake_history.treap );
-  FD_LOG_WARNING(("STAKE HISTORY SIZES %lu %lu %lu", bank_sz, old_manifest_sh_sz, new_manifest_sh_sz));
-
+  fd_snapshot_create_serialiable_stakes( slot_ctx, &epoch_bank->stakes, &new_manifest.bank.stakes ); /* DONE! */
 
   /* Assign the other fields of the manifest to the serializable manifest */
   new_manifest.accounts_db                           = old_manifest->accounts_db;
