@@ -79,7 +79,8 @@ fd_restart_init( fd_restart_state_t * restart_state,
 
 void
 fd_restart_recv_last_voted_fork_slots( fd_restart_state_t * restart_state,
-                                       fd_gossip_restart_last_voted_fork_slots_t * msg ) {
+                                       fd_gossip_restart_last_voted_fork_slots_t * msg,
+                                       ulong * out_restart_slot ) {
   if( FD_UNLIKELY( restart_state->stage!=WR_STATE_FIND_HEAVIEST_FORK ) ) {
     return;
   }
@@ -140,7 +141,8 @@ fd_restart_recv_last_voted_fork_slots( fd_restart_state_t * restart_state,
     }
     FD_LOG_NOTICE(( "Found heaviest fork slot=%lu", restart_state->heaviest_fork_slot ));
 
-    /* TODO: Repair missing slots and calculate the fork hash for heaviest_fork_slot */
+    /* Notify the store tile for repairing slots from root to restart_state->heaviest_fork_slot */
+    *out_restart_slot = restart_state->heaviest_fork_slot;
     FD_LOG_WARNING(( "Reparing and replaying slots before %lu, not implemented yet", restart_state->heaviest_fork_slot ));
 
     restart_state->stage = WR_STATE_AGREE_ON_HEAVIEST_FORK;

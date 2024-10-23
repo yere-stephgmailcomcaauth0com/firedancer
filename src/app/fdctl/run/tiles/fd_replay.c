@@ -459,7 +459,7 @@ during_frag( void * _ctx,
     uchar * src = (uchar *) fd_type_pun( fd_chunk_to_laddr( ctx->gossip_in_mem, chunk) );
     fd_gossip_restart_last_voted_fork_slots_t * msg = (fd_gossip_restart_last_voted_fork_slots_t *) fd_type_pun( src );
     msg->offsets.inner.raw_offsets.offsets.bits.bits = src + sizeof(fd_gossip_restart_last_voted_fork_slots_t);
-    fd_restart_recv_last_voted_fork_slots( ctx->restart_state, msg );
+    fd_restart_recv_last_voted_fork_slots( ctx->restart_state, msg, &ctx->blockstore->restart_slot );
     return;
   }
 
@@ -1130,6 +1130,13 @@ after_frag( void *             _ctx,
       fd_hash_t const * bank_hash = &child->slot_ctx.slot_bank.banks_hash;
       fd_bank_hash_cmp_t * bank_hash_cmp = child->slot_ctx.epoch_ctx->bank_hash_cmp;
       fd_bank_hash_cmp_lock( bank_hash_cmp );
+
+      if( ctx->in_wen_restart && curr_slot==ctx->restart_state->heaviest_fork_slot ) {
+        fd_memcpy( &ctx->restart_state->heaviest_fork_bank_hash, bank_hash, sizeof(fd_hash_t) );
+        FD_LOG_ERR(( "Output of wen-restart: slot=%lu, bank_hash=%s",
+                     ctx->restart_state->heaviest_fork_slot,
+                     FD_BASE58_ENC_32_ALLOCA( &ctx->restart_state->heaviest_fork_bank_hash ) ));
+      }
       fd_bank_hash_cmp_insert( bank_hash_cmp, curr_slot, bank_hash, 1, 0 );
 
       /* Try to move the bank hash comparison watermark forward */
@@ -1421,6 +1428,16 @@ after_credit( void *             _ctx,
                                  buf_len, 0UL, 0, 0 );
               ctx->gossip_out_seq   = fd_seq_inc( ctx->gossip_out_seq, 1UL );
               ctx->gossip_out_chunk = fd_dcache_compact_next( ctx->gossip_out_chunk, buf_len, ctx->gossip_out_chunk0, ctx->gossip_out_wmark );
+
+              /* FIXME: Restoring funk checkpoint does not give the correct epoch number,
+               *        i.e., the epoch number when the funk checkpoint file is produced.
+               *        For now, we need to redo stakes->epoch in order to avoid a BHM in
+               *        a local setup when repairing blocks. */
+              fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( ctx->slot_ctx->epoch_ctx );
+              fd_stakes_t * stakes = &epoch_bank->stakes;
+              stakes->epoch = ctx->blockstore->smr / epoch_bank->epoch_schedule.slots_per_epoch;
+              FD_LOG_NOTICE(( "slots_per_epoch=%lu, blockstore root=%lu", epoch_bank->epoch_schedule.slots_per_epoch, ctx->blockstore->smr ));
+              FD_LOG_WARNING(( "Reset stakes->epoch=%lu (blockstore root / slots per epoch)", stakes->epoch ));
             } FD_SCRATCH_SCOPE_END;
           }
         }

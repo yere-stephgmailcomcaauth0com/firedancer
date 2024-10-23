@@ -509,6 +509,19 @@ after_credit( void *             _ctx,
     FD_LOG_DEBUG(( "store slot - mode: %d, slot: %lu, repair_slot: %lu", store_slot_prepare_mode, i, repair_slot ));
     fd_store_tile_slot_prepare( ctx, mux_ctx, store_slot_prepare_mode, slot );
   }
+
+  if( ctx->blockstore->restart_slot != 0 ) {
+    fd_block_map_t * block_map = fd_blockstore_block_map( ctx->blockstore );
+    for( ulong slot=ctx->blockstore->smr+1; slot<=ctx->blockstore->restart_slot; slot++ ){
+      fd_block_map_t * block_map_entry = fd_block_map_query( block_map, &slot, NULL );
+      if( block_map_entry != NULL ){
+        fd_blockstore_slot_remove( ctx->blockstore, slot);
+        FD_LOG_NOTICE(( "Cleaning up slot%lu from blockstore for wen-restart repair", slot ));
+      }
+    }
+    fd_store_add_pending( ctx->store, ctx->blockstore->restart_slot+1, (long)5e6, 0, 0 );
+    ctx->blockstore->restart_slot = 0;
+  }
 }
 
 static void

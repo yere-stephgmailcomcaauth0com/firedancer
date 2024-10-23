@@ -48,12 +48,12 @@ struct fd_restart_state {
 
   /* States maintained by the FIND_HEAVIEST_FORK stage of wen-restart */
   ulong                  total_active_stake;
-  ulong                  heaviest_fork_slot;
   ulong                  slot_to_stake[ LAST_VOTED_FORK_MAX_SLOTS ];
   uchar                  last_voted_fork_slots_received[ MAX_RESTART_PEERS ];
 
   /* States maintained by the AGREE_ON_HEAVIEST_FORK stage of wen-restart */
-  /* TODO */
+  ulong                  heaviest_fork_slot;
+  fd_hash_t              heaviest_fork_bank_hash;
 };
 typedef struct fd_restart_state fd_restart_state_t;
 
@@ -90,6 +90,7 @@ fd_restart_init( fd_restart_state_t * restart_state,
    move wen-restart to the next stage, i.e., AGREE_ON_HEAVIEST_FORK. */
 void
 fd_restart_recv_last_voted_fork_slots( fd_restart_state_t * restart_state,
-                                       fd_gossip_restart_last_voted_fork_slots_t * last_voted_msg );
+                                       fd_gossip_restart_last_voted_fork_slots_t * last_voted_msg,
+                                       ulong * out_restart_slot );
 
 #endif
