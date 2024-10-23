@@ -125,7 +125,7 @@ fd_snapshot_create_populate_stakes( fd_exec_slot_ctx_t       * slot_ctx,
   new_stakes->stake_delegations_root = old_stakes->stake_delegations_root;
   new_stakes->unused                 = old_stakes->unused;
   new_stakes->epoch                  = old_stakes->epoch;
-  fd_memcpy( &new_stakes->stake_history, &old_stakes->stake_history, fd_stake_history_size( &new_stakes->stake_history ) ); 
+  new_stakes->stake_history          = old_stakes->stake_history;
 }
 
 int FD_FN_UNUSED
@@ -276,6 +276,13 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   /* Deserialized stakes cache is NOT equivalent to the one that we need to
      serialize because of the way vote accounts are stored */
   fd_snapshot_create_populate_stakes( slot_ctx, &new_manifest.bank.stakes ); /* DONE! */
+
+  fd_stakes_t *        old_stakes    = &fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx )->stakes;
+  ulong bank_sz = fd_stake_history_treap_ele_cnt( old_stakes->stake_history.treap );
+  ulong old_manifest_sh_sz = fd_stake_history_treap_ele_cnt( old_manifest->bank.stakes.stake_history.treap );
+  ulong new_manifest_sh_sz = fd_stake_history_treap_ele_cnt( new_manifest.bank.stakes.stake_history.treap );
+  FD_LOG_WARNING(("STAKE HISTORY SIZES %lu %lu %lu", bank_sz, old_manifest_sh_sz, new_manifest_sh_sz));
+
 
   /* Assign the other fields of the manifest to the serializable manifest */
   new_manifest.accounts_db                           = old_manifest->accounts_db;
