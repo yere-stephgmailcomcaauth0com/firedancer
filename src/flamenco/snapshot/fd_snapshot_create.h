@@ -129,8 +129,6 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
 
 int FD_FN_UNUSED
 fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
-  FD_LOG_WARNING(("Creating manifest."));
-
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
 
   /* Populate the fields of the new manifest */
@@ -244,22 +242,22 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.unused_accounts       = unused_accounts; /* DONE! */
 
+  FD_LOG_WARNING(("UNVERSIONED EPOCH STAKES %lu", old_manifest->bank.epoch_stakes_len));
+  /* DONE! */
+  /* We need to copy over the stakes for two epochs*/
   fd_epoch_epoch_stakes_pair_t relevant_epoch_stakes[2];
-
-  /* Restore the [0] stakes */
   fd_memset( &relevant_epoch_stakes[0], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
-  relevant_epoch_stakes[0].key                                 = new_manifest.bank.epoch;
-  relevant_epoch_stakes[0].value.stakes.vote_accounts          = slot_ctx->slot_bank.epoch_stakes;
+  relevant_epoch_stakes[0].key                        = new_manifest.bank.epoch;
+  relevant_epoch_stakes[0].value.stakes.vote_accounts = slot_ctx->slot_bank.epoch_stakes;
 
-  /* Restore the [1] stakes */
   fd_memset( &relevant_epoch_stakes[1], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
-  relevant_epoch_stakes[1].key                                = new_manifest.bank.epoch+1UL;
-  relevant_epoch_stakes[1].value.stakes.vote_accounts         = epoch_bank->next_epoch_stakes;
+  relevant_epoch_stakes[1].key                        = new_manifest.bank.epoch+1UL;
+  relevant_epoch_stakes[1].value.stakes.vote_accounts = epoch_bank->next_epoch_stakes;
 
-  new_manifest.bank.epoch_stakes_len = 2UL;
-  new_manifest.bank.epoch_stakes     = relevant_epoch_stakes;
+  new_manifest.bank.epoch_stakes_len                  = 2UL;
+  new_manifest.bank.epoch_stakes                      = relevant_epoch_stakes;
 
-  new_manifest.bank.is_delta              = 0; /* DONE! */
+  new_manifest.bank.is_delta                          = 0; /* DONE! */
 
   /* Deserialized stakes cache is NOT equivalent to the one that we need to
      serialize because of the way vote accounts are stored */
@@ -267,11 +265,17 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   /* Assign the other fields of the manifest to the serializable manifest */
   new_manifest.accounts_db                           = old_manifest->accounts_db;
-  new_manifest.lamports_per_signature                = old_manifest->lamports_per_signature;
+
+  new_manifest.lamports_per_signature                = slot_ctx->slot_bank.lamports_per_signature; /* DONE! */
+
   new_manifest.bank_incremental_snapshot_persistence = old_manifest->bank_incremental_snapshot_persistence;
-  new_manifest.epoch_account_hash                    = old_manifest->epoch_account_hash;
-  new_manifest.versioned_epoch_stakes_len            = old_manifest->versioned_epoch_stakes_len;
-  new_manifest.versioned_epoch_stakes                = old_manifest->versioned_epoch_stakes;
+
+  new_manifest.epoch_account_hash                    = &slot_ctx->slot_bank.epoch_account_hash; /* DONE! */
+
+  /* TODO: This needs to be properly populated instead of the epoch stakes in
+     the bank when 2.1 gets activated on testnet. DONE! */
+  new_manifest.versioned_epoch_stakes_len            = 0UL;
+  new_manifest.versioned_epoch_stakes                = NULL;
 
   // /* Encode and output the manifest to a file */
   ulong old_manifest_sz = fd_solana_manifest_size( old_manifest );
