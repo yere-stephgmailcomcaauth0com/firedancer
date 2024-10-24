@@ -304,14 +304,9 @@ accumulate_and_check_loaded_account_data_size( ulong   acc_size,
 int
 fd_executor_load_transaction_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
 
-  ulong requested_loaded_accounts_data_size = 0UL;
-
-  if( FD_UNLIKELY( txn_ctx->loaded_accounts_data_size_limit==0UL ) ) {
-    return FD_RUNTIME_TXN_ERR_INVALID_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
-  }
-  requested_loaded_accounts_data_size = txn_ctx->loaded_accounts_data_size_limit;
-
+  ulong requested_loaded_accounts_data_size = txn_ctx->loaded_accounts_data_size_limit;
   ulong accumulated_account_size = 0UL;
+  uchar loader_v4_active = FD_FEATURE_ACTIVE( txn_ctx->slot_ctx, enable_program_runtime_v2_and_loader_v4);
 
   /* https://github.com/anza-xyz/agave/blob/v2.0.9/svm/src/account_loader.rs#L217-L296 */
   /* In the agave client, this loop is responsible for loading in all of the
@@ -429,10 +424,10 @@ fd_executor_load_transaction_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
          into the program cache. From my inspection, it seems that if we reach this
          far in the code path, then this account should be in the program cache iff
          the owners match one of the four loaders OR the program is in the blacklist. */
-      if( FD_UNLIKELY( ( memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_deprecated_program_id.key,  sizeof(fd_pubkey_t) )   &&
-                         memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_program_id.key,             sizeof(fd_pubkey_t) )   &&
-                         memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_upgradeable_program_id.key, sizeof(fd_pubkey_t) )   &&
-                         memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_v4_program_id.key,          sizeof(fd_pubkey_t) ) ) ||
+      if( FD_UNLIKELY( ( memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_deprecated_program_id.key,               sizeof(fd_pubkey_t) )   &&
+                         memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_program_id.key,                          sizeof(fd_pubkey_t) )   &&
+                         memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_upgradeable_program_id.key,              sizeof(fd_pubkey_t) ) ) ||
+                         ( loader_v4_active && memcmp( program_account->const_meta->info.owner, fd_solana_bpf_loader_v4_program_id.key, sizeof(fd_pubkey_t) ) ) ||
                          fd_bpf_is_in_program_blacklist( txn_ctx->slot_ctx, program_account->pubkey ) ) ) {
         return FD_RUNTIME_TXN_ERR_INVALID_PROGRAM_FOR_EXECUTION;
       }

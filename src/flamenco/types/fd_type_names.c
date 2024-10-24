@@ -1,5 +1,5 @@
 // This is an auto-generated file. To add entries, edit fd_types.json
-#define FD_TYPE_NAME_COUNT 220
+#define FD_TYPE_NAME_COUNT 221
 static char const * fd_type_names[FD_TYPE_NAME_COUNT] = {
  "fd_hash",
  "fd_pubkey",
@@ -221,4 +221,5 @@ static char const * fd_type_names[FD_TYPE_NAME_COUNT] = {
  "fd_optional_account",
  "fd_calculated_stake_points",
  "fd_calculated_stake_rewards",
+ "fd_duplicate_slot_proof",
 };
