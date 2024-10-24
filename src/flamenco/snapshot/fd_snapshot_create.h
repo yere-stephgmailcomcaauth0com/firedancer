@@ -148,7 +148,6 @@ int
 fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_FN_UNUSED slot_ctx,
                                          fd_solana_manifest_serializable_t * FD_FN_UNUSED manifest ) {
 
-
   ulong rec_cnt = fd_funk_rec_global_cnt( slot_ctx->acc_mgr->funk, fd_funk_wksp( slot_ctx->acc_mgr->funk) );
   void * mem = fd_valloc_malloc( slot_ctx->valloc, fd_key_build_align(), fd_key_build_footprint( rec_cnt ) );
   fd_key_build_t * key_build = fd_key_build_join( fd_key_build_new( mem, rec_cnt, 0UL) );
@@ -170,6 +169,7 @@ fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_
     }
 
     ulong record_slot = acc->const_meta->slot;
+    fd_key_build_insert( key_build, const ulong *key)
   }
   FD_LOG_ERR(("NUM ACCOUNTS %lu", num_accs));
 
