@@ -11,6 +11,21 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <string.h>
+#include <sys/stat.h>
+
+struct fd_key_build {
+  ulong key;
+  ulong count;
+  ulong next;
+};
+typedef struct fd_key_build fd_key_build_t;
+
+  /* clang-format off */
+  #define MAP_NAME         fd_key_build
+  #define MAP_T            fd_key_build_t
+  #define MAP_KEY          key
+  #include "../../util/tmpl/fd_map_giant.c"
+  /* clang-format on */
 
 struct fd_snapshot_create_private;
 typedef struct fd_snapshot_create_private fd_snapshot_create_t;
@@ -132,77 +147,79 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
 int
 fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_FN_UNUSED slot_ctx,
                                          fd_solana_manifest_serializable_t * FD_FN_UNUSED manifest ) {
+
+
+  ulong rec_cnt = fd_funk_rec_global_cnt( slot_ctx->acc_mgr->funk, fd_funk_wksp( slot_ctx->acc_mgr->funk) );
+  void * mem = fd_valloc_malloc( slot_ctx->valloc, fd_key_build_align(), fd_key_build_footprint( rec_cnt ) );
+  fd_key_build_t * key_build = fd_key_build_join( fd_key_build_new( mem, rec_cnt, 0UL) );
+
+  ulong num_accs = 0UL;
+  for (fd_funk_rec_t const *rec = fd_funk_txn_first_rec( slot_ctx->acc_mgr->funk, NULL );
+       NULL != rec;
+       rec = fd_funk_txn_next_rec( slot_ctx->acc_mgr->funk, rec )) {
+    if( !fd_funk_key_is_acc( rec->pair.key ) ) {
+      continue;
+    }
+
+    fd_pubkey_t const * pubkey = fd_type_pun_const( rec->pair.key[0].uc );
+    num_accs++;
+
+    FD_BORROWED_ACCOUNT_DECL( acc );
+    if( fd_acc_mgr_view( slot_ctx->acc_mgr, NULL, pubkey, acc ) != FD_ACC_MGR_SUCCESS ) {
+      FD_LOG_ERR(( "Can't find record" ));
+    }
+
+    ulong record_slot = acc->const_meta->slot;
+  }
+  FD_LOG_ERR(("NUM ACCOUNTS %lu", num_accs));
+
+
+
+
+  // fd_solana_accounts_db_fields_t * fields = &manifest->accounts_db;
+
+  // char * dir_buf = fd_scratch_alloc( 8UL, 256UL );
+  // fd_memset( dir_buf, '\0', 256UL );
+  // dir_buf = "/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/";
+  // ulong dir_len = strlen( dir_buf );
   
-  #define FD_DT_REG (8)
-  // fd_funk_t *     funk     = slot_ctx->acc_mgr->funk;
-  // fd_funk_txn_t * funk_txn = slot_ctx->funk_txn;
+  // char * filename_buffer = fd_scratch_alloc( 8UL, 256UL );
+  // fd_memset( filename_buffer, '\0', 256UL );
+  // fd_memcpy( filename_buffer, dir_buf, dir_len );
 
-  // for( fd_funk_rec_t const * rec = fd_funk_txn_first_rec( funk, funk_txn );
-  //      rec; rec = fd_funk_txn_next_rec( funk, rec ) ) {
-  //   /* Collect the pubkey, lookup the borrowed account in the account manager,
-  //      reencode the header and the data. */
-  // }
-  // struct dirent * entry   = NULL;
-  // ulong           dir_len = strlen("/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/");
-  // DIR           * dir     = opendir("/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/");
+  // char * oldname = fd_scratch_alloc( 8UL, 256UL );
+  // fd_memset( oldname, '\0', 256UL );
+  // fd_memcpy( oldname, dir_buf, dir_len );
 
-  // while( ( entry = readdir(dir) ) != NULL ) {
-  //   if( entry->d_type==FD_D T_REG ) {
-  //     FD_LOG_NOTICE(("ENTRY %s", entry->d_name));
-  //     ulong old_path_len = dir_len + strlen(entry->d_name);
-  //     FD_LOG_NOTICE(("OLD PATH LEN %lu %lu", dir_len, old_path_len));
-  //     uchar * new_path = fd_scratch_alloc( 1UL, old_path_len + 1UL );
-      
+  // ulong id = 1000000000UL;
+  // for( ulong i=0UL; i<fields->storages_len; i++ ) {
+  //   fd_snapshot_slot_acc_vecs_t * storage = &fields->storages[i];
+  //   //FD_LOG_NOTICE(("SLOT %lu ENTRIES %lu", storage->slot, storage->account_vecs_len));
+  //   for( ulong j=0UL; j<storage->account_vecs_len; j++ ) {
+  //     fd_snapshot_acc_vec_t * acc_vec = &storage->account_vecs[j];
+  //     //FD_LOG_NOTICE(("acc vec %lu %lu", acc_vec->file_sz, acc_vec->id));
 
-  //     /* TODO:FIXME: rename to current "slot.i" and update the header
-  //        while you're at it*/
-      
+  //     sprintf( filename_buffer+dir_len, "%lu.%lu", storage->slot, id );
+  //     sprintf( oldname+dir_len, "%lu.%lu", storage->slot, acc_vec->id );
+
+  //     acc_vec->id = id;
+  //     id++;
+  //     // FD_LOG_WARNING(("OLD FILENAME %s", oldname));
+  //     // FD_LOG_WARNING(("NEW FILENAME %s", filename_buffer));
+  //     struct stat buffer;
+  //     if( !stat( oldname, &buffer ) ) {
+  //       //rename( oldname, filename_buffer );
+  //     }
+  //     else {
+  //       FD_LOG_WARNING(("CANT RENAME FILE %s %s", oldname, filename_buffer));
+  //     }      
   //   }
   // }
+  // FD_LOG_WARNING(("PROCESSED %lu FILES", id));
 
-  // closedir(dir);
+  // return 0;
 
-  fd_solana_accounts_db_fields_t * fields = &manifest->accounts_db;
-
-  char * dir_buf = fd_scratch_alloc( 8UL, 256UL );
-  fd_memset( dir_buf, '\0', 256UL );
-  dir_buf = "/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/";
-  ulong dir_len = strlen( dir_buf );
-  
-  char * filename_buffer = fd_scratch_alloc( 8UL, 256UL );
-  fd_memset( filename_buffer, '\0', 256UL );
-  fd_memcpy( filename_buffer, dir_buf, dir_len );
-
-  char * oldname = fd_scratch_alloc( 8UL, 256UL );
-  fd_memset( oldname, '\0', 256UL );
-  fd_memcpy( oldname, dir_buf, dir_len );
-
-  ulong id = 1000000000UL;
-  for( ulong i=0UL; i<fields->storages_len; i++ ) {
-    fd_snapshot_slot_acc_vecs_t * storage = &fields->storages[i];
-    //FD_LOG_NOTICE(("SLOT %lu ENTRIES %lu", storage->slot, storage->account_vecs_len));
-    for( ulong j=0UL; j<storage->account_vecs_len; j++ ) {
-      fd_snapshot_acc_vec_t * acc_vec = &storage->account_vecs[j];
-      //FD_LOG_NOTICE(("acc vec %lu %lu", acc_vec->file_sz, acc_vec->id));
-
-      sprintf( filename_buffer+dir_len, "%lu.%lu", storage->slot, id );
-      sprintf( oldname+dir_len, "%lu.%lu", storage->slot, acc_vec->id );
-
-
-
-      id++;
-      acc_vec->id = id;
-      // FD_LOG_WARNING(("OLD FILENAME %s", oldname));
-      // FD_LOG_WARNING(("NEW FILENAME %s", filename_buffer));
-      //rename( oldname, filename_buffer );
-      if( id % 1000 == 0 ) { FD_LOG_WARNING(("ID %lu", id)); }
-    }
-  }
-  FD_LOG_WARNING(("RENAMED %lu FILES", id));
-
-  return 0;
-
-  #undef FD_DT_REG
+  // #undef FD_DT_REG
 }
 
 int FD_FN_UNUSED
