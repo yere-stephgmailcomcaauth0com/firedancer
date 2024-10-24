@@ -2843,7 +2843,7 @@ fd_runtime_checkpt( fd_capture_ctx_t * capture_ctx,
 static int
 fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
                              fd_capture_ctx_t * capture_ctx,
-                             fd_tpool_t * tpool ) {
+                             fd_tpool_t * tpool ) {        
   /* Publish any transaction older than 31 slots */
   fd_funk_t * funk = slot_ctx->acc_mgr->funk;
   fd_funk_txn_t * txnmap = fd_funk_txn_map(funk, fd_funk_wksp(funk));

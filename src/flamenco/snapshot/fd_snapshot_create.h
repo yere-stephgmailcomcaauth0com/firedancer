@@ -9,6 +9,8 @@
 #include "../runtime/context/fd_exec_epoch_ctx.h"
 #include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
 #include <stdio.h>
+#include <dirent.h>
+#include <string.h>
 
 struct fd_snapshot_create_private;
 typedef struct fd_snapshot_create_private fd_snapshot_create_t;
@@ -127,31 +129,107 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
   new_stakes->stake_history          = old_stakes->stake_history;
 }
 
+int
+fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_FN_UNUSED slot_ctx,
+                                         fd_solana_manifest_serializable_t * FD_FN_UNUSED manifest ) {
+  
+  #define FD_DT_REG (8)
+  // fd_funk_t *     funk     = slot_ctx->acc_mgr->funk;
+  // fd_funk_txn_t * funk_txn = slot_ctx->funk_txn;
+
+  // for( fd_funk_rec_t const * rec = fd_funk_txn_first_rec( funk, funk_txn );
+  //      rec; rec = fd_funk_txn_next_rec( funk, rec ) ) {
+  //   /* Collect the pubkey, lookup the borrowed account in the account manager,
+  //      reencode the header and the data. */
+  // }
+  // struct dirent * entry   = NULL;
+  // ulong           dir_len = strlen("/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/");
+  // DIR           * dir     = opendir("/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/");
+
+  // while( ( entry = readdir(dir) ) != NULL ) {
+  //   if( entry->d_type==FD_D T_REG ) {
+  //     FD_LOG_NOTICE(("ENTRY %s", entry->d_name));
+  //     ulong old_path_len = dir_len + strlen(entry->d_name);
+  //     FD_LOG_NOTICE(("OLD PATH LEN %lu %lu", dir_len, old_path_len));
+  //     uchar * new_path = fd_scratch_alloc( 1UL, old_path_len + 1UL );
+      
+
+  //     /* TODO:FIXME: rename to current "slot.i" and update the header
+  //        while you're at it*/
+      
+  //   }
+  // }
+
+  // closedir(dir);
+
+  fd_solana_accounts_db_fields_t * fields = &manifest->accounts_db;
+
+  char * dir_buf = fd_scratch_alloc( 8UL, 256UL );
+  fd_memset( dir_buf, '\0', 256UL );
+  dir_buf = "/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/";
+  ulong dir_len = strlen( dir_buf );
+  
+  char * filename_buffer = fd_scratch_alloc( 8UL, 256UL );
+  fd_memset( filename_buffer, '\0', 256UL );
+  fd_memcpy( filename_buffer, dir_buf, dir_len );
+
+  char * oldname = fd_scratch_alloc( 8UL, 256UL );
+  fd_memset( oldname, '\0', 256UL );
+  fd_memcpy( oldname, dir_buf, dir_len );
+
+  ulong id = 1000000000UL;
+  for( ulong i=0UL; i<fields->storages_len; i++ ) {
+    fd_snapshot_slot_acc_vecs_t * storage = &fields->storages[i];
+    //FD_LOG_NOTICE(("SLOT %lu ENTRIES %lu", storage->slot, storage->account_vecs_len));
+    for( ulong j=0UL; j<storage->account_vecs_len; j++ ) {
+      fd_snapshot_acc_vec_t * acc_vec = &storage->account_vecs[j];
+      //FD_LOG_NOTICE(("acc vec %lu %lu", acc_vec->file_sz, acc_vec->id));
+
+      sprintf( filename_buffer+dir_len, "%lu.%lu", storage->slot, id );
+      sprintf( oldname+dir_len, "%lu.%lu", storage->slot, acc_vec->id );
+
+
+
+      id++;
+      acc_vec->id = id;
+      // FD_LOG_WARNING(("OLD FILENAME %s", oldname));
+      // FD_LOG_WARNING(("NEW FILENAME %s", filename_buffer));
+      //rename( oldname, filename_buffer );
+      if( id % 1000 == 0 ) { FD_LOG_WARNING(("ID %lu", id)); }
+    }
+  }
+  FD_LOG_WARNING(("RENAMED %lu FILES", id));
+
+  return 0;
+
+  #undef FD_DT_REG
+}
+
 int FD_FN_UNUSED
 fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
-  /****************** HACK TO GET THE ACC DB FROM THE NEWEST ***************/
+  // /****************** HACK TO GET THE ACC DB FROM THE NEWEST ***************/
 
-  FILE * ahead_manifest = fopen("/data/ibhatt/dump/mainnet-254462437/254462442", "rb");
-  FD_TEST(ahead_manifest);
-  fseek( ahead_manifest, 0, SEEK_END );
-  ulong file_sz = (ulong)ftell( ahead_manifest );
-  rewind( ahead_manifest );
-  uchar * buffer = fd_scratch_alloc( 8UL, file_sz );
-  ulong fread_res = fread( buffer, 1, file_sz, ahead_manifest );
-  FD_TEST(fread_res == file_sz);
+  // FILE * ahead_manifest = fopen("/data/ibhatt/dump/mainnet-254462437/254462442", "rb");
+  // FD_TEST(ahead_manifest);
+  // fseek( ahead_manifest, 0, SEEK_END );
+  // ulong file_sz = (ulong)ftell( ahead_manifest );
+  // // rewind( ahead_manifest );
+  // // uchar * buffer = fd_scratch_alloc( 8UL, file_sz );
+  // // ulong fread_res = fread( buffer, 1, file_sz, ahead_manifest );
+  // // FD_TEST(fread_res == file_sz);
 
-  fclose( ahead_manifest );
+  // // fclose( ahead_manifest );
 
 
-  fd_bincode_decode_ctx_t decode_ctx = {
-    .data = buffer,
-    .dataend = buffer + file_sz,
-    .valloc = slot_ctx->valloc,
-  };
-  fd_solana_manifest_t newest_manifest = {0};
-  int decode_res = fd_solana_manifest_decode( &newest_manifest, &decode_ctx );
-  FD_TEST(!decode_res);
+  // fd_bincode_decode_ctx_t decode_ctx = {
+  //   .data = buffer,
+  //   .dataend = buffer + file_sz,
+  //   .valloc = slot_ctx->valloc,
+  // };
+  // fd_solana_manifest_t newest_manifest = {0};
+  // int decode_res = fd_solana_manifest_decode( &newest_manifest, &decode_ctx );
+  // FD_TEST(!decode_res);
 
 
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
@@ -292,7 +370,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   /* AT THIS POINT THE BANK IS DONE *******************************************/
   /* Assign the other fields of the manifest to the serializable manifest */
-  new_manifest.accounts_db                           = newest_manifest.accounts_db;
+  new_manifest.accounts_db                           = old_manifest->accounts_db; // newest_manifest.accounts_db;
 
   new_manifest.lamports_per_signature                = slot_ctx->slot_bank.lamports_per_signature; /* DONE! */
 
@@ -303,6 +381,10 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
      the bank when 2.1 gets activated on testnet. DONE! */
   new_manifest.versioned_epoch_stakes_len            = 0UL;
   new_manifest.versioned_epoch_stakes                = NULL;
+
+  fd_snapshot_create_populate_acc_vec_idx( slot_ctx, &new_manifest );
+
+  FD_LOG_WARNING(("ACCOUNTS DB HEADER %lu %lu %lu", new_manifest.accounts_db.storages_len, new_manifest.accounts_db.version, new_manifest.accounts_db.slot));
 
   // /* Encode and output the manifest to a file */
   ulong old_manifest_sz = fd_solana_manifest_size( old_manifest );
