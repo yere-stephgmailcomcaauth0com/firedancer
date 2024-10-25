@@ -8,8 +8,6 @@
 #include "../context/fd_exec_epoch_ctx.h"
 #include "../context/fd_exec_slot_ctx.h"
 #include "../context/fd_exec_txn_ctx.h"
-#include "../../../util/scratch/fd_scratch.h"
-#include <alloca.h>
 
 
 /* The `Address` type in the Agave system program is logged in the format:
