@@ -127,7 +127,6 @@ fd_snapshot_restore_delete( fd_snapshot_restore_t * self ) {
 
 static int
 fd_snapshot_expect_account_hdr( fd_snapshot_restore_t * restore ) {
-
   ulong accv_sz = restore->accv_sz;
   if( accv_sz < sizeof(fd_solana_account_hdr_t) ) {
     if( FD_LIKELY( accv_sz==0UL ) ) {
@@ -180,7 +179,6 @@ fd_snapshot_restore_account_hdr( fd_snapshot_restore_t * restore ) {
   /* Write account */
   if( !is_dupe ) {
     int write_result = fd_acc_mgr_modify( acc_mgr, funk_txn, key, /* do_create */ 1, hdr->meta.data_len, rec );
-    FD_LOG_NOTICE(("WRITING ACCOUNT accounts/%lu.%lu %lu",restore->accv_slot, restore->accv_id , fd_funk_rec_global_cnt(acc_mgr->funk, fd_funk_wksp( acc_mgr->funk))));
     if( FD_UNLIKELY( write_result != FD_ACC_MGR_SUCCESS ) ) {
       FD_LOG_WARNING(( "fd_acc_mgr_modify(%s) failed (%d)", fd_acct_addr_cstr( key_cstr, key->uc ), write_result ));
       return ENOMEM;

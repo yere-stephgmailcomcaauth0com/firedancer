@@ -5,26 +5,39 @@
    snapshot from a slot execution context. */
 
 #include "../fd_flamenco_base.h"
+#include "fd_snapshot_base.h"
 #include "../runtime/context/fd_exec_slot_ctx.h"
 #include "../runtime/context/fd_exec_epoch_ctx.h"
 #include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
+#include "../runtime/fd_hashes.h"
 #include <stdio.h>
 #include <dirent.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <fcntl.h>
 
-struct fd_key_build {
-  ulong key;
-  ulong count;
-  ulong next;
+
+struct fd_acc_vecs {
+  ulong                 slot;
+  ulong                 count;
+  ulong                 next;
+  fd_snapshot_acc_vec_t acc_vec;
+  char                  filename[256];
+  //int                   fd;
+  /* These can be easily turned into snapshot_slot_acc_vecs */
 };
-typedef struct fd_key_build fd_key_build_t;
+typedef struct fd_acc_vecs fd_acc_vecs_t;
 
   /* clang-format off */
-  #define MAP_NAME         fd_key_build
-  #define MAP_T            fd_key_build_t
-  #define MAP_KEY          key
-  #include "../../util/tmpl/fd_map_giant.c"
+  #define MAP_NAME          fd_acc_vecs
+  #define MAP_T             fd_acc_vecs_t
+  #define MAP_KEY           slot
+  #define MAP_MEMOIZE       0
+  #define MAP_LG_SLOT_CNT   20
+  #include "../../util/tmpl/fd_map.c"
   /* clang-format on */
 
 struct fd_snapshot_create_private;
@@ -94,6 +107,156 @@ int
 fd_snapshot_create( fd_snapshot_create_t * create, 
                     fd_exec_slot_ctx_t *   slot_ctx );
 
+int
+fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_FN_UNUSED slot_ctx,
+                                         fd_solana_manifest_serializable_t * FD_FN_UNUSED manifest ) {
+
+  fd_funk_t * funk = slot_ctx->acc_mgr->funk;
+
+  void * mem                     = fd_valloc_malloc( slot_ctx->valloc, fd_acc_vecs_align(), fd_acc_vecs_footprint() );
+  fd_acc_vecs_t * acc_vecs       = fd_acc_vecs_join( fd_acc_vecs_new( mem ) );
+  fd_acc_vecs_t ** acc_vecs_iter = fd_scratch_alloc( 8UL, sizeof(fd_acc_vecs_t*) * 1<<20 );
+
+
+  ulong id       = 10000000000UL;
+  ulong start_id = id;
+  ulong num_accs = 0UL;
+  for (fd_funk_rec_t const *rec = fd_funk_txn_first_rec( funk, NULL ); NULL != rec; rec = fd_funk_txn_next_rec( funk, rec )) {
+
+    if( num_accs % 10000 == 0 ) {
+      FD_LOG_WARNING(("ID %lu", id));
+    }
+
+    if( !fd_funk_key_is_acc( rec->pair.key ) ) {
+      continue;
+    }
+
+    fd_pubkey_t const * pubkey = fd_type_pun_const( rec->pair.key[0].uc );
+    (void)pubkey;
+
+    uchar             const * raw      = fd_funk_val( rec, fd_funk_wksp( funk ) );
+    fd_account_meta_t const * metadata = fd_type_pun_const( raw );
+
+    if( !metadata ) {
+      continue;
+    }
+
+    if( metadata->magic!=FD_ACCOUNT_META_MAGIC ) {
+      continue;
+    }
+
+    uchar const * acc_data = raw + metadata->hlen;
+    (void)acc_data;
+
+    /* If it is the first record from a slot, create an append vec file,
+       open a file descriptor */
+    
+    num_accs++;
+
+    ulong record_slot = metadata->slot;
+
+    fd_acc_vecs_t * acc_vec_key = fd_acc_vecs_query( acc_vecs, record_slot, NULL );
+    if( !acc_vec_key ) {
+      /* If entry for the slot does not exist, insert a key and assign it's id
+         and slot. Create a corresponding filename that can be used to manage
+         opening and closing the file descriptor. */
+      acc_vec_key = fd_acc_vecs_insert( acc_vecs, record_slot );
+      if( FD_UNLIKELY( !acc_vec_key ) ) {
+        FD_LOG_ERR(( "Can't insert new acc vec" ));
+      }
+      fd_memset( acc_vec_key, 0UL, sizeof(fd_acc_vecs_t) );
+      acc_vec_key->acc_vec.id = id;
+      acc_vec_key->slot       = record_slot;
+
+      /* Set the filename for the append vec. 
+         TODO: the accounts directory should be parameterized. */
+      char * filepath = acc_vec_key->filename;
+      fd_memset( filepath, '\0', 256UL );
+      fd_memcpy( filepath, "/data/ibhatt/dump/mainnet-254462437/own_snapshot/accounts/", 58UL );
+      sprintf( filepath+58UL, "%lu.%lu", record_slot, id );
+
+      /* Increment the id for the next append vec file */
+      acc_vecs_iter[ id-start_id ] = acc_vec_key;
+      id++;
+    }
+
+    /* The file size and number of keys should be updated.
+       TODO: You technically don't need the count here. */
+    acc_vec_key->count           += 1UL;
+    acc_vec_key->acc_vec.file_sz += sizeof(fd_solana_account_hdr_t) + fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN );
+
+    char * file_path = acc_vec_key->filename;
+
+    /* Open the file here. */
+    int fd = open( file_path, O_CREAT | O_WRONLY | O_APPEND, 0644 );
+
+    /* Write out the header. */
+    fd_solana_account_hdr_t header = {0};
+    /* Stored meta */
+    header.meta.write_version_obsolete = 0UL;
+    header.meta.data_len               = metadata->dlen;
+    fd_memcpy( header.meta.pubkey, pubkey, sizeof(fd_pubkey_t) );
+    /* Account Meta */
+    header.info.lamports               = metadata->info.lamports;
+    header.info.rent_epoch             = metadata->info.rent_epoch;
+    fd_memcpy( header.info.owner, metadata->info.owner, sizeof(fd_pubkey_t) );
+    header.info.executable             = metadata->info.executable;
+    /* Hash */
+    fd_memcpy( &header.hash, metadata->hash, sizeof(fd_hash_t) );
+
+    ulong sz = 0UL;
+    fd_io_write( fd, &header, sizeof(fd_solana_account_hdr_t), sizeof(fd_solana_account_hdr_t), &sz );
+    if( FD_UNLIKELY( sz!=sizeof(fd_solana_account_hdr_t) ) ) {
+      FD_LOG_ERR(( "Failed to write out the header" ));
+    }
+    fd_io_write( fd, acc_data, metadata->dlen, metadata->dlen, &sz );
+    if( FD_UNLIKELY( sz!=metadata->dlen ) ) {
+      FD_LOG_ERR(( "Failed to write out the account data" ));
+    }
+    ulong align_sz                       = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
+    uchar padding[FD_SNAPSHOT_ACC_ALIGN] = {0};
+    fd_io_write( fd, padding, align_sz, align_sz, &sz );
+    if( FD_UNLIKELY( sz!=align_sz ) ) {
+      FD_LOG_ERR(( "Failed to write out the padding" ));
+    }
+
+    close( fd );
+
+  }
+
+  /* At this point all of the append vec files have been written out. 
+     We now need to populate the append vec index. */
+
+  fd_bank_hash_info_t info = {0};
+
+  manifest->accounts_db.storages_len                   = id-start_id;
+  manifest->accounts_db.storages                       = fd_scratch_alloc( 8UL, manifest->accounts_db.storages_len * sizeof(fd_snapshot_slot_acc_vecs_t) );
+  manifest->accounts_db.version                        = 1UL;
+  manifest->accounts_db.slot                           = slot_ctx->slot_bank.slot - 1UL;
+  manifest->accounts_db.bank_hash_info                 = info;
+  manifest->accounts_db.historical_roots_len           = 0UL;
+  manifest->accounts_db.historical_roots               = NULL;
+  manifest->accounts_db.historical_roots_with_hash_len = 0UL;
+  manifest->accounts_db.historical_roots_with_hash     = NULL;
+
+  /* Populate the storages */
+  for( ulong i=0UL; i<(id-start_id); i++ ) {
+    fd_acc_vecs_t               * acc_vec = acc_vecs_iter[i];
+    fd_snapshot_slot_acc_vecs_t * storage = &manifest->accounts_db.storages[i];
+    
+    storage->slot                    = acc_vec->slot;
+    storage->account_vecs_len        = 1UL;
+    storage->account_vecs            = fd_scratch_alloc( 8UL, sizeof(fd_snapshot_acc_vec_t) );
+    storage->account_vecs[0].id      = acc_vec->acc_vec.id;
+    storage->account_vecs[0].file_sz = acc_vec->acc_vec.file_sz;
+    struct stat st;
+    FD_TEST( 0 == stat(acc_vec->filename, &st) );
+    FD_TEST((ulong)st.st_size == acc_vec->acc_vec.file_sz);
+  }
+  
+  return 0;
+}
+
 
 static void
 fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
@@ -110,8 +273,8 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
   new_stakes->vote_accounts.vote_accounts_root = NULL;
 
   for( fd_vote_accounts_pair_t_mapnode_t * n = fd_vote_accounts_pair_t_map_minimum(
-        old_stakes->vote_accounts.vote_accounts_pool,
-        old_stakes->vote_accounts.vote_accounts_root );
+       old_stakes->vote_accounts.vote_accounts_pool,
+       old_stakes->vote_accounts.vote_accounts_root );
        n;
        n = fd_vote_accounts_pair_t_map_successor( old_stakes->vote_accounts.vote_accounts_pool, n ) ) {
     
@@ -142,84 +305,6 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
   new_stakes->unused                 = old_stakes->unused;
   new_stakes->epoch                  = old_stakes->epoch;
   new_stakes->stake_history          = old_stakes->stake_history;
-}
-
-int
-fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_FN_UNUSED slot_ctx,
-                                         fd_solana_manifest_serializable_t * FD_FN_UNUSED manifest ) {
-
-  ulong rec_cnt = fd_funk_rec_global_cnt( slot_ctx->acc_mgr->funk, fd_funk_wksp( slot_ctx->acc_mgr->funk) );
-  void * mem = fd_valloc_malloc( slot_ctx->valloc, fd_key_build_align(), fd_key_build_footprint( rec_cnt ) );
-  fd_key_build_t * key_build = fd_key_build_join( fd_key_build_new( mem, rec_cnt, 0UL) );
-
-  ulong num_accs = 0UL;
-  for (fd_funk_rec_t const *rec = fd_funk_txn_first_rec( slot_ctx->acc_mgr->funk, NULL );
-       NULL != rec;
-       rec = fd_funk_txn_next_rec( slot_ctx->acc_mgr->funk, rec )) {
-    if( !fd_funk_key_is_acc( rec->pair.key ) ) {
-      continue;
-    }
-
-    fd_pubkey_t const * pubkey = fd_type_pun_const( rec->pair.key[0].uc );
-    num_accs++;
-
-    FD_BORROWED_ACCOUNT_DECL( acc );
-    if( fd_acc_mgr_view( slot_ctx->acc_mgr, NULL, pubkey, acc ) != FD_ACC_MGR_SUCCESS ) {
-      FD_LOG_ERR(( "Can't find record" ));
-    }
-
-    ulong record_slot = acc->const_meta->slot;
-    fd_key_build_insert( key_build, const ulong *key)
-  }
-  FD_LOG_ERR(("NUM ACCOUNTS %lu", num_accs));
-
-
-
-
-  // fd_solana_accounts_db_fields_t * fields = &manifest->accounts_db;
-
-  // char * dir_buf = fd_scratch_alloc( 8UL, 256UL );
-  // fd_memset( dir_buf, '\0', 256UL );
-  // dir_buf = "/data/ibhatt/dump/mainnet-254462437/extracted_snapshot/accounts/";
-  // ulong dir_len = strlen( dir_buf );
-  
-  // char * filename_buffer = fd_scratch_alloc( 8UL, 256UL );
-  // fd_memset( filename_buffer, '\0', 256UL );
-  // fd_memcpy( filename_buffer, dir_buf, dir_len );
-
-  // char * oldname = fd_scratch_alloc( 8UL, 256UL );
-  // fd_memset( oldname, '\0', 256UL );
-  // fd_memcpy( oldname, dir_buf, dir_len );
-
-  // ulong id = 1000000000UL;
-  // for( ulong i=0UL; i<fields->storages_len; i++ ) {
-  //   fd_snapshot_slot_acc_vecs_t * storage = &fields->storages[i];
-  //   //FD_LOG_NOTICE(("SLOT %lu ENTRIES %lu", storage->slot, storage->account_vecs_len));
-  //   for( ulong j=0UL; j<storage->account_vecs_len; j++ ) {
-  //     fd_snapshot_acc_vec_t * acc_vec = &storage->account_vecs[j];
-  //     //FD_LOG_NOTICE(("acc vec %lu %lu", acc_vec->file_sz, acc_vec->id));
-
-  //     sprintf( filename_buffer+dir_len, "%lu.%lu", storage->slot, id );
-  //     sprintf( oldname+dir_len, "%lu.%lu", storage->slot, acc_vec->id );
-
-  //     acc_vec->id = id;
-  //     id++;
-  //     // FD_LOG_WARNING(("OLD FILENAME %s", oldname));
-  //     // FD_LOG_WARNING(("NEW FILENAME %s", filename_buffer));
-  //     struct stat buffer;
-  //     if( !stat( oldname, &buffer ) ) {
-  //       //rename( oldname, filename_buffer );
-  //     }
-  //     else {
-  //       FD_LOG_WARNING(("CANT RENAME FILE %s %s", oldname, filename_buffer));
-  //     }      
-  //   }
-  // }
-  // FD_LOG_WARNING(("PROCESSED %lu FILES", id));
-
-  // return 0;
-
-  // #undef FD_DT_REG
 }
 
 int FD_FN_UNUSED
@@ -387,7 +472,6 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   /* AT THIS POINT THE BANK IS DONE *******************************************/
   /* Assign the other fields of the manifest to the serializable manifest */
-  new_manifest.accounts_db                           = old_manifest->accounts_db; // newest_manifest.accounts_db;
 
   new_manifest.lamports_per_signature                = slot_ctx->slot_bank.lamports_per_signature; /* DONE! */
 
@@ -399,7 +483,27 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   new_manifest.versioned_epoch_stakes_len            = 0UL;
   new_manifest.versioned_epoch_stakes                = NULL;
 
+  fd_hash_t acc_hash = {0};
+  fd_snapshot_hash( slot_ctx, NULL, &acc_hash, 0);
+  FD_LOG_WARNING(("ACCOUNTS DB HASH %s", FD_BASE58_ENC_32_ALLOCA(&acc_hash)));
+
+  FD_LOG_ERR(("bank hash info %s %s stats %lu %lu %lu %lu %lu", 
+                  FD_BASE58_ENC_32_ALLOCA(&old_manifest->accounts_db.bank_hash_info.snapshot_hash), 
+                  FD_BASE58_ENC_32_ALLOCA(&old_manifest->accounts_db.bank_hash_info.hash), 
+                  old_manifest->accounts_db.bank_hash_info.stats.num_updated_accounts, 
+                  old_manifest->accounts_db.bank_hash_info.stats.num_removed_accounts,
+                  old_manifest->accounts_db.bank_hash_info.stats.num_lamports_stored,
+                  old_manifest->accounts_db.bank_hash_info.stats.total_data_len,
+                  old_manifest->accounts_db.bank_hash_info.stats.num_executable_accounts));
+
   fd_snapshot_create_populate_acc_vec_idx( slot_ctx, &new_manifest );
+  //fd_hash_t hash = {0};
+  fd_bank_hash_stats_t stats = {0};
+  new_manifest.accounts_db.bank_hash_info.snapshot_hash = acc_hash;
+  new_manifest.accounts_db.bank_hash_info.stats = stats;
+
+  /* TODO: THE LAST PIECE IS THE SNAPSHOT ACC HASH */
+
 
   FD_LOG_WARNING(("ACCOUNTS DB HEADER %lu %lu %lu", new_manifest.accounts_db.storages_len, new_manifest.accounts_db.version, new_manifest.accounts_db.slot));
 
@@ -414,7 +518,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
       .dataend = out_manifest + new_manifest_sz + 1 };
   FD_TEST( 0==fd_solana_manifest_serializable_encode( &new_manifest, &encode ) );
 
-  FILE * file = fopen( "/data/ibhatt/manifest", "wb" );
+  FILE * file = fopen( "/data/ibhatt/dump/mainnet-254462437/own_snapshot/snapshots/254462437/254462437", "wb" );
   ulong  bytes_written= fwrite( out_manifest, 1, new_manifest_sz, file );
   if( bytes_written != new_manifest_sz ) {
     FD_LOG_ERR(("FAILED TO WRITE OUT"));

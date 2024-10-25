@@ -183,6 +183,7 @@ fd_snapshot_load( const char *         snapshotfile,
     if (snapshot_type == FD_SNAPSHOT_TYPE_FULL) {
       fd_hash_t accounts_hash;
       fd_snapshot_hash(slot_ctx, tpool, &accounts_hash, check_hash);
+      FD_LOG_WARNING(("ORIGINAL SNAPSHOT HASH %s", FD_BASE58_ENC_32_ALLOCA(&accounts_hash)));
 
       if (memcmp(fhash->uc, accounts_hash.uc, 32) != 0)
         FD_LOG_ERR(( "snapshot accounts_hash %s != %s", FD_BASE58_ENC_32_ALLOCA( accounts_hash.hash ), FD_BASE58_ENC_32_ALLOCA( fhash->uc ) ));
