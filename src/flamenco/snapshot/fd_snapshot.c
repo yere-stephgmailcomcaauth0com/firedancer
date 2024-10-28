@@ -44,7 +44,6 @@ fd_hashes_load(fd_exec_slot_ctx_t * slot_ctx) {
   fd_runtime_save_epoch_bank( slot_ctx );
 }
 
-
 static int
 restore_manifest( void *                 ctx,
                   fd_solana_manifest_t * manifest ) {

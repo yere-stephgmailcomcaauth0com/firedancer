@@ -288,6 +288,13 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
     if( FD_UNLIKELY( err ) ) {
       FD_LOG_ERR(( "Failed to view vote account %s", FD_BASE58_ENC_32_ALLOCA(&n->elem.key) ));
     }
+
+    uchar key[32];
+    fd_base58_decode_32( "FiijvR2ibXEHaFqB127CxrL3vSj19K2Kx1jf2RbK4BWS", key );
+    if( !memcmp( &n->elem.key, key, sizeof(fd_pubkey_t) ) ) {
+      FD_LOG_WARNING(("SLOT FOR FIJI %lu",vote_acc->const_meta->slot));
+    }
+
     new_node->elem.value.lamports   = vote_acc->const_meta->info.lamports;
     new_node->elem.value.data_len   = vote_acc->const_meta->dlen;
     new_node->elem.value.data       = fd_scratch_alloc( 16UL, vote_acc->const_meta->dlen );
@@ -299,6 +306,24 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
 
   }
 
+  FD_BORROWED_ACCOUNT_DECL( stake_acc );
+  fd_delegation_pair_t_mapnode_t * nn = NULL;
+  for( fd_delegation_pair_t_mapnode_t * n = fd_delegation_pair_t_map_minimum(
+      old_stakes->stake_delegations_pool,
+      old_stakes->stake_delegations_root );
+      n; n=nn ) {
+
+    nn = fd_delegation_pair_t_map_successor( old_stakes->stake_delegations_pool, n );
+    
+    int err = fd_acc_mgr_view( slot_ctx->acc_mgr, slot_ctx->funk_txn, &n->elem.account, stake_acc );
+    if( FD_UNLIKELY( err ) ) {
+      fd_delegation_pair_t_map_remove( old_stakes->stake_delegations_pool, &old_stakes->stake_delegations_root, n );
+      fd_delegation_pair_t_map_release( old_stakes->stake_delegations_pool, n );
+      FD_LOG_WARNING(("REMOVING %s", FD_BASE58_ENC_32_ALLOCA(&n->elem.account)));
+    }
+  }
+    
+
   /* Copy over the rest of the fields as they are the same. */
   new_stakes->stake_delegations_pool = old_stakes->stake_delegations_pool;
   new_stakes->stake_delegations_root = old_stakes->stake_delegations_root;
@@ -309,6 +334,17 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
 
 int FD_FN_UNUSED
 fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
+
+  /* Do a funk */
+  fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
+  fd_funk_txn_t * txn  = slot_ctx->funk_txn;
+  fd_funk_start_write( funk );
+  ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
+  if( !publish_err ) {
+    FD_LOG_ERR(("publish err"));
+    return -1;
+  }
+  fd_funk_end_write( funk );
 
   // /****************** HACK TO GET THE ACC DB FROM THE NEWEST ***************/
 
@@ -487,7 +523,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   fd_snapshot_hash( slot_ctx, NULL, &acc_hash, 0);
   FD_LOG_WARNING(("ACCOUNTS DB HASH %s", FD_BASE58_ENC_32_ALLOCA(&acc_hash)));
 
-  FD_LOG_ERR(("bank hash info %s %s stats %lu %lu %lu %lu %lu", 
+  FD_LOG_WARNING(("bank hash info %s %s stats %lu %lu %lu %lu %lu", 
                   FD_BASE58_ENC_32_ALLOCA(&old_manifest->accounts_db.bank_hash_info.snapshot_hash), 
                   FD_BASE58_ENC_32_ALLOCA(&old_manifest->accounts_db.bank_hash_info.hash), 
                   old_manifest->accounts_db.bank_hash_info.stats.num_updated_accounts, 
@@ -502,7 +538,11 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   new_manifest.accounts_db.bank_hash_info.snapshot_hash = acc_hash;
   new_manifest.accounts_db.bank_hash_info.stats = stats;
 
-  /* TODO: THE LAST PIECE IS THE SNAPSHOT ACC HASH */
+
+  /* TODO: Need to write out the snapshot hash to the name of the file as well. */
+
+  /* NOW POPulate the STATUS CACHE */
+  //fd_bank_slot_deltas_t slot_deltas;
 
 
   FD_LOG_WARNING(("ACCOUNTS DB HEADER %lu %lu %lu", new_manifest.accounts_db.storages_len, new_manifest.accounts_db.version, new_manifest.accounts_db.slot));

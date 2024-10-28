@@ -212,6 +212,9 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
       fd_delegation_pair_t_mapnode_t * new_node = fd_delegation_pair_t_map_acquire( epoch_bank->stakes.stake_delegations_pool );
       FD_TEST( new_node );
       fd_memcpy( &new_node->elem, &n->elem, FD_DELEGATION_PAIR_FOOTPRINT );
+      if( new_node->elem.delegation.deactivation_epoch == ULONG_MAX ) {
+        FD_LOG_WARNING(("Delegation with deactivation epoch ULONG_MAX *********"));
+      }
       fd_delegation_pair_t_map_insert(
         epoch_bank->stakes.stake_delegations_pool,
         &epoch_bank->stakes.stake_delegations_root,
@@ -443,6 +446,8 @@ fd_exec_slot_ctx_recover( fd_exec_slot_ctx_t *   slot_ctx,
 fd_exec_slot_ctx_t *
 fd_exec_slot_ctx_recover_status_cache( fd_exec_slot_ctx_t *    ctx,
                                        fd_bank_slot_deltas_t * slot_deltas ) {
+
+  FD_LOG_WARNING(("RECOVER STATUS CACHE %lu", slot_deltas->slot_deltas_len));
   fd_txncache_t * status_cache = ctx->status_cache;
   if( !status_cache ) {
     FD_LOG_WARNING(("No status cache in slot ctx"));
@@ -453,7 +458,9 @@ fd_exec_slot_ctx_recover_status_cache( fd_exec_slot_ctx_t *    ctx,
     ulong num_entries = 0;
     for( ulong i = 0; i < slot_deltas->slot_deltas_len; i++ ) {
       fd_slot_delta_t * slot_delta = &slot_deltas->slot_deltas[i];
+      //FD_LOG_WARNING(("SLOT DELTA %lu %lu %lu", slot_delta->slot, (ulong)slot_delta->is_root, slot_delta->slot_delta_vec_len));
       for( ulong j = 0; j < slot_delta->slot_delta_vec_len; j++ ) {
+        //FD_LOG_WARNING(("VALUE", slot_delta->slot_delta_vec[j].value.statuses/)
         num_entries += slot_delta->slot_delta_vec[j].value.statuses_len;
       }
     }

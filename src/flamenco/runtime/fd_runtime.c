@@ -1848,6 +1848,7 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t *         slot_ctx,
           fd_borrowed_account_t * acc_rec = &txn_ctx->borrowed_accounts[i];
 
           if( dirty_vote_acc && !memcmp( acc_rec->const_meta->info.owner, &fd_solana_vote_program_id, sizeof(fd_pubkey_t) ) ) {
+            //FD_LOG_WARNING(("DIRTY VOTE ACC %s  deact epoch %lu", FD_BASE58_ENC_32_ALLOCA(acc_rec->pubkey), ));
             fd_vote_store_account( slot_ctx, acc_rec );
             FD_SCRATCH_SCOPE_BEGIN {
               fd_vote_state_versioned_t vsv[1];
@@ -1880,6 +1881,7 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t *         slot_ctx,
           }
 
           if( dirty_stake_acc && !memcmp( acc_rec->const_meta->info.owner, &fd_solana_stake_program_id, sizeof(fd_pubkey_t) ) ) {
+            FD_LOG_WARNING(("DIRTY STAKE ACCOUNT %s", FD_BASE58_ENC_32_ALLOCA(acc_rec->pubkey)));
             // TODO: does this correctly handle stake account close?
             fd_store_stake_delegation( slot_ctx, acc_rec );
           }
@@ -2844,7 +2846,7 @@ fd_runtime_checkpt( fd_capture_ctx_t * capture_ctx,
   }
 }
 
-static int
+static int FD_FN_UNUSED
 fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
                              fd_capture_ctx_t * capture_ctx,
                              fd_tpool_t * tpool ) {        
@@ -2900,10 +2902,10 @@ fd_runtime_block_eval_tpool( fd_exec_slot_ctx_t * slot_ctx,
                              ulong                spad_cnt ) {
   (void)scheduler;
 
-  int err = fd_runtime_publish_old_txns( slot_ctx, capture_ctx, tpool );
-  if( err != 0 ) {
-    return err;
-  }
+  // int err = fd_runtime_publish_old_txns( slot_ctx, capture_ctx, tpool );
+  // if( err != 0 ) {
+    // return err;
+  // }
 
   fd_funk_t * funk = slot_ctx->acc_mgr->funk;
 
