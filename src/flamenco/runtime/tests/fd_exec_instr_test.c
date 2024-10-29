@@ -966,6 +966,12 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   return task_info;
 }
 
+static fd_execute_txn_task_info_t *
+_block_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
+                                fd_exec_slot_ctx_t *               slot_ctx,
+                                fd_exec_test_block_context_t const * test_ctx ) {
+}
+
 void
 fd_exec_test_instr_context_destroy( fd_exec_instr_test_runner_t * runner,
                                     fd_exec_instr_ctx_t *         ctx,
@@ -1411,6 +1417,169 @@ fd_exec_instr_test_run( fd_exec_instr_test_runner_t * runner,
   *output = effects;
   return actual_end - (ulong)output_buf;
 }
+
+
+/* Executes several transactions within a single slot. A few things to know when using this harness...
+   - All sysvars are assumed to have been provided in the context
+   - This does not test sigverify
+   - Epoch boundaries are NOT tested
+   - Tested Firedancer code is `fd_runtime_execute_txns_in_waves_tpool` and `fd_runtime_block_execute_finalize_tpool`
+   - Associated entrypoint tested in Agave is `confirm_slot_entries` (except sigverify is removed and verify_ticks is included) */
+ulong
+fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only contains funk instance, so we can borrow instr test runner
+                        void const *                  input_,
+                        void **                       output_,
+                        void *                        output_buf,
+                        ulong                         output_bufsz ) {
+  fd_exec_test_block_context_t const * input  = fd_type_pun_const( input_ );
+  fd_exec_test_block_result_t **       output = fd_type_pun( output_ );
+
+  FD_SCRATCH_SCOPE_BEGIN {
+    int res = _block_context_create_and_exec( runner, input, output, output_buf, output_bufsz );
+    
+  } FD_SCRATCH_SCOPE_END;
+
+  // FD_SCRATCH_SCOPE_BEGIN {
+  //     /* Initialize memory */
+  //   fd_wksp_t *           wksp          = fd_wksp_attach( "wksp" );
+  //   fd_alloc_t *          alloc         = fd_alloc_join( fd_alloc_new( fd_wksp_alloc_laddr( wksp, fd_alloc_align(), fd_alloc_footprint(), 2 ), 2 ), 0 );
+  //   uchar *               slot_ctx_mem  = fd_scratch_alloc( FD_EXEC_SLOT_CTX_ALIGN,  FD_EXEC_SLOT_CTX_FOOTPRINT  );
+  //   fd_exec_slot_ctx_t *  slot_ctx      = fd_exec_slot_ctx_join ( fd_exec_slot_ctx_new ( slot_ctx_mem, fd_alloc_virtual( alloc ) ) );
+
+  //   /* Create and exec transaction */
+  //   fd_execute_txn_task_info_t * task_info = _txn_context_create_and_exec( runner, slot_ctx, input );
+  //   if( task_info == NULL ) {
+  //     _txn_context_destroy( runner, NULL, slot_ctx, wksp, alloc );
+  //     return 0UL;
+  //   }
+  //   fd_exec_txn_ctx_t * txn_ctx = task_info->txn_ctx;
+
+  //   int exec_res = task_info->exec_res;
+
+  //   /* Start saving txn exec results */
+  //   FD_SCRATCH_ALLOC_INIT( l, output_buf );
+  //   ulong output_end = (ulong)output_buf + output_bufsz;
+
+  //   fd_exec_test_txn_result_t * txn_result =
+  //   FD_SCRATCH_ALLOC_APPEND( l, alignof(fd_exec_test_txn_result_t),
+  //                                 sizeof (fd_exec_test_txn_result_t) );
+  //   if( FD_UNLIKELY( _l > output_end ) ) {
+  //     abort();
+  //   }
+  //   fd_memset( txn_result, 0, sizeof(fd_exec_test_txn_result_t) );
+
+  //   /* Capture basic results fields */
+  //   txn_result->executed                          = task_info->txn->flags & FD_TXN_P_FLAGS_EXECUTE_SUCCESS;
+  //   txn_result->sanitization_error                = !( task_info->txn->flags & FD_TXN_P_FLAGS_SANITIZE_SUCCESS );
+  //   txn_result->has_resulting_state               = false;
+  //   txn_result->resulting_state.acct_states_count = 0;
+  //   txn_result->is_ok                             = !exec_res;
+  //   txn_result->status                            = (uint32_t) -exec_res;
+  //   txn_result->instruction_error                 = 0;
+  //   txn_result->instruction_error_index           = 0;
+  //   txn_result->custom_error                      = 0;
+  //   txn_result->executed_units                    = txn_ctx->compute_unit_limit - txn_ctx->compute_meter;
+  //   txn_result->has_fee_details                   = false;
+
+  //   if( txn_result->sanitization_error ) {
+  //     /* If exec_res was an instruction error, capture the error number and idx */
+  //     if( exec_res == FD_RUNTIME_TXN_ERR_INSTRUCTION_ERROR ) {
+  //       txn_result->instruction_error = (uint32_t) -task_info->txn_ctx->exec_err;
+  //       txn_result->instruction_error_index = (uint32_t) task_info->txn_ctx->instr_err_idx;
+  //     }
+  //     ulong actual_end = FD_SCRATCH_ALLOC_FINI( l, 1UL );
+  //     _txn_context_destroy( runner, txn_ctx, slot_ctx, wksp, alloc );
+
+  //     *output = txn_result;
+  //     return actual_end - (ulong)output_buf;
+  //   }
+
+  //   txn_result->has_fee_details                   = true;
+  //   txn_result->fee_details.transaction_fee       = slot_ctx->slot_bank.collected_execution_fees;
+  //   txn_result->fee_details.prioritization_fee    = slot_ctx->slot_bank.collected_priority_fees;
+
+  //   /* Rent is only collected on successfully loaded transactions */
+  //   txn_result->rent                              = slot_ctx->slot_bank.collected_rent;
+
+  //   /* At this point, the transaction has executed */
+  //   if( exec_res ) {
+  //     /* Instruction error index must be set for the txn error to be an instruction error */
+  //     if( txn_ctx->instr_err_idx != INT32_MAX ) {
+  //       txn_result->status = (uint32_t) -FD_RUNTIME_TXN_ERR_INSTRUCTION_ERROR;
+  //       txn_result->instruction_error = (uint32_t) -exec_res;
+  //       txn_result->instruction_error_index = (uint32_t) txn_ctx->instr_err_idx;
+  //       if( exec_res == FD_EXECUTOR_INSTR_ERR_CUSTOM_ERR ) {
+  //         txn_result->custom_error = txn_ctx->custom_err;
+  //       }
+  //     } else {
+  //       txn_result->status = (uint32_t) -exec_res;
+  //     }
+  //   }
+
+  //   if( txn_ctx->return_data.len > 0 ) {
+  //     txn_result->return_data = FD_SCRATCH_ALLOC_APPEND( l, alignof(pb_bytes_array_t),
+  //                                     PB_BYTES_ARRAY_T_ALLOCSIZE( txn_ctx->return_data.len ) );
+  //     if( FD_UNLIKELY( _l > output_end ) ) {
+  //       abort();
+  //     }
+
+  //     txn_result->return_data->size = (pb_size_t)txn_ctx->return_data.len;
+  //     fd_memcpy( txn_result->return_data->bytes, txn_ctx->return_data.data, txn_ctx->return_data.len );
+  //   }
+
+  //   /* Allocate space for captured accounts */
+  //   ulong modified_acct_cnt = txn_ctx->accounts_cnt;
+
+  //   txn_result->has_resulting_state         = true;
+  //   txn_result->resulting_state.acct_states =
+  //     FD_SCRATCH_ALLOC_APPEND( l, alignof(fd_exec_test_acct_state_t),
+  //                                 sizeof (fd_exec_test_acct_state_t) * modified_acct_cnt );
+  //   if( FD_UNLIKELY( _l > output_end ) ) {
+  //     abort();
+  //   }
+
+  //   /* Capture borrowed accounts */
+  //   for( ulong j=0UL; j < txn_ctx->accounts_cnt; j++ ) {
+  //     fd_borrowed_account_t * acc = &txn_ctx->borrowed_accounts[j];
+  //     if( !acc->const_meta ) continue;
+
+  //     ulong modified_idx = txn_result->resulting_state.acct_states_count;
+  //     assert( modified_idx < modified_acct_cnt );
+
+  //     fd_exec_test_acct_state_t * out_acct = &txn_result->resulting_state.acct_states[ modified_idx ];
+  //     memset( out_acct, 0, sizeof(fd_exec_test_acct_state_t) );
+  //     /* Copy over account content */
+
+  //     memcpy( out_acct->address, acc->pubkey, sizeof(fd_pubkey_t) );
+
+  //     out_acct->lamports = acc->const_meta->info.lamports;
+
+  //     if( acc->const_meta->dlen > 0 ) {
+  //       out_acct->data =
+  //         FD_SCRATCH_ALLOC_APPEND( l, alignof(pb_bytes_array_t),
+  //                                     PB_BYTES_ARRAY_T_ALLOCSIZE( acc->const_meta->dlen ) );
+  //       if( FD_UNLIKELY( _l > output_end ) ) {
+  //         abort();
+  //       }
+  //       out_acct->data->size = (pb_size_t)acc->const_meta->dlen;
+  //       fd_memcpy( out_acct->data->bytes, acc->const_data, acc->const_meta->dlen );
+  //     }
+
+  //     out_acct->executable     = acc->const_meta->info.executable;
+  //     out_acct->rent_epoch     = acc->const_meta->info.rent_epoch;
+  //     memcpy( out_acct->owner, acc->const_meta->info.owner, sizeof(fd_pubkey_t) );
+
+  //     txn_result->resulting_state.acct_states_count++;
+  //   }
+
+  //   ulong actual_end = FD_SCRATCH_ALLOC_FINI( l, 1UL );
+  //   _txn_context_destroy( runner, txn_ctx, slot_ctx, wksp, alloc );
+
+  //   *output = txn_result;
+  //   return actual_end - (ulong)output_buf;
+  // } FD_SCRATCH_SCOPE_END;
+}
+
 
 ulong
 fd_exec_txn_test_run( fd_exec_instr_test_runner_t * runner, // Runner only contains funk instance, so we can borrow instr test runner
