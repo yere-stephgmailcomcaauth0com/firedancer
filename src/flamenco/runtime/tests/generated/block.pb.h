@@ -4,6 +4,7 @@
 #ifndef PB_ORG_SOLANA_SEALEVEL_V1_BLOCK_PB_H_INCLUDED
 #define PB_ORG_SOLANA_SEALEVEL_V1_BLOCK_PB_H_INCLUDED
 
+#include "../../../nanopb/pb_firedancer.h"
 #include "context.pb.h"
 #include "txn.pb.h"
 #include "metadata.pb.h"
@@ -13,11 +14,13 @@
 #endif
 
 /* Struct definitions */
-typedef struct org_solana_sealevel_v1_block_context {
+typedef struct fd_exec_test_block_context {
     /* All sanitized transactions in this slot */
-    pb_callback_t txns;
+    pb_size_t txns_count;
+    struct fd_exec_test_sanitized_transaction *txns;
     /* The blockhash queue */
-    pb_callback_t blockhash_queue;
+    pb_size_t blockhash_queue_count;
+    pb_bytes_array_t **blockhash_queue;
     /* Last slot's lamports per signature */
     uint64_t prev_lps;
     /* Parent's signature count */
@@ -28,27 +31,28 @@ typedef struct org_solana_sealevel_v1_block_context {
     uint64_t slot;
     /* Last restart slot */
     uint64_t last_restart_slot;
-} org_solana_sealevel_v1_block_context_t;
+} fd_exec_test_block_context_t;
 
-typedef struct org_solana_sealevel_v1_block_effects {
+typedef struct fd_exec_test_block_effects {
     /* First transaction error code */
     uint32_t first_error;
     /* Resulting account states */
-    pb_callback_t acct_states;
+    pb_size_t acct_states_count;
+    struct fd_exec_test_acct_state *acct_states;
     /* Slot capitalization */
     uint64_t slot_capitalization;
-} org_solana_sealevel_v1_block_effects_t;
+} fd_exec_test_block_effects_t;
 
-typedef struct org_solana_sealevel_v1_block_fixture {
+typedef struct fd_exec_test_block_fixture {
     bool has_metadata;
-    org_solana_sealevel_v1_fixture_metadata_t metadata;
+    fd_exec_test_fixture_metadata_t metadata;
     /* The block context */
     bool has_block_context;
-    org_solana_sealevel_v1_block_context_t block_context;
+    fd_exec_test_block_context_t block_context;
     /* The block effects */
     bool has_block_effects;
-    org_solana_sealevel_v1_block_effects_t block_effects;
-} org_solana_sealevel_v1_block_fixture_t;
+    fd_exec_test_block_effects_t block_effects;
+} fd_exec_test_block_fixture_t;
 
 
 #ifdef __cplusplus
@@ -56,72 +60,83 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_INIT_DEFAULT {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0}
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_INIT_DEFAULT {0, {{NULL}, NULL}, 0}
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_INIT_DEFAULT {false, ORG_SOLANA_SEALEVEL_V1_FIXTURE_METADATA_INIT_DEFAULT, false, ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_INIT_DEFAULT, false, ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_INIT_DEFAULT}
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_INIT_ZERO {{{NULL}, NULL}, {{NULL}, NULL}, 0, 0, 0, 0, 0}
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_INIT_ZERO {0, {{NULL}, NULL}, 0}
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_INIT_ZERO {false, ORG_SOLANA_SEALEVEL_V1_FIXTURE_METADATA_INIT_ZERO, false, ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_INIT_ZERO, false, ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_INIT_ZERO}
+#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT  {0, NULL, 0, NULL, 0, 0, 0, 0, 0}
+#define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT  {0, 0, NULL, 0}
+#define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_DEFAULT  {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT}
+#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO     {0, NULL, 0, NULL, 0, 0, 0, 0, 0}
+#define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO     {0, 0, NULL, 0}
+#define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_ZERO     {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_TXNS_TAG 1
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_BLOCKHASH_QUEUE_TAG 2
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_PREV_LPS_TAG 3
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_PARENT_SIGNATURE_CNT_TAG 4
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_PREV_SLOT_TAG 5
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_SLOT_TAG 6
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_LAST_RESTART_SLOT_TAG 7
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_FIRST_ERROR_TAG 1
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_ACCT_STATES_TAG 2
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_SLOT_CAPITALIZATION_TAG 3
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_METADATA_TAG 1
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_BLOCK_CONTEXT_TAG 2
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_BLOCK_EFFECTS_TAG 3
+#define FD_EXEC_TEST_BLOCK_CONTEXT_TXNS_TAG      1
+#define FD_EXEC_TEST_BLOCK_CONTEXT_BLOCKHASH_QUEUE_TAG 2
+#define FD_EXEC_TEST_BLOCK_CONTEXT_PREV_LPS_TAG  3
+#define FD_EXEC_TEST_BLOCK_CONTEXT_PARENT_SIGNATURE_CNT_TAG 4
+#define FD_EXEC_TEST_BLOCK_CONTEXT_PREV_SLOT_TAG 5
+#define FD_EXEC_TEST_BLOCK_CONTEXT_SLOT_TAG      6
+#define FD_EXEC_TEST_BLOCK_CONTEXT_LAST_RESTART_SLOT_TAG 7
+#define FD_EXEC_TEST_BLOCK_EFFECTS_FIRST_ERROR_TAG 1
+#define FD_EXEC_TEST_BLOCK_EFFECTS_ACCT_STATES_TAG 2
+#define FD_EXEC_TEST_BLOCK_EFFECTS_SLOT_CAPITALIZATION_TAG 3
+#define FD_EXEC_TEST_BLOCK_FIXTURE_METADATA_TAG  1
+#define FD_EXEC_TEST_BLOCK_FIXTURE_BLOCK_CONTEXT_TAG 2
+#define FD_EXEC_TEST_BLOCK_FIXTURE_BLOCK_EFFECTS_TAG 3
 
 /* Struct field encoding specification for nanopb */
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_FIELDLIST(X, a) \
-X(a, CALLBACK, REPEATED, MESSAGE,  txns,              1) \
-X(a, CALLBACK, REPEATED, BYTES,    blockhash_queue,   2) \
+#define FD_EXEC_TEST_BLOCK_CONTEXT_FIELDLIST(X, a) \
+X(a, POINTER,  REPEATED, MESSAGE,  txns,              1) \
+X(a, POINTER,  REPEATED, BYTES,    blockhash_queue,   2) \
 X(a, STATIC,   SINGULAR, UINT64,   prev_lps,          3) \
 X(a, STATIC,   SINGULAR, UINT64,   parent_signature_cnt,   4) \
 X(a, STATIC,   SINGULAR, FIXED64,  prev_slot,         5) \
 X(a, STATIC,   SINGULAR, FIXED64,  slot,              6) \
 X(a, STATIC,   SINGULAR, FIXED64,  last_restart_slot,   7)
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_CALLBACK pb_default_field_callback
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_DEFAULT NULL
-#define org_solana_sealevel_v1_block_context_t_txns_MSGTYPE org_solana_sealevel_v1_sanitized_transaction_t
+#define FD_EXEC_TEST_BLOCK_CONTEXT_CALLBACK NULL
+#define FD_EXEC_TEST_BLOCK_CONTEXT_DEFAULT NULL
+#define fd_exec_test_block_context_t_txns_MSGTYPE fd_exec_test_sanitized_transaction_t
 
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_FIELDLIST(X, a) \
+#define FD_EXEC_TEST_BLOCK_EFFECTS_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   first_error,       1) \
-X(a, CALLBACK, REPEATED, MESSAGE,  acct_states,       2) \
+X(a, POINTER,  REPEATED, MESSAGE,  acct_states,       2) \
 X(a, STATIC,   SINGULAR, UINT64,   slot_capitalization,   3)
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_CALLBACK pb_default_field_callback
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_DEFAULT NULL
-#define org_solana_sealevel_v1_block_effects_t_acct_states_MSGTYPE org_solana_sealevel_v1_acct_state_t
+#define FD_EXEC_TEST_BLOCK_EFFECTS_CALLBACK NULL
+#define FD_EXEC_TEST_BLOCK_EFFECTS_DEFAULT NULL
+#define fd_exec_test_block_effects_t_acct_states_MSGTYPE fd_exec_test_acct_state_t
 
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_FIELDLIST(X, a) \
+#define FD_EXEC_TEST_BLOCK_FIXTURE_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  metadata,          1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  block_context,     2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  block_effects,     3)
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_CALLBACK NULL
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_DEFAULT NULL
-#define org_solana_sealevel_v1_block_fixture_t_metadata_MSGTYPE org_solana_sealevel_v1_fixture_metadata_t
-#define org_solana_sealevel_v1_block_fixture_t_block_context_MSGTYPE org_solana_sealevel_v1_block_context_t
-#define org_solana_sealevel_v1_block_fixture_t_block_effects_MSGTYPE org_solana_sealevel_v1_block_effects_t
+#define FD_EXEC_TEST_BLOCK_FIXTURE_CALLBACK NULL
+#define FD_EXEC_TEST_BLOCK_FIXTURE_DEFAULT NULL
+#define fd_exec_test_block_fixture_t_metadata_MSGTYPE fd_exec_test_fixture_metadata_t
+#define fd_exec_test_block_fixture_t_block_context_MSGTYPE fd_exec_test_block_context_t
+#define fd_exec_test_block_fixture_t_block_effects_MSGTYPE fd_exec_test_block_effects_t
 
-extern const pb_msgdesc_t org_solana_sealevel_v1_block_context_t_msg;
-extern const pb_msgdesc_t org_solana_sealevel_v1_block_effects_t_msg;
-extern const pb_msgdesc_t org_solana_sealevel_v1_block_fixture_t_msg;
+extern const pb_msgdesc_t fd_exec_test_block_context_t_msg;
+extern const pb_msgdesc_t fd_exec_test_block_effects_t_msg;
+extern const pb_msgdesc_t fd_exec_test_block_fixture_t_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_FIELDS &org_solana_sealevel_v1_block_context_t_msg
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_FIELDS &org_solana_sealevel_v1_block_effects_t_msg
-#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_FIELDS &org_solana_sealevel_v1_block_fixture_t_msg
+#define FD_EXEC_TEST_BLOCK_CONTEXT_FIELDS &fd_exec_test_block_context_t_msg
+#define FD_EXEC_TEST_BLOCK_EFFECTS_FIELDS &fd_exec_test_block_effects_t_msg
+#define FD_EXEC_TEST_BLOCK_FIXTURE_FIELDS &fd_exec_test_block_fixture_t_msg
 
 /* Maximum encoded size of messages (where known) */
-/* org_solana_sealevel_v1_BlockContext_size depends on runtime parameters */
-/* org_solana_sealevel_v1_BlockEffects_size depends on runtime parameters */
-/* org_solana_sealevel_v1_BlockFixture_size depends on runtime parameters */
+/* fd_exec_test_BlockContext_size depends on runtime parameters */
+/* fd_exec_test_BlockEffects_size depends on runtime parameters */
+/* fd_exec_test_BlockFixture_size depends on runtime parameters */
+
+/* Mapping from canonical names (mangle_names or overridden package name) */
+#define org_solana_sealevel_v1_BlockContext fd_exec_test_BlockContext
+#define org_solana_sealevel_v1_BlockEffects fd_exec_test_BlockEffects
+#define org_solana_sealevel_v1_BlockFixture fd_exec_test_BlockFixture
+#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_INIT_DEFAULT FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT
+#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_INIT_DEFAULT FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT
+#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_INIT_DEFAULT FD_EXEC_TEST_BLOCK_FIXTURE_INIT_DEFAULT
+#define ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT_INIT_ZERO FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO
+#define ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS_INIT_ZERO FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO
+#define ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE_INIT_ZERO FD_EXEC_TEST_BLOCK_FIXTURE_INIT_ZERO
 
 #ifdef __cplusplus
 } /* extern "C" */

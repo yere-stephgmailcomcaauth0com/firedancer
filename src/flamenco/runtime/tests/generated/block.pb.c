@@ -6,13 +6,13 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(ORG_SOLANA_SEALEVEL_V1_BLOCK_CONTEXT, org_solana_sealevel_v1_block_context_t, AUTO)
+PB_BIND(FD_EXEC_TEST_BLOCK_CONTEXT, fd_exec_test_block_context_t, AUTO)
 
 
-PB_BIND(ORG_SOLANA_SEALEVEL_V1_BLOCK_EFFECTS, org_solana_sealevel_v1_block_effects_t, AUTO)
+PB_BIND(FD_EXEC_TEST_BLOCK_EFFECTS, fd_exec_test_block_effects_t, AUTO)
 
 
-PB_BIND(ORG_SOLANA_SEALEVEL_V1_BLOCK_FIXTURE, org_solana_sealevel_v1_block_fixture_t, 2)
+PB_BIND(FD_EXEC_TEST_BLOCK_FIXTURE, fd_exec_test_block_fixture_t, AUTO)
 
 
 
