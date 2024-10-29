@@ -566,6 +566,7 @@ unprivileged_init( fd_topo_t *      topo,
   quic->config.net.ip_addr                = tile->quic.ip_addr;
   quic->config.net.listen_udp_port        = tile->quic.quic_transaction_listen_port;
   quic->config.idle_timeout               = tile->quic.idle_timeout_millis * 1000000UL;
+  quic->config.ack_delay                  = tile->quic.ack_delay_millis * 1000000UL;
   quic->config.initial_rx_max_stream_data = FD_TXN_MTU;
   quic->config.retry                      = tile->quic.retry;
   fd_memcpy( quic->config.link.src_mac_addr, tile->quic.src_mac_addr, 6 );
