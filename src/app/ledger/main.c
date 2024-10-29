@@ -211,6 +211,9 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     fd_block_t * blk = fd_blockstore_block_query( blockstore, slot );
     if( blk == NULL ) {
       FD_LOG_WARNING( ( "failed to read slot %ld", slot ) );
+      ledger_args->slot_ctx->tick_height += 64UL; /* TODO: We should be using hte computed quantity of ticks here.*/
+      ledger_args->slot_ctx->slot_bank.max_tick_height += 64;
+
       fd_blockstore_end_read( blockstore );
       continue;
     }
@@ -221,7 +224,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
     /* TODO:FIXME: This is where we want to do all of the snapshot related testing */
     //if( ledger_args->slot_ctx->slot_bank.slot == 254462443 ) {
-    if( ledger_args->slot_ctx->slot_bank.slot==254462501 ) {
+    if( false && ledger_args->slot_ctx->slot_bank.slot==254462501 ) {
       fd_snapshot_create_manifest( ledger_args->slot_ctx );
       first_create = 1;
     }

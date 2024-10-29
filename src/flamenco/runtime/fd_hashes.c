@@ -233,6 +233,7 @@ fd_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
   sort_pubkey_hash_pair_inplace( dirty_keys, dirty_key_cnt );
   fd_pubkey_hash_pair_list_t list1 = { .pairs = dirty_keys, .pairs_len = dirty_key_cnt };
   fd_hash_account_deltas(&list1, 1, &slot_ctx->account_delta_hash, slot_ctx );
+  FD_LOG_WARNING(("HASH ACCOUNT DELTAS OF LENGHTH %lu", list1.pairs_len));
 
   fd_sha256_t sha;
   fd_sha256_init( &sha );
@@ -1032,7 +1033,9 @@ fd_accounts_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
     fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx, 0, 1, &num_pairs, lthash_values, 0 );
     FD_TEST(NULL != pairs);
     fd_pubkey_hash_pair_list_t list1 = { .pairs = pairs, .pairs_len = num_pairs };
+    FD_LOG_WARNING(("HASH BEFORE %s accs len %lu", FD_BASE58_ENC_32_ALLOCA(accounts_hash), list1.pairs_len));
     fd_hash_account_deltas( &list1, 1, accounts_hash, slot_ctx );
+    FD_LOG_WARNING(("HASH AFTER %s", FD_BASE58_ENC_32_ALLOCA(accounts_hash)));
     fd_valloc_free( slot_ctx->valloc, pairs );
 
     fd_lthash_value_t * acc = (fd_lthash_value_t *)fd_type_pun(slot_ctx->slot_bank.lthash.lthash);
@@ -1154,7 +1157,7 @@ fd_snapshot_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
   (void) check_hash;
 
   if( FD_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash ) ) {
-    if( fd_should_snapshot_include_epoch_accounts_hash (slot_ctx) ) {
+    if( fd_should_snapshot_include_epoch_accounts_hash( slot_ctx ) ) {
       FD_LOG_NOTICE(( "snapshot is including epoch account hash" ));
       fd_sha256_t h;
       fd_hash_t hash;
@@ -1164,6 +1167,10 @@ fd_snapshot_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
       fd_sha256_append( &h, (uchar const *) hash.hash, sizeof( fd_hash_t ) );
       fd_sha256_append( &h, (uchar const *) slot_ctx->slot_bank.epoch_account_hash.hash, sizeof( fd_hash_t ) );
       fd_sha256_fini( &h, accounts_hash );
+
+      FD_LOG_WARNING(("ALL OTHER HASHES %s %s %s", FD_BASE58_ENC_32_ALLOCA(hash.hash), 
+                                                               FD_BASE58_ENC_32_ALLOCA(slot_ctx->slot_bank.epoch_account_hash.hash), 
+                                                               FD_BASE58_ENC_32_ALLOCA(accounts_hash->hash)));
 
       return 0;
     }

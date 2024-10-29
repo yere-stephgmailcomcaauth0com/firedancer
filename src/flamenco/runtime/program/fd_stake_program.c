@@ -3211,6 +3211,8 @@ fd_stakes_upsert_stake_delegation( fd_exec_slot_ctx_t * slot_ctx, fd_borrowed_ac
       fd_memcpy( new_node->elem.key.uc, stake_account->pubkey->uc, sizeof(fd_pubkey_t) );
       fd_stake_accounts_pair_t_map_insert( slot_ctx->slot_bank.stake_account_keys.stake_accounts_pool, &slot_ctx->slot_bank.stake_account_keys.stake_accounts_root, new_node );
     }
+  } else {
+    FD_LOG_WARNING(("NOT NEW CASE %s", FD_BASE58_ENC_32_ALLOCA(stake_account->pubkey)));
   }
 }
 

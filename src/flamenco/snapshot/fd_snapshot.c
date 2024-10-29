@@ -180,7 +180,8 @@ fd_snapshot_load( const char *         snapshotfile,
 
   if( verify_hash ) {
     if (snapshot_type == FD_SNAPSHOT_TYPE_FULL) {
-      fd_hash_t accounts_hash;
+      fd_hash_t accounts_hash = {0};
+      FD_LOG_WARNING(("BEFORE ACC HASH %s", FD_BASE58_ENC_32_ALLOCA(&accounts_hash)));
       fd_snapshot_hash(slot_ctx, tpool, &accounts_hash, check_hash);
       FD_LOG_WARNING(("ORIGINAL SNAPSHOT HASH %s", FD_BASE58_ENC_32_ALLOCA(&accounts_hash)));
 

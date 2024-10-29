@@ -212,9 +212,9 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
       fd_delegation_pair_t_mapnode_t * new_node = fd_delegation_pair_t_map_acquire( epoch_bank->stakes.stake_delegations_pool );
       FD_TEST( new_node );
       fd_memcpy( &new_node->elem, &n->elem, FD_DELEGATION_PAIR_FOOTPRINT );
-      if( new_node->elem.delegation.deactivation_epoch == ULONG_MAX ) {
-        FD_LOG_WARNING(("Delegation with deactivation epoch ULONG_MAX *********"));
-      }
+      // if( new_node->elem.delegation.deactivation_epoch == ULONG_MAX ) {
+        // FD_LOG_WARNING(("Delegation with deactivation epoch ULONG_MAX *********"));
+      // }
       fd_delegation_pair_t_map_insert(
         epoch_bank->stakes.stake_delegations_pool,
         &epoch_bank->stakes.stake_delegations_root,
@@ -261,6 +261,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
   slot_bank->prev_slot = oldbank->parent_slot;
   fd_memcpy(&slot_bank->banks_hash, &oldbank->hash, sizeof(oldbank->hash));
   fd_memcpy(&slot_ctx->prev_banks_hash, &oldbank->parent_hash, sizeof(oldbank->parent_hash));
+  FD_LOG_WARNING(("BANKS HASH %s PREV BANKS HASH %s", FD_BASE58_ENC_32_ALLOCA( slot_bank->banks_hash.hash ), FD_BASE58_ENC_32_ALLOCA(oldbank->parent_hash.hash)));
   fd_memcpy(&slot_bank->fee_rate_governor, &oldbank->fee_rate_governor, sizeof(oldbank->fee_rate_governor));
   slot_bank->lamports_per_signature = oldbank->fee_calculator.lamports_per_signature;
   slot_ctx->prev_lamports_per_signature = oldbank->fee_calculator.lamports_per_signature;
@@ -273,6 +274,7 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
   epoch_bank->genesis_creation_time = oldbank->genesis_creation_time;
   epoch_bank->slots_per_year = oldbank->slots_per_year;
   slot_bank->max_tick_height = oldbank->max_tick_height;
+  FD_LOG_WARNING(("MAX TICK HEIGHT %lu %lu", slot_ctx->tick_height, slot_bank->max_tick_height));
   fd_memcpy( &epoch_bank->inflation, &oldbank->inflation, FD_INFLATION_FOOTPRINT );
   fd_memcpy( &epoch_bank->epoch_schedule, &oldbank->epoch_schedule, FD_EPOCH_SCHEDULE_FOOTPRINT );
   epoch_bank->rent = oldbank->rent_collector.rent;

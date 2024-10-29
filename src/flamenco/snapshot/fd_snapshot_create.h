@@ -320,6 +320,35 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
       fd_delegation_pair_t_map_remove( old_stakes->stake_delegations_pool, &old_stakes->stake_delegations_root, n );
       fd_delegation_pair_t_map_release( old_stakes->stake_delegations_pool, n );
       FD_LOG_WARNING(("REMOVING %s", FD_BASE58_ENC_32_ALLOCA(&n->elem.account)));
+    } else {
+
+      uchar key[32];
+      fd_base58_decode_32("FQgW8xrr6KDYivzfdeezaaVE3ws7xJBb7Fu27Zfk6c9n", key);
+
+      if( !memcmp(key, &n->elem.account, sizeof(fd_pubkey_t)) ) {
+        FD_LOG_WARNING(("SLOT FOR AGF %lu",n->elem.delegation.deactivation_epoch));
+      }
+
+      fd_bincode_decode_ctx_t ctx = {
+        .data    = stake_acc->const_data,
+        .dataend = stake_acc->const_data + stake_acc->const_meta->dlen,
+        .valloc  = fd_scratch_virtual()
+      };
+      fd_stake_state_v2_t stake_state = {0};
+      err = fd_stake_state_v2_decode( &stake_state, &ctx );
+      if( FD_UNLIKELY( err ) ) {
+        FD_LOG_ERR(( "Failed to decode stake state" ));
+      }
+
+      if( n->elem.delegation.deactivation_epoch == ULONG_MAX && stake_state.inner.stake.stake.delegation.deactivation_epoch != ULONG_MAX ) {
+        FD_LOG_WARNING(("DELEGATION %lu", stake_state.inner.stake.stake.delegation.deactivation_epoch));
+      }
+
+      n->elem.delegation = stake_state.inner.stake.stake.delegation;
+      if( !memcmp(key, &n->elem.account, sizeof(fd_pubkey_t)) ) {
+        FD_LOG_WARNING(("SLOT FOR AGF 2 %lu",n->elem.delegation.deactivation_epoch));
+      }
+
     }
   }
     
@@ -440,6 +469,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.capitalization        = slot_ctx->slot_bank.capitalization; /* DONE! */
 
+  new_manifest.bank.tick_height           = slot_ctx->tick_height; /* DONE! */
   new_manifest.bank.max_tick_height       = slot_ctx->tick_height; /* DONE! */
 
   new_manifest.bank.hashes_per_tick       = &epoch_bank->hashes_per_tick; /* DONE */
