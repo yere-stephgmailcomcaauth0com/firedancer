@@ -305,8 +305,7 @@ fd_quic_sandbox_new_conn_established( fd_quic_sandbox_t * sandbox,
       /* peer_conn_id */ &peer_conn_id,
       /* dst_ip_addr  */ FD_QUIC_SANDBOX_PEER_IP4,
       /* dst_udp_addr */ FD_QUIC_SANDBOX_PEER_PORT,
-      /* server       */ quic->config.role == FD_QUIC_ROLE_SERVER,
-      /* version      */ 1 );
+      /* server       */ quic->config.role == FD_QUIC_ROLE_SERVER );
   if( FD_UNLIKELY( !conn ) ) {
     FD_LOG_WARNING(( "fd_quic_conn_create failed" ));
     return NULL;
@@ -393,4 +392,11 @@ fd_quic_sandbox_send_lone_frame( fd_quic_sandbox_t * sandbox,
   };
 
   fd_quic_sandbox_send_frame( sandbox, conn, &pkt_meta, frame, frame_sz );
+
+  if( !( pkt_meta.ack_flag & ACK_FLAG_CANCEL ) ) {
+    fd_quic_ack_pkt( conn->ack_gen, pkt_meta.pkt_number, pkt_meta.enc_level, sandbox->wallclock );
+    if( pkt_meta.ack_flag & ACK_FLAG_RQD ) {
+      conn->ack_gen->is_elicited |= 1;
+    }
+  }
 }

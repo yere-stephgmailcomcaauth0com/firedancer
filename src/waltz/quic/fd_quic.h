@@ -81,6 +81,7 @@
 
 /* TODO provide fd_quic on non-hosted targets */
 
+#include "fd_quic_common.h"
 #include "fd_quic_enum.h"
 
 #include "../aio/fd_aio.h"
@@ -142,18 +143,25 @@ struct __attribute__((aligned(16UL))) fd_quic_config {
      event loop. */
   /* TODO are there any other duties than ACKs? */
   ulong service_interval;
+# define FD_QUIC_DEFAULT_SERVICE_INTERVAL (ulong)(50e6) /* 50ms */
 
   /* ping_interval: inactivity time in ns before sending a
      ping request to peer. */
   /* TODO unused for now */
   ulong ping_interval;
 
-  /* idle_timeout: time in ns before timing out a conn.
-     Also sent to peer via max_idle_timeout transport param */
+  /* idle_timeout: Upper bound on conn idle timeout (ns).
+     Also sent to peer via max_idle_timeout transport param.
+     If the peer specifies a lower idle timeout, that is used instead. */
   ulong idle_timeout;
 
    /* retry: whether address validation using retry packets is enabled (RFC 9000, Section 8.1.2) */
   int retry;
+
+  /* ack_threshold: immediately send an ACK when the number of
+     unacknowledged stream bytes exceeds this value. */
+  ulong ack_threshold;
+# define FD_QUIC_DEFAULT_ACK_THRESHOLD (65536UL) /* 64 KiB */
 
   /* TLS config ********************************************/
 
@@ -204,7 +212,6 @@ struct __attribute__((aligned(16UL))) fd_quic_config {
     uchar dscp;
   } net;
 };
-typedef struct fd_quic_config fd_quic_config_t;
 
 /* Callback API *******************************************************/
 
@@ -309,7 +316,7 @@ typedef struct fd_quic_callbacks fd_quic_callbacks_t;
 /* TODO: evaluate performance impact of metrics */
 
 union fd_quic_metrics {
-  ulong  ul[ 30 ];
+  ulong  ul[ 51 ];
   struct {
     /* Network metrics */
     ulong net_rx_pkt_cnt;  /* number of IP packets received */
@@ -318,7 +325,7 @@ union fd_quic_metrics {
     ulong net_tx_byte_cnt; /* total bytes sent */
 
     /* Conn metrics */
-    ulong conn_active_cnt;        /* number of active conns */
+    ulong conn_active_cnt;         /* number of active conns */
     ulong conn_created_cnt;        /* number of conns created */
     ulong conn_closed_cnt;         /* number of conns gracefully closed */
     ulong conn_aborted_cnt;        /* number of conns aborted */
@@ -326,6 +333,9 @@ union fd_quic_metrics {
     ulong conn_err_no_slots_cnt;   /* number of conns that failed to create due to lack of slots */
     ulong conn_err_tls_fail_cnt;   /* number of conns that aborted due to TLS failure */
     ulong conn_err_retry_fail_cnt; /* number of conns that failed during retry (e.g. invalid token) */
+
+    /* Frame metrics */
+    ulong frame_rx_cnt[ 0x20 ];    /* number of frames received, indexed by frame ID */
 
     /* Handshake metrics */
     ulong hs_created_cnt;          /* number of handshake flows created */
@@ -361,7 +371,6 @@ struct fd_quic {
 
   /* ... private variable-length structures follow ... */
 };
-typedef struct fd_quic fd_quic_t;
 
 FD_PROTOTYPES_BEGIN
 

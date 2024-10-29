@@ -63,6 +63,7 @@ static FD_TL char _report_prefix[100] = {0};
 
 struct __attribute__((aligned(32UL))) fd_exec_instr_test_runner_private {
   fd_funk_t * funk;
+  fd_spad_t * spad;
 };
 
 ulong
@@ -80,6 +81,7 @@ fd_exec_instr_test_runner_footprint( void ) {
 
 fd_exec_instr_test_runner_t *
 fd_exec_instr_test_runner_new( void * mem,
+                               void * spad_mem,
                                ulong  wksp_tag ) {
   FD_SCRATCH_ALLOC_INIT( l, mem );
   void * runner_mem = FD_SCRATCH_ALLOC_APPEND( l, alignof(fd_exec_instr_test_runner_t), sizeof(fd_exec_instr_test_runner_t) );
@@ -96,6 +98,9 @@ fd_exec_instr_test_runner_new( void * mem,
 
   fd_exec_instr_test_runner_t * runner = runner_mem;
   runner->funk = funk;
+
+  /* Create spad */
+  runner->spad = fd_spad_join( fd_spad_new( spad_mem, fd_ulong_align_up( 128UL * FD_ACC_TOT_SZ_MAX, FD_SPAD_ALIGN ) ) );
   return runner;
 }
 
@@ -104,6 +109,7 @@ fd_exec_instr_test_runner_delete( fd_exec_instr_test_runner_t * runner ) {
   if( FD_UNLIKELY( !runner ) ) return NULL;
   fd_funk_delete( fd_funk_leave( runner->funk ) );
   runner->funk = NULL;
+  runner->spad = NULL;
   return runner;
 }
 
@@ -307,11 +313,7 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
   memset( txn_ctx->_txn_raw, 0, sizeof(fd_rawtxn_b_t) );
   memset( txn_ctx->return_data.program_id.key, 0, sizeof(fd_pubkey_t) );
   txn_ctx->return_data.len         = 0;
-
-  ulong       total_mem_sz = fd_ulong_align_up( 128UL * FD_ACC_TOT_SZ_MAX, FD_SPAD_ALIGN );
-  uchar *     mem          = fd_valloc_malloc( slot_ctx->valloc, FD_SPAD_ALIGN, total_mem_sz );
-  fd_spad_t * spad         = fd_spad_join( fd_spad_new( mem, total_mem_sz ) );
-  txn_ctx->spad            = spad;
+  txn_ctx->spad                    = runner->spad;
 
   /* Set up instruction context */
 
@@ -949,11 +951,7 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   fd_runtime_prepare_txns_start( slot_ctx, task_info, txn, 1UL );
 
   /* Setup the spad for account allocation */
-  ulong       total_mem_sz = fd_ulong_align_up( 128UL * FD_ACC_TOT_SZ_MAX, FD_SPAD_ALIGN );
-  uchar *     mem          = fd_valloc_malloc( slot_ctx->valloc, FD_SPAD_ALIGN, total_mem_sz );
-  fd_spad_t * spad         = fd_spad_join( fd_spad_new( mem, total_mem_sz ) );
-  FD_TEST( spad );
-  task_info->txn_ctx->spad = spad;
+  task_info->txn_ctx->spad = runner->spad;
 
   fd_runtime_pre_execute_check( task_info );
 
@@ -964,7 +962,7 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
 
   slot_ctx->slot_bank.collected_execution_fees += task_info->txn_ctx->execution_fee;
   slot_ctx->slot_bank.collected_priority_fees  += task_info->txn_ctx->priority_fee;
-
+  slot_ctx->slot_bank.collected_rent           += task_info->txn_ctx->collected_rent;
   return task_info;
 }
 
@@ -974,24 +972,10 @@ fd_exec_test_instr_context_destroy( fd_exec_instr_test_runner_t * runner,
                                     fd_wksp_t *                   wksp,
                                     fd_alloc_t *                  alloc ) {
   if( !ctx ) return;
-  fd_exec_slot_ctx_t *  slot_ctx  = ctx->slot_ctx;
+  fd_exec_slot_ctx_t *  slot_ctx  = (fd_exec_slot_ctx_t *)ctx->slot_ctx;
   if( !slot_ctx ) return;
   fd_acc_mgr_t *        acc_mgr   = slot_ctx->acc_mgr;
   fd_funk_txn_t *       funk_txn  = slot_ctx->funk_txn;
-
-  // Free any allocated borrowed account data
-  for( ulong i = 0; i < ctx->txn_ctx->accounts_cnt; ++i ) {
-    fd_borrowed_account_t * acc = &ctx->txn_ctx->borrowed_accounts[i];
-    void * borrowed_account_mem = fd_borrowed_account_destroy( acc );
-    fd_wksp_t * belongs_to_wksp = fd_wksp_containing( borrowed_account_mem );
-    if( belongs_to_wksp ) {
-      fd_wksp_free_laddr( borrowed_account_mem );
-    }
-  }
-
-  if( ctx->txn_ctx ) {
-    fd_valloc_free( slot_ctx->valloc, ctx->txn_ctx->spad );
-  }
 
   // Free alloc
   if( alloc ) {
@@ -1021,11 +1005,6 @@ _txn_context_destroy( fd_exec_instr_test_runner_t * runner,
   if( !slot_ctx ) return; // This shouldn't be false either
   fd_acc_mgr_t *        acc_mgr   = slot_ctx->acc_mgr;
   fd_funk_txn_t *       funk_txn  = slot_ctx->funk_txn;
-
-  /* Free the spad which holds all of the allocations for the borrowed accs */
-  if( txn_ctx ) {
-    fd_valloc_free( slot_ctx->valloc, txn_ctx->spad );
-  }
 
   // Free alloc
   if( alloc ) {
@@ -1489,6 +1468,16 @@ fd_exec_txn_test_run( fd_exec_instr_test_runner_t * runner, // Runner only conta
       if( exec_res == FD_RUNTIME_TXN_ERR_INSTRUCTION_ERROR ) {
         txn_result->instruction_error = (uint32_t) -task_info->txn_ctx->exec_err;
         txn_result->instruction_error_index = (uint32_t) task_info->txn_ctx->instr_err_idx;
+
+        /* 
+        TODO: precompile error codes are not conformant, so we're ignoring custom error codes for them for now. This should be revisited in the future. 
+        For now, only precompiles throw custom error codes, so we can ignore all custom error codes thrown in the sanitization phase. If this changes,
+        this logic will have to be revisited.
+
+        if( task_info->txn_ctx->exec_err == FD_EXECUTOR_INSTR_ERR_CUSTOM_ERR ) {
+          txn_result->custom_error = txn_ctx->custom_err;
+        } 
+        */
       }
       ulong actual_end = FD_SCRATCH_ALLOC_FINI( l, 1UL );
       _txn_context_destroy( runner, txn_ctx, slot_ctx, wksp, alloc );
@@ -1502,7 +1491,7 @@ fd_exec_txn_test_run( fd_exec_instr_test_runner_t * runner, // Runner only conta
     txn_result->fee_details.prioritization_fee    = slot_ctx->slot_bank.collected_priority_fees;
 
     /* Rent is only collected on successfully loaded transactions */
-    txn_result->rent                              = slot_ctx->slot_bank.collected_rent;
+    txn_result->rent                              = txn_ctx->collected_rent;
 
     /* At this point, the transaction has executed */
     if( exec_res ) {
