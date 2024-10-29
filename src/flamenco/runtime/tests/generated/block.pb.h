@@ -41,6 +41,8 @@ typedef struct fd_exec_test_block_effects {
     struct fd_exec_test_acct_state *acct_states;
     /* Slot capitalization */
     uint64_t slot_capitalization;
+    /* Accounts lattice hash */
+    pb_bytes_array_t *lt_hash;
 } fd_exec_test_block_effects_t;
 
 typedef struct fd_exec_test_block_fixture {
@@ -61,10 +63,10 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT  {0, NULL, 0, NULL, 0, 0, 0, 0, 0}
-#define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT  {0, 0, NULL, 0}
+#define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT  {0, 0, NULL, 0, NULL}
 #define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_DEFAULT  {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT}
 #define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO     {0, NULL, 0, NULL, 0, 0, 0, 0, 0}
-#define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO     {0, 0, NULL, 0}
+#define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO     {0, 0, NULL, 0, NULL}
 #define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_ZERO     {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -78,6 +80,7 @@ extern "C" {
 #define FD_EXEC_TEST_BLOCK_EFFECTS_FIRST_ERROR_TAG 1
 #define FD_EXEC_TEST_BLOCK_EFFECTS_ACCT_STATES_TAG 2
 #define FD_EXEC_TEST_BLOCK_EFFECTS_SLOT_CAPITALIZATION_TAG 3
+#define FD_EXEC_TEST_BLOCK_EFFECTS_LT_HASH_TAG   4
 #define FD_EXEC_TEST_BLOCK_FIXTURE_METADATA_TAG  1
 #define FD_EXEC_TEST_BLOCK_FIXTURE_BLOCK_CONTEXT_TAG 2
 #define FD_EXEC_TEST_BLOCK_FIXTURE_BLOCK_EFFECTS_TAG 3
@@ -98,7 +101,8 @@ X(a, STATIC,   SINGULAR, FIXED64,  last_restart_slot,   7)
 #define FD_EXEC_TEST_BLOCK_EFFECTS_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   first_error,       1) \
 X(a, POINTER,  REPEATED, MESSAGE,  acct_states,       2) \
-X(a, STATIC,   SINGULAR, UINT64,   slot_capitalization,   3)
+X(a, STATIC,   SINGULAR, UINT64,   slot_capitalization,   3) \
+X(a, POINTER,  SINGULAR, BYTES,    lt_hash,           4)
 #define FD_EXEC_TEST_BLOCK_EFFECTS_CALLBACK NULL
 #define FD_EXEC_TEST_BLOCK_EFFECTS_DEFAULT NULL
 #define fd_exec_test_block_effects_t_acct_states_MSGTYPE fd_exec_test_acct_state_t

@@ -995,9 +995,12 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   fd_acc_mgr_t * acc_mgr = fd_acc_mgr_new( fd_scratch_alloc( FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT ), funk );
 
   /* Set up slot context */
-  slot_ctx->epoch_ctx = epoch_ctx;
   slot_ctx->funk_txn  = funk_txn;
   slot_ctx->acc_mgr   = acc_mgr;
+  // slot_ctx->blockstore = ... // do we need this?
+  // slot_ctx->block = ... // ...or this?
+
+  slot_ctx->epoch_ctx = epoch_ctx;
 
   /* Set up slot bank */
   fd_slot_bank_t * slot_bank = &slot_ctx->slot_bank;
@@ -1013,6 +1016,7 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   };
   slot_bank->block_height = test_ctx->prev_slot + 1UL;
   // slot_bank->last_restart_slot = ...;
+
 
   /*  
   fd_runtime_block_sysvar_update_pre_execute
