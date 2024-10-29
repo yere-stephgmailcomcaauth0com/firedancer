@@ -234,6 +234,9 @@ fd_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
   fd_pubkey_hash_pair_list_t list1 = { .pairs = dirty_keys, .pairs_len = dirty_key_cnt };
   fd_hash_account_deltas(&list1, 1, &slot_ctx->account_delta_hash, slot_ctx );
   FD_LOG_WARNING(("HASH ACCOUNT DELTAS OF LENGHTH %lu", list1.pairs_len));
+  for( ulong i=0UL; i<list1.pairs_len; i++ ) {
+    FD_LOG_NOTICE(("PUBKEY %s", FD_BASE58_ENC_32_ALLOCA(dirty_keys[i].rec->pair.key)));
+  }
 
   fd_sha256_t sha;
   fd_sha256_init( &sha );
