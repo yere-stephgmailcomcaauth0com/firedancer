@@ -966,10 +966,11 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   return task_info;
 }
 
-static fd_execute_txn_task_info_t *
-_block_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
-                                fd_exec_slot_ctx_t *               slot_ctx,
+static int
+_block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
+                                fd_exec_slot_ctx_t *                 slot_ctx,
                                 fd_exec_test_block_context_t const * test_ctx ) {
+  
 }
 
 void
@@ -1436,7 +1437,7 @@ fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only con
 
   FD_SCRATCH_SCOPE_BEGIN {
     int res = _block_context_create_and_exec( runner, input, output, output_buf, output_bufsz );
-    
+    s
   } FD_SCRATCH_SCOPE_END;
 
   // FD_SCRATCH_SCOPE_BEGIN {
