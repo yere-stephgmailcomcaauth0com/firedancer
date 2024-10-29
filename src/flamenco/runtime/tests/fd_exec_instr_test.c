@@ -970,7 +970,56 @@ static int
 _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
                                 fd_exec_slot_ctx_t *                 slot_ctx,
                                 fd_exec_test_block_context_t const * test_ctx ) {
-  
+  fd_funk_t * funk = runner->funk;
+
+  /* Generate unique ID for funk txn */
+
+  fd_funk_txn_xid_t xid[1] = {0};
+  xid[0] = fd_funk_generate_xid();
+
+  /* Create temporary funk transaction and scratch contexts */
+
+  fd_funk_start_write( runner->funk );
+  fd_funk_txn_t * funk_txn = fd_funk_txn_prepare( funk, NULL, xid, 1 );
+  fd_funk_end_write( runner->funk );
+
+  /* Allocate contexts */
+  ulong vote_acct_max = 1024UL;
+  uchar *               epoch_ctx_mem = fd_scratch_alloc( fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( vote_acct_max ) );
+  fd_exec_epoch_ctx_t * epoch_ctx     = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, vote_acct_max ) );
+
+  /* Set up epoch context */
+  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( epoch_ctx );
+
+  /* Create account manager */
+  fd_acc_mgr_t * acc_mgr = fd_acc_mgr_new( fd_scratch_alloc( FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT ), funk );
+
+  /* Set up slot context */
+  slot_ctx->epoch_ctx = epoch_ctx;
+  slot_ctx->funk_txn  = funk_txn;
+  slot_ctx->acc_mgr   = acc_mgr;
+
+  /* Set up slot bank */
+  fd_slot_bank_t * slot_bank = &slot_ctx->slot_bank;
+  // slot_bank->recent_block_hashes = ...
+  slot_bank->slot = test_ctx->slot;
+  slot_bank->prev_slot = test_ctx->prev_slot;
+  slot_bank->fee_rate_governor = (fd_fee_rate_governor_t) {
+    .target_lamports_per_signature =  10000UL,
+    .target_signatures_per_slot    =  20000UL,
+    .min_lamports_per_signature    =   5000UL,
+    .max_lamports_per_signature    = 100000UL,
+    .burn_percent                  =     50,
+  };
+  slot_bank->block_height = test_ctx->prev_slot + 1UL;
+  // slot_bank->last_restart_slot = ...;
+
+  /*  
+  fd_runtime_block_sysvar_update_pre_execute
+  fd_runtime_execute_txns_in_waves_tpool
+  fd_runtime_block_execute_finalize_tpool
+  */
+
 }
 
 void
@@ -1437,7 +1486,7 @@ fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only con
 
   FD_SCRATCH_SCOPE_BEGIN {
     int res = _block_context_create_and_exec( runner, input, output, output_buf, output_bufsz );
-    s
+
   } FD_SCRATCH_SCOPE_END;
 
   // FD_SCRATCH_SCOPE_BEGIN {
