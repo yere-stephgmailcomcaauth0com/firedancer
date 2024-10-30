@@ -973,12 +973,10 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   fd_funk_t * funk = runner->funk;
 
   /* Generate unique ID for funk txn */
-
   fd_funk_txn_xid_t xid[1] = {0};
   xid[0] = fd_funk_generate_xid();
 
   /* Create temporary funk transaction and scratch contexts */
-
   fd_funk_start_write( runner->funk );
   fd_funk_txn_t * funk_txn = fd_funk_txn_prepare( funk, NULL, xid, 1 );
   fd_funk_end_write( runner->funk );
@@ -994,18 +992,25 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   /* Create account manager */
   fd_acc_mgr_t * acc_mgr = fd_acc_mgr_new( fd_scratch_alloc( FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT ), funk );
 
+  /* Restore feature flags */
+  if( !_restore_feature_flags( epoch_ctx, &test_ctx->epoch_ctx.features ) ) {
+    return NULL;
+  }
+
   /* Set up slot context */
   slot_ctx->funk_txn  = funk_txn;
   slot_ctx->acc_mgr   = acc_mgr;
   // slot_ctx->blockstore = ... // do we need this?
-  // slot_ctx->block = ... // ...or this?
-
+  // slot_ctx->block = ... // do we need this?
   slot_ctx->epoch_ctx = epoch_ctx;
+  slot_ctx->prev_lamports_per_signature = test_ctx->prev_lps;
+  slot_ctx->parent_signature_cnt = test_ctx->parent_signature_cnt;
+  // slot_ctx->parent_transaction_count = ... // do we need this?
 
   /* Set up slot bank */
   fd_slot_bank_t * slot_bank = &slot_ctx->slot_bank;
   // slot_bank->recent_block_hashes = ...
-  slot_bank->slot = test_ctx->slot;
+  slot_bank->slot = test_ctx->slot_ctx.slot;
   slot_bank->prev_slot = test_ctx->prev_slot;
   slot_bank->fee_rate_governor = (fd_fee_rate_governor_t) {
     .target_lamports_per_signature =  10000UL,
@@ -1015,10 +1020,20 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
     .burn_percent                  =     50,
   };
   slot_bank->block_height = test_ctx->prev_slot + 1UL;
-  // slot_bank->last_restart_slot = ...;
+  // slot_bank->last_restart_slot = ...; // get this from sysvar cache
 
+  /* Set up epoch context */
 
-  /*  
+  /* set up epoch bank */
+
+  /* Load in accounts */
+
+  /* Initialize the recent blockhashes sysvar */
+
+  /* Restore sysvar cache */
+  // fd_runtime_sysvar_cache_load( slot_ctx );
+
+  /* Prepare. Execute. Finalize.
   fd_runtime_block_sysvar_update_pre_execute
   fd_runtime_execute_txns_in_waves_tpool
   fd_runtime_block_execute_finalize_tpool
@@ -1478,7 +1493,8 @@ fd_exec_instr_test_run( fd_exec_instr_test_runner_t * runner,
    - This does not test sigverify
    - Epoch boundaries are NOT tested
    - Tested Firedancer code is `fd_runtime_execute_txns_in_waves_tpool` and `fd_runtime_block_execute_finalize_tpool`
-   - Associated entrypoint tested in Agave is `confirm_slot_entries` (except sigverify is removed and verify_ticks is included) */
+   - Associated entrypoint tested in Agave is `confirm_slot_entries` (except sigverify is removed and verify_ticks is included) 
+   - Recent blockhashes sysvar account must NOT be provided in the input account states. Instead, the sysvar is populated through the input blockhash queue. */
 ulong
 fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only contains funk instance, so we can borrow instr test runner
                         void const *                  input_,
@@ -1486,10 +1502,16 @@ fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only con
                         void *                        output_buf,
                         ulong                         output_bufsz ) {
   fd_exec_test_block_context_t const * input  = fd_type_pun_const( input_ );
-  fd_exec_test_block_result_t **       output = fd_type_pun( output_ );
+  fd_exec_test_block_effects_t **      output = fd_type_pun( output_ );
 
   FD_SCRATCH_SCOPE_BEGIN {
-    int res = _block_context_create_and_exec( runner, input, output, output_buf, output_bufsz );
+    /* Initialize memory */
+    fd_wksp_t *           wksp          = fd_wksp_attach( "wksp" );
+    fd_alloc_t *          alloc         = fd_alloc_join( fd_alloc_new( fd_wksp_alloc_laddr( wksp, fd_alloc_align(), fd_alloc_footprint(), 2 ), 2 ), 0 );
+    uchar *               slot_ctx_mem  = fd_scratch_alloc( FD_EXEC_SLOT_CTX_ALIGN,  FD_EXEC_SLOT_CTX_FOOTPRINT  );
+    fd_exec_slot_ctx_t *  slot_ctx      = fd_exec_slot_ctx_join ( fd_exec_slot_ctx_new ( slot_ctx_mem, fd_alloc_virtual( alloc ) ) );
+
+    int res = _block_context_create_and_exec( runner, slot_ctx, input );
 
   } FD_SCRATCH_SCOPE_END;
 
