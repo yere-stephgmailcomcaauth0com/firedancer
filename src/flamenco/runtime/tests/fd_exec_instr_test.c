@@ -1025,7 +1025,11 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   // self.max_tick_height = (self.slot + 1) * self.ticks_per_slot;
   // 
 
-  /* Load in accounts */
+  /* Load in accounts; accounts are loaded in the same way as the txn harness, where 0-lamport accounts are 0-set */
+  for( int i=0; i<test_ctx->acct_states_count; i++ ) {
+    FD_BORROWED_ACCOUNT_DECL(acc);
+    _load_txn_account( acc, acc_mgr, funk_txn, &test_ctx->acct_states[i] );
+  }
 
   /* Initialize the recent blockhashes sysvar */
 

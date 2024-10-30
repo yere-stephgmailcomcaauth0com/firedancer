@@ -19,7 +19,8 @@ typedef struct fd_exec_test_block_context {
     pb_size_t txns_count;
     struct fd_exec_test_sanitized_transaction *txns;
     /* Input account states */
-    pb_callback_t acct_states;
+    pb_size_t acct_states_count;
+    struct fd_exec_test_acct_state *acct_states;
     /* The blockhash queue */
     pb_size_t blockhash_queue_count;
     pb_bytes_array_t **blockhash_queue;
@@ -62,10 +63,10 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT  {0, NULL, {{NULL}, NULL}, 0, NULL, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_DEFAULT}
+#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT  {0, NULL, 0, NULL, 0, NULL, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_DEFAULT}
 #define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT  {0, 0, NULL, 0, NULL, {{NULL}, NULL}}
 #define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_DEFAULT  {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT}
-#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO     {0, NULL, {{NULL}, NULL}, 0, NULL, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_ZERO}
+#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO     {0, NULL, 0, NULL, 0, NULL, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_ZERO}
 #define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO     {0, 0, NULL, 0, NULL, {{NULL}, NULL}}
 #define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_ZERO     {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO}
 
@@ -87,11 +88,11 @@ extern "C" {
 /* Struct field encoding specification for nanopb */
 #define FD_EXEC_TEST_BLOCK_CONTEXT_FIELDLIST(X, a) \
 X(a, POINTER,  REPEATED, MESSAGE,  txns,              1) \
-X(a, CALLBACK, REPEATED, MESSAGE,  acct_states,       2) \
+X(a, POINTER,  REPEATED, MESSAGE,  acct_states,       2) \
 X(a, POINTER,  REPEATED, BYTES,    blockhash_queue,   3) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  slot_ctx,          4) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  epoch_ctx,         5)
-#define FD_EXEC_TEST_BLOCK_CONTEXT_CALLBACK pb_default_field_callback
+#define FD_EXEC_TEST_BLOCK_CONTEXT_CALLBACK NULL
 #define FD_EXEC_TEST_BLOCK_CONTEXT_DEFAULT NULL
 #define fd_exec_test_block_context_t_txns_MSGTYPE fd_exec_test_sanitized_transaction_t
 #define fd_exec_test_block_context_t_acct_states_MSGTYPE fd_exec_test_acct_state_t
