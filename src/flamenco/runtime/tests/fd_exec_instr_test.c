@@ -986,9 +986,6 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   uchar *               epoch_ctx_mem = fd_scratch_alloc( fd_exec_epoch_ctx_align(), fd_exec_epoch_ctx_footprint( vote_acct_max ) );
   fd_exec_epoch_ctx_t * epoch_ctx     = fd_exec_epoch_ctx_join( fd_exec_epoch_ctx_new( epoch_ctx_mem, vote_acct_max ) );
 
-  /* Set up epoch context */
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( epoch_ctx );
-
   /* Create account manager */
   fd_acc_mgr_t * acc_mgr = fd_acc_mgr_new( fd_scratch_alloc( FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT ), funk );
 
@@ -1019,12 +1016,14 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
     .max_lamports_per_signature    = 100000UL,
     .burn_percent                  =     50,
   };
-  slot_bank->block_height = test_ctx->prev_slot + 1UL;
+  // slot_bank->block_height = test_ctx->prev_slot + 1UL; // do we need this?
   // slot_bank->last_restart_slot = ...; // get this from sysvar cache
 
-  /* Set up epoch context */
-
-  /* set up epoch bank */
+  /* Set up epoch bank */
+  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( epoch_ctx );
+  // epoch_bank->stakes = ... // fd_unlikely that we need this
+  // self.max_tick_height = (self.slot + 1) * self.ticks_per_slot;
+  // 
 
   /* Load in accounts */
 
@@ -1032,6 +1031,14 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
 
   /* Restore sysvar cache */
   // fd_runtime_sysvar_cache_load( slot_ctx );
+
+  /* Finish init slot and epoch bank */
+  // epoch_bank->epoch_schedule = slot_ctx->sysvar_cache->val_epoch_schedule;
+  // epoch_bank->rent_epoch_schedule = slot_ctx->sysvar_cache->val_epoch_schedule;
+  // epoch_bank->rent = slot_ctx->sysvar_cache->val_rent;
+
+  /* Calculate epoch account hash values */
+  // fd_calculate_epoch_accounts_hash_values( slot_ctx );
 
   /* Prepare. Execute. Finalize.
   fd_runtime_block_sysvar_update_pre_execute

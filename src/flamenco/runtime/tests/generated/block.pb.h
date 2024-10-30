@@ -23,18 +23,12 @@ typedef struct fd_exec_test_block_context {
     /* The blockhash queue */
     pb_size_t blockhash_queue_count;
     pb_bytes_array_t **blockhash_queue;
-    /* Last slot's lamports per signature */
-    uint64_t prev_lps;
-    /* Parent's signature count */
-    uint64_t parent_signature_cnt;
-    /* The last executed slot */
-    uint64_t prev_slot;
-    /* Epoch context (contains feature info) */
-    bool has_epoch_ctx;
-    fd_exec_test_epoch_context_t epoch_ctx;
     /* Slot context (contains slot number) */
     bool has_slot_ctx;
     fd_exec_test_slot_context_t slot_ctx;
+    /* Epoch context (contains feature info) */
+    bool has_epoch_ctx;
+    fd_exec_test_epoch_context_t epoch_ctx;
 } fd_exec_test_block_context_t;
 
 typedef struct fd_exec_test_block_effects {
@@ -68,10 +62,10 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT  {0, NULL, {{NULL}, NULL}, 0, NULL, 0, 0, 0, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_DEFAULT}
+#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT  {0, NULL, {{NULL}, NULL}, 0, NULL, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_DEFAULT}
 #define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT  {0, 0, NULL, 0, NULL, {{NULL}, NULL}}
 #define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_DEFAULT  {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_DEFAULT, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_DEFAULT}
-#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO     {0, NULL, {{NULL}, NULL}, 0, NULL, 0, 0, 0, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_ZERO}
+#define FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO     {0, NULL, {{NULL}, NULL}, 0, NULL, false, FD_EXEC_TEST_SLOT_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_EPOCH_CONTEXT_INIT_ZERO}
 #define FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO     {0, 0, NULL, 0, NULL, {{NULL}, NULL}}
 #define FD_EXEC_TEST_BLOCK_FIXTURE_INIT_ZERO     {false, FD_EXEC_TEST_FIXTURE_METADATA_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_CONTEXT_INIT_ZERO, false, FD_EXEC_TEST_BLOCK_EFFECTS_INIT_ZERO}
 
@@ -79,11 +73,8 @@ extern "C" {
 #define FD_EXEC_TEST_BLOCK_CONTEXT_TXNS_TAG      1
 #define FD_EXEC_TEST_BLOCK_CONTEXT_ACCT_STATES_TAG 2
 #define FD_EXEC_TEST_BLOCK_CONTEXT_BLOCKHASH_QUEUE_TAG 3
-#define FD_EXEC_TEST_BLOCK_CONTEXT_PREV_LPS_TAG  4
-#define FD_EXEC_TEST_BLOCK_CONTEXT_PARENT_SIGNATURE_CNT_TAG 5
-#define FD_EXEC_TEST_BLOCK_CONTEXT_PREV_SLOT_TAG 6
-#define FD_EXEC_TEST_BLOCK_CONTEXT_EPOCH_CTX_TAG 7
-#define FD_EXEC_TEST_BLOCK_CONTEXT_SLOT_CTX_TAG  8
+#define FD_EXEC_TEST_BLOCK_CONTEXT_SLOT_CTX_TAG  4
+#define FD_EXEC_TEST_BLOCK_CONTEXT_EPOCH_CTX_TAG 5
 #define FD_EXEC_TEST_BLOCK_EFFECTS_FIRST_ERROR_TAG 1
 #define FD_EXEC_TEST_BLOCK_EFFECTS_ACCT_STATES_TAG 2
 #define FD_EXEC_TEST_BLOCK_EFFECTS_SLOT_CAPITALIZATION_TAG 3
@@ -98,17 +89,14 @@ extern "C" {
 X(a, POINTER,  REPEATED, MESSAGE,  txns,              1) \
 X(a, CALLBACK, REPEATED, MESSAGE,  acct_states,       2) \
 X(a, POINTER,  REPEATED, BYTES,    blockhash_queue,   3) \
-X(a, STATIC,   SINGULAR, UINT64,   prev_lps,          4) \
-X(a, STATIC,   SINGULAR, UINT64,   parent_signature_cnt,   5) \
-X(a, STATIC,   SINGULAR, FIXED64,  prev_slot,         6) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  epoch_ctx,         7) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  slot_ctx,          8)
+X(a, STATIC,   OPTIONAL, MESSAGE,  slot_ctx,          4) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  epoch_ctx,         5)
 #define FD_EXEC_TEST_BLOCK_CONTEXT_CALLBACK pb_default_field_callback
 #define FD_EXEC_TEST_BLOCK_CONTEXT_DEFAULT NULL
 #define fd_exec_test_block_context_t_txns_MSGTYPE fd_exec_test_sanitized_transaction_t
 #define fd_exec_test_block_context_t_acct_states_MSGTYPE fd_exec_test_acct_state_t
-#define fd_exec_test_block_context_t_epoch_ctx_MSGTYPE fd_exec_test_epoch_context_t
 #define fd_exec_test_block_context_t_slot_ctx_MSGTYPE fd_exec_test_slot_context_t
+#define fd_exec_test_block_context_t_epoch_ctx_MSGTYPE fd_exec_test_epoch_context_t
 
 #define FD_EXEC_TEST_BLOCK_EFFECTS_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   first_error,       1) \
