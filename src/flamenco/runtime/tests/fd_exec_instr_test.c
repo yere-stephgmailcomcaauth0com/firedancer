@@ -1010,11 +1010,11 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   slot_bank->slot = test_ctx->slot_ctx.slot;
   slot_bank->prev_slot = test_ctx->slot_ctx.prev_slot;
   slot_bank->fee_rate_governor = (fd_fee_rate_governor_t) {
-    .target_lamports_per_signature =  10000UL,
-    .target_signatures_per_slot    =  20000UL,
-    .min_lamports_per_signature    =   5000UL,
+    .target_lamports_per_signature = 10000UL,
+    .target_signatures_per_slot    = 20000UL,
+    .min_lamports_per_signature    = 5000UL,
     .max_lamports_per_signature    = 100000UL,
-    .burn_percent                  =     50,
+    .burn_percent                  = 50,
   };
   // slot_bank->block_height = test_ctx->prev_slot + 1UL; // do we need this?
   // slot_bank->last_restart_slot = ...; // get this from sysvar cache
