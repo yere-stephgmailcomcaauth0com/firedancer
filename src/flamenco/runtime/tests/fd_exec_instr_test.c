@@ -1000,15 +1000,15 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   // slot_ctx->blockstore = ... // do we need this?
   // slot_ctx->block = ... // do we need this?
   slot_ctx->epoch_ctx = epoch_ctx;
-  slot_ctx->prev_lamports_per_signature = test_ctx->prev_lps;
-  slot_ctx->parent_signature_cnt = test_ctx->parent_signature_cnt;
+  slot_ctx->prev_lamports_per_signature = test_ctx->slot_ctx.prev_lps;
+  slot_ctx->parent_signature_cnt = test_ctx->slot_ctx.parent_signature_cnt;
   // slot_ctx->parent_transaction_count = ... // do we need this?
 
   /* Set up slot bank */
   fd_slot_bank_t * slot_bank = &slot_ctx->slot_bank;
   // slot_bank->recent_block_hashes = ...
   slot_bank->slot = test_ctx->slot_ctx.slot;
-  slot_bank->prev_slot = test_ctx->prev_slot;
+  slot_bank->prev_slot = test_ctx->slot_ctx.prev_slot;
   slot_bank->fee_rate_governor = (fd_fee_rate_governor_t) {
     .target_lamports_per_signature =  10000UL,
     .target_signatures_per_slot    =  20000UL,
