@@ -234,9 +234,16 @@ fd_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
   fd_pubkey_hash_pair_list_t list1 = { .pairs = dirty_keys, .pairs_len = dirty_key_cnt };
   fd_hash_account_deltas(&list1, 1, &slot_ctx->account_delta_hash, slot_ctx );
   FD_LOG_WARNING(("HASH ACCOUNT DELTAS OF LENGHTH %lu", list1.pairs_len));
-  for( ulong i=0UL; i<list1.pairs_len; i++ ) {
-    FD_LOG_NOTICE(("PUBKEY %s", FD_BASE58_ENC_32_ALLOCA(dirty_keys[i].rec->pair.key)));
-  }
+  // for( ulong i=0UL; i<list1.pairs_len; i++ ) {
+  //   FD_LOG_NOTICE(("PUBKEY %s", FD_BASE58_ENC_32_ALLOCA(dirty_keys[i].rec->pair.key)));
+  //   uchar key[32];
+  //   fd_base58_decode_32("JC3jTygxN7A3fEGPK9rMtN26f5HobTCydrkrQfG2B2M7", key);
+  //   if( !memcmp( key, acc_rec->pubkey, sizeof(fd_pubkey_t))) {
+  //     FD_LOG_WARNING(("ASDF ASDF ASDF ASDF"))
+  //   }
+
+
+  // }
 
   fd_sha256_t sha;
   fd_sha256_init( &sha );
@@ -483,20 +490,30 @@ fd_update_hash_bank_tpool( fd_exec_slot_ctx_t * slot_ctx,
     char owner_string[ FD_BASE58_ENCODED_32_SZ ];
     fd_acct_addr_cstr( owner_string, acc_rec->meta->info.owner );
 
-    FD_LOG_DEBUG(( "fd_acc_mgr_update_hash: %s "
-        "slot: %ld "
-        "lamports: %ld  "
-        "owner: %s "
-        "executable: %s,  "
-        "rent_epoch: %ld, "
-        "data_len: %ld",
-        acc_key_string,
-        slot_ctx->slot_bank.slot,
-        acc_rec->meta->info.lamports,
-        owner_string,
-        acc_rec->meta->info.executable ? "true" : "false",
-        acc_rec->meta->info.rent_epoch,
-        acc_rec->meta->dlen ));
+    if( slot_ctx->slot_bank.slot == 254462500 ) {
+      FD_LOG_DEBUG(( "fd_acc_mgr_update_hash: %s "
+          "slot: %ld "
+          "lamports: %ld  "
+          "owner: %s "
+          "executable: %s,  "
+          "rent_epoch: %ld, "
+          "data_len: %ld",
+          acc_key_string,
+          slot_ctx->slot_bank.slot,
+          acc_rec->meta->info.lamports,
+          owner_string,
+          acc_rec->meta->info.executable ? "true" : "false",
+          acc_rec->meta->info.rent_epoch,
+          acc_rec->meta->dlen ));
+    }
+
+
+    uchar key[32];
+    fd_base58_decode_32("JC3jTygxN7A3fEGPK9rMtN26f5HobTCydrkrQfG2B2M7", key);
+    if( !memcmp( key, acc_rec->pubkey, sizeof(fd_pubkey_t))) {
+      FD_LOG_WARNING(("ASDF ASDF ASDF ASDF 2 %lu", acc_rec->meta->slot));
+    }
+
 
     if( capture_ctx != NULL && capture_ctx->capture != NULL ) {
       fd_account_meta_t const * acc_meta = fd_acc_mgr_view_raw( slot_ctx->acc_mgr, slot_ctx->funk_txn, task_info->acc_pubkey, &task_info->rec, &err, NULL);
@@ -532,7 +549,14 @@ fd_update_hash_bank_tpool( fd_exec_slot_ctx_t * slot_ctx,
       continue;
     }
 
-    fd_funk_rec_remove(funk, fd_funk_rec_modify(funk, task_info->rec), 1);
+    //FD_LOG_WARNING(("REMOVING %s", FD_BASE58_ENC_32_ALLOCA(task_info->rec->pair.key)));;
+    (void)funk;
+    fd_account_meta_t * metadata = fd_funk_val( task_info->rec, fd_funk_wksp( funk ) );
+    FD_LOG_WARNING(("REMOVING %s %u %lu", FD_BASE58_ENC_32_ALLOCA(task_info->rec->pair.key), task_info->rec->val_sz, metadata->dlen));
+
+    if( slot_ctx->slot_bank.slot < 254462500 ) {
+      fd_funk_rec_remove(funk, fd_funk_rec_modify(funk, task_info->rec), 1);
+    }
   }
 
   // Sanity-check LT Hash
@@ -820,6 +844,7 @@ fd_update_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
 
   for (ulong i = 0; i < erase_rec_cnt; i++) {
     fd_funk_rec_t const * erase_rec = erase_recs[i];
+    FD_LOG_WARNING(("REMOVING %s", FD_BASE58_ENC_32_ALLOCA(erase_rec->pair.key)));;
     fd_funk_rec_remove(funk, fd_funk_rec_modify(funk, erase_rec), 1);
   }
 

@@ -170,11 +170,14 @@ fd_snapshot_restore_account_hdr( fd_snapshot_restore_t * restore ) {
 
   int is_dupe = 0;
 
-  /* Check if account exists */
+  /* Check if account exists. If this is older than what is in the account
+     manager, consider the account a duplicate. */
   rec->const_meta = fd_acc_mgr_view_raw( acc_mgr, funk_txn, key, &rec->const_rec, NULL, NULL );
-  if( rec->const_meta )
-    if( rec->const_meta->slot > restore->accv_slot )
+  if( rec->const_meta ) {
+    if( rec->const_meta->slot > restore->accv_slot ) {
       is_dupe = 1;
+    }
+  }
 
   /* Write account */
   if( !is_dupe ) {
@@ -193,9 +196,14 @@ fd_snapshot_restore_account_hdr( fd_snapshot_restore_t * restore ) {
   restore->acc_sz  = data_sz;
   restore->acc_pad = fd_ulong_align_up( data_sz, FD_SNAPSHOT_ACC_ALIGN ) - data_sz;
 
+  // if( hdr->meta.data_len == 0 && hdr->info.lamports == 0 ) {
+    // FD_LOG_WARNING(("Pubkey %s at slot %lu", FD_BASE58_ENC_32_ALLOCA(key), restore->accv_slot));
+  // }
+
   /* Next step */
-  if( data_sz == 0UL )
+  if( data_sz == 0UL ) {
     return fd_snapshot_expect_account_hdr( restore );
+  }
 
   /* Fail if account data is cut off */
   if( FD_UNLIKELY( restore->accv_sz < data_sz ) ) {

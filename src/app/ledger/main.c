@@ -226,7 +226,6 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     fd_blockstore_end_read( blockstore );
 
     /* TODO:FIXME: This is where we want to do all of the snapshot related testing */
-    //if( ledger_args->slot_ctx->slot_bank.slot == 254462443 ) {
     if( false && ledger_args->slot_ctx->slot_bank.slot==254462501 ) {
       fd_snapshot_create_manifest( ledger_args->slot_ctx );
       first_create = 1;

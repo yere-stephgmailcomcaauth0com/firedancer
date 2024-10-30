@@ -123,6 +123,13 @@ fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_
   ulong num_accs = 0UL;
   for (fd_funk_rec_t const *rec = fd_funk_txn_first_rec( funk, NULL ); NULL != rec; rec = fd_funk_txn_next_rec( funk, rec )) {
 
+
+    uchar key[32];
+    fd_base58_decode_32("JC3jTygxN7A3fEGPK9rMtN26f5HobTCydrkrQfG2B2M7", key);
+    if( !memcmp( key, rec->pair.key, sizeof(fd_pubkey_t))) {
+      FD_LOG_WARNING(("ASDF ASDF ASDF ASDF HERE"));
+    }
+
     if( num_accs % 10000 == 0 ) {
       FD_LOG_WARNING(("ID %lu", id));
     }
@@ -180,6 +187,12 @@ fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_
       id++;
     }
 
+    // uchar key[32];
+    // fd_base58_decode_32("JC3jTygxN7A3fEGPK9rMtN26f5HobTCydrkrQfG2B2M7", key);
+    // if( !memcmp( key, pubkey, sizeof(fd_pubkey_t))) {
+    //   FD_LOG_WARNING(("ASDF ASDF ASDF ASDF %lu", metadata->slot));
+    // }
+
     /* The file size and number of keys should be updated.
        TODO: You technically don't need the count here. */
     acc_vec_key->count           += 1UL;
@@ -198,7 +211,8 @@ fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_
     fd_memcpy( header.meta.pubkey, pubkey, sizeof(fd_pubkey_t) );
     /* Account Meta */
     header.info.lamports               = metadata->info.lamports;
-    header.info.rent_epoch             = metadata->info.rent_epoch;
+
+    header.info.rent_epoch             = header.info.lamports ? metadata->info.rent_epoch : 0UL;
     fd_memcpy( header.info.owner, metadata->info.owner, sizeof(fd_pubkey_t) );
     header.info.executable             = metadata->info.executable;
     /* Hash */

@@ -3751,8 +3751,10 @@ fd_runtime_cleanup_incinerator( fd_exec_slot_ctx_t * slot_ctx ) {
   fd_funk_rec_key_t id   = fd_acc_funk_key( &fd_sysvar_incinerator_id );
   fd_funk_t * funk = slot_ctx->acc_mgr->funk;
   fd_funk_rec_t const * rec = fd_funk_rec_query( funk, slot_ctx->funk_txn, &id );
-  if( rec )
+  if( rec ) {
+    FD_LOG_WARNING(("REMOVING %s %u", FD_BASE58_ENC_32_ALLOCA(rec->pair.key), rec->val_sz));
     fd_funk_rec_remove( funk, fd_funk_rec_modify( funk, rec ), 1 );
+  }
 }
 
 void
