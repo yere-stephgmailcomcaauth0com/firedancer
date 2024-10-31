@@ -171,14 +171,11 @@ fd_snapshot_restore_account_hdr( fd_snapshot_restore_t * restore ) {
 
   int is_dupe = 0;
 
-  /* Check if account exists. If this is older than what is in the account
-     manager, consider the account a duplicate. */
+  /* Check if account exists */
   rec->const_meta = fd_acc_mgr_view_raw( acc_mgr, funk_txn, key, &rec->const_rec, NULL, NULL );
-  if( rec->const_meta ) {
-    if( rec->const_meta->slot > restore->accv_slot ) {
+  if( rec->const_meta )
+    if( rec->const_meta->slot > restore->accv_slot )
       is_dupe = 1;
-    }
-  }
 
   /* Write account */
   if( !is_dupe ) {
@@ -198,9 +195,8 @@ fd_snapshot_restore_account_hdr( fd_snapshot_restore_t * restore ) {
   restore->acc_pad = fd_ulong_align_up( data_sz, FD_SNAPSHOT_ACC_ALIGN ) - data_sz;
 
   /* Next step */
-  if( data_sz == 0UL ) {
+  if( data_sz == 0UL )
     return fd_snapshot_expect_account_hdr( restore );
-  }
 
   /* Fail if account data is cut off */
   if( FD_UNLIKELY( restore->accv_sz < data_sz ) ) {
@@ -261,13 +257,11 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
      revisit this. */
 
   fd_solana_manifest_t manifest[1];
-
   fd_bincode_decode_ctx_t decode =
       { .data    = restore->buf,
         .dataend = restore->buf + restore->buf_sz,
         .valloc  = restore->valloc };
   int decode_err = fd_solana_manifest_decode( manifest, &decode );
-
   if( FD_UNLIKELY( decode_err!=FD_BINCODE_SUCCESS ) ) {
     /* TODO: The types generator does not yet handle OOM correctly.
              OOM failures won't always end up here, but could also
@@ -280,7 +274,6 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
 
   fd_solana_accounts_db_fields_t accounts_db = manifest->accounts_db;
   fd_memset( &manifest->accounts_db, 0, sizeof(fd_solana_accounts_db_fields_t) );
-  int err = fd_snapshot_accv_index( restore->accv_map, &manifest->accounts_db );
 
   /* Remember slot number */
 
@@ -289,14 +282,12 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
   /* Move over objects and recover state
      This destroys all remaining fields with the slot context valloc. */
 
-  err = restore->cb_manifest( restore->cb_manifest_ctx, manifest );
-  FD_TEST( !err );
+  int err = restore->cb_manifest( restore->cb_manifest_ctx, manifest );
 
   /* Read AccountVec map */
 
-  if( FD_LIKELY( !err ) ) {
-    err = fd_snapshot_accv_index( restore->accv_map, &manifest->accounts_db );
-  }
+  if( FD_LIKELY( !err ) )
+    err = fd_snapshot_accv_index( restore->accv_map, &accounts_db );
 
   /* Discard superfluous fields that the callback didn't move */
 
@@ -376,7 +367,6 @@ fd_snapshot_restore_accv_prepare( fd_snapshot_restore_t * const restore,
   /* Parse file name */
   ulong id, slot;
   if( FD_UNLIKELY( sscanf( meta->name, "accounts/%lu.%lu", &slot, &id )!=2 ) ) {
-    FD_LOG_WARNING(("FILE NAME PARSE FAILURE"));
     /* Ignore entire file if file name invalid */
     restore->state  = STATE_DONE;
     restore->buf_sz = 0UL;
@@ -398,7 +388,6 @@ fd_snapshot_restore_accv_prepare( fd_snapshot_restore_t * const restore,
     /* Ignore account vec files that are not explicitly mentioned in the
        manifest. */
     FD_LOG_DEBUG(( "Ignoring %s (sz %lu)", meta->name, real_sz ));
-    FD_LOG_WARNING(("NOT MENTIONED IN MANIFEST %lu %lu", slot, id));
     restore->state  = STATE_DONE;
     restore->buf_sz = 0UL;
     return 0;
@@ -509,10 +498,8 @@ fd_snapshot_restore_file( void *                restore_,
   /* Snapshot manifest */
   assert( sizeof("snapshots/status_cache")<FD_TAR_NAME_SZ );
   if( 0==strncmp( meta->name, "snapshots/", sizeof("snapshots/")-1) &&
-      0!=strcmp ( meta->name, "snapshots/status_cache" ) ) {
-    FD_LOG_WARNING(("RESTORING MANIFEST TO PREPARE %s", meta->name));
+      0!=strcmp ( meta->name, "snapshots/status_cache" ) )
     return fd_snapshot_restore_manifest_prepare( restore, sz );
-  }
 
   else if( 0==strcmp ( meta->name, "snapshots/status_cache" ) )
     return fd_snapshot_restore_status_cache_prepare( restore, sz );
