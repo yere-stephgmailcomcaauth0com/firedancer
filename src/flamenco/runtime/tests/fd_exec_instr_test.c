@@ -231,9 +231,10 @@ _add_compact_u16(uchar ** data, ushort to_add) {
 
 #define FD_CHECKED_ADD_CU16_TO_DATA( _begin, _cur_data, _to_add ) __extension__({            \
   do {                                                                                       \
-    fd_bincode_encode_ctx_t _encode_ctx = { .data = *_cur_data, .dataend = *_cur_data + 3 }; \
+    uchar _buf[3];                                                                           \
+    fd_bincode_encode_ctx_t _encode_ctx = { .data = _buf, .dataend = _buf+3 };               \
     fd_bincode_compact_u16_encode( &_to_add, &_encode_ctx );                                 \
-    ulong _sz = (ulong) ((uchar *)_encode_ctx.data - *_cur_data );                            \
+    ulong _sz = (ulong) ((uchar *)_encode_ctx.data - _buf );                                 \
     if( FD_UNLIKELY( (*_cur_data)+_sz>_begin+FD_TXN_MTU ) ) return ULONG_MAX;                \
     _add_compact_u16( _cur_data, _to_add );                                                  \
   } while(0);                                                                                \
