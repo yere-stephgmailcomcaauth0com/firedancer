@@ -91,9 +91,11 @@ struct fd_ledger_args {
   char const *          rocksdb_list[32];        /* max number of rocksdb dirs that can be passed in */
   ulong                 rocksdb_list_slot[32];   /* start slot for each rocksdb dir that's passed in assuming there are mulitple */
   ulong                 rocksdb_list_cnt;        /* number of rocksdb dirs passed in */
-  uint                  cluster_version[3];         /* What version of solana is the genesis block? */
+  uint                  cluster_version[3];      /* What version of solana is the genesis block? */
   char const *          one_off_features[32];    /* List of one off feature pubkeys to enable for execution agnostic of cluster version */
   uint                  one_off_features_cnt;    /* Number of one off features */
+  ulong                 snapshot_slot;           /* Slot to create a snapshot at*/
+
 
   /* These values are setup before replay */
   fd_capture_ctx_t *    capture_ctx;             /* capture_ctx is used in runtime_replay for various debugging tasks */
@@ -184,8 +186,6 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
   /* Setup trash_hash */
   uchar trash_hash_buf[32];
   memset( trash_hash_buf, 0xFE, sizeof(trash_hash_buf) );
-  int first_create = 0;
-  (void)first_create;
 
   for( ulong slot = start_slot; slot <= ledger_args->end_slot; ++slot ) {
     ledger_args->slot_ctx->slot_bank.prev_slot = prev_slot;
@@ -214,8 +214,11 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     fd_block_t * blk = fd_blockstore_block_query( blockstore, slot );
     if( blk == NULL ) {
       FD_LOG_WARNING( ( "failed to read slot %ld", slot ) );
-      ledger_args->slot_ctx->tick_height += 64UL; /* TODO: We should be using hte computed quantity of ticks here.*/
-      ledger_args->slot_ctx->slot_bank.max_tick_height += 64;
+      /* TODO: This is currently a hack because ticks are not correctly
+         computed or handled in the runtime. It is neceesary to update ticks
+         for skipped slots for snapshot creation. */
+      ledger_args->slot_ctx->tick_height               += 64UL;
+      ledger_args->slot_ctx->slot_bank.max_tick_height += 64UL;
 
       fd_blockstore_end_read( blockstore );
       continue;
@@ -225,10 +228,9 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     ulong   sz  = blk->data_sz;
     fd_blockstore_end_read( blockstore );
 
-    /* TODO:FIXME: This is where we want to do all of the snapshot related testing */
-    if( false && ledger_args->slot_ctx->slot_bank.slot==254462501 ) {
+
+    if( ledger_args->slot_ctx->slot_bank.slot==ledger_args->snapshot_slot+1UL ) {
       fd_snapshot_create_manifest( ledger_args->slot_ctx );
-      first_create = 1;
     }
   
     ulong blk_txn_cnt = 0;
@@ -243,9 +245,6 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
                                           ledger_args->spad_cnt ) == FD_RUNTIME_EXECUTE_SUCCESS );
     txn_cnt += blk_txn_cnt;
     slot_cnt++;
-
-    FD_LOG_WARNING(("BANK HASH AND PARENT HASH %s %s", FD_BASE58_ENC_32_ALLOCA(&ledger_args->slot_ctx->slot_bank.banks_hash), FD_BASE58_ENC_32_ALLOCA(&ledger_args->slot_ctx->prev_banks_hash) ));
-    FD_LOG_WARNING(("PREV SLOT %lu", ledger_args->slot_ctx->slot_bank.prev_slot));
 
     fd_blockstore_start_read( blockstore );
     fd_hash_t const * expected = fd_blockstore_block_hash_query( blockstore, slot );
@@ -867,7 +866,6 @@ ingest( fd_ledger_args_t * args ) {
 
   init_tpool( args );
 
-
   /* Load in snapshot(s) */
   if( args->snapshot ) {
     fd_snapshot_load( args->snapshot, slot_ctx, args->tpool, args->verify_acc_hash, args->check_acc_hash , FD_SNAPSHOT_TYPE_FULL );
@@ -1370,6 +1368,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   char const * checkpt_status_cache    = fd_env_strip_cmdline_cstr ( &argc, &argv, "--checkpt-status-cache",    NULL, NULL      );
   char const * one_off_features        = fd_env_strip_cmdline_cstr ( &argc, &argv, "--one-off-features",        NULL, NULL      );
   char const * lthash                  = fd_env_strip_cmdline_cstr ( &argc, &argv, "--lthash",                  NULL, "false"   );
+  ulong        snapshot_slot           = fd_env_strip_cmdline_ulong( &argc, &argv, "--snapshot-slot",           NULL, ULONG_MAX );
 
   // TODO: Add argument validation. Make sure that we aren't including any arguments that aren't parsed for
 
@@ -1466,6 +1465,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   args->rocksdb_list_cnt        = 0UL;
   args->checkpt_status_cache    = checkpt_status_cache;
   args->one_off_features_cnt    = 0UL;
+  args->snapshot_slot           = snapshot_slot;
   parse_one_off_features( args, one_off_features );
   parse_rocksdb_list( args, rocksdb_list, rocksdb_list_starts );
 
