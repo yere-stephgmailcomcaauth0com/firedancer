@@ -8,8 +8,6 @@
 #include "../runtime/context/fd_exec_epoch_ctx.h"
 #include "../runtime/context/fd_exec_slot_ctx.h"
 #include "../rewards/fd_rewards.h"
-#include "fd_snapshot_restore_private.h" // Ensure this header contains the full struct definition
-
 
 #include <assert.h>
 #include <errno.h>
@@ -85,14 +83,11 @@ load_one_snapshot( fd_exec_slot_ctx_t * slot_ctx,
   fd_acc_mgr_t *  acc_mgr  = slot_ctx->acc_mgr;
   fd_funk_txn_t * funk_txn = slot_ctx->funk_txn;
 
-  slot_ctx->solana_manifest = fd_valloc_malloc( valloc, fd_solana_manifest_align(), fd_solana_manifest_footprint() );
-
   void * restore_mem = fd_valloc_malloc( valloc, fd_snapshot_restore_align(), fd_snapshot_restore_footprint() );
   void * loader_mem  = fd_valloc_malloc( valloc, fd_snapshot_loader_align(),  fd_snapshot_loader_footprint( zstd_window_sz ) );
 
   fd_snapshot_restore_t * restore = fd_snapshot_restore_new( restore_mem, acc_mgr, funk_txn, valloc, slot_ctx, restore_manifest, restore_status_cache );
   fd_snapshot_loader_t *  loader  = fd_snapshot_loader_new ( loader_mem, zstd_window_sz );
-  restore->manifest = slot_ctx->solana_manifest;
 
   if( FD_UNLIKELY( !restore || !loader ) ) {
     fd_valloc_free( valloc, fd_snapshot_loader_delete ( loader_mem  ) );
@@ -180,10 +175,8 @@ fd_snapshot_load( const char *         snapshotfile,
 
   if( verify_hash ) {
     if (snapshot_type == FD_SNAPSHOT_TYPE_FULL) {
-      fd_hash_t accounts_hash = {0};
-      FD_LOG_WARNING(("BEFORE ACC HASH %s", FD_BASE58_ENC_32_ALLOCA(&accounts_hash)));
+      fd_hash_t accounts_hash;
       fd_snapshot_hash(slot_ctx, tpool, &accounts_hash, check_hash);
-      FD_LOG_WARNING(("ORIGINAL SNAPSHOT HASH %s", FD_BASE58_ENC_32_ALLOCA(&accounts_hash)));
 
       if (memcmp(fhash->uc, accounts_hash.uc, 32) != 0)
         FD_LOG_ERR(( "snapshot accounts_hash %s != %s", FD_BASE58_ENC_32_ALLOCA( accounts_hash.hash ), FD_BASE58_ENC_32_ALLOCA( fhash->uc ) ));

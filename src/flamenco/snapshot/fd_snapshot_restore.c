@@ -264,25 +264,7 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
      heap.  Once the epoch context heap is separated out, we need to
      revisit this. */
 
-  fd_solana_manifest_t * manifest = restore->manifest;
-
-  // FILE * file = fopen( "/data/ibhatt/manifest", "rb" );
-  // fseek(file, 0, SEEK_END);
-  // ulong file_sz = (ulong)ftell(file);
-  // fseek( file, 0, SEEK_SET);
-  // FD_LOG_WARNING(("FILE SIZE %lu", file_sz));
-
-
-  // uchar * buf = fd_valloc_malloc( restore->valloc, 8UL, file_sz);
-  // ulong res = fread( buf, 1, file_sz, file);
-  // FD_LOG_WARNING(("RES %lu", res));
-  // FD_TEST( res==file_sz );
-
-  // fd_bincode_decode_ctx_t decode =
-  //     { .data    = buf,
-  //       .dataend = buf + file_sz,
-  //       .valloc  = restore->valloc };
-  // int decode_err = fd_solana_manifest_decode( manifest, &decode );
+  fd_solana_manifest_t manifest[1];
 
   fd_bincode_decode_ctx_t decode =
       { .data    = restore->buf,
