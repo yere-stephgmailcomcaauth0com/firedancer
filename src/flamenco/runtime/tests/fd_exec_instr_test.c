@@ -991,7 +991,7 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
 
   /* Restore feature flags */
   if( !_restore_feature_flags( epoch_ctx, &test_ctx->epoch_ctx.features ) ) {
-    return NULL;
+    return 0;
   }
 
   /* Set up slot context */
@@ -1026,15 +1026,16 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   // 
 
   /* Load in accounts; accounts are loaded in the same way as the txn harness, where 0-lamport accounts are 0-set */
-  for( int i=0; i<test_ctx->acct_states_count; i++ ) {
+  for( ushort i=0; i<test_ctx->acct_states_count; i++ ) {
     FD_BORROWED_ACCOUNT_DECL(acc);
     _load_txn_account( acc, acc_mgr, funk_txn, &test_ctx->acct_states[i] );
   }
 
   /* Initialize the recent blockhashes sysvar */
+  // TODO: implement
 
   /* Restore sysvar cache */
-  // fd_runtime_sysvar_cache_load( slot_ctx );
+  fd_runtime_sysvar_cache_load( slot_ctx );
 
   /* Finish init slot and epoch bank */
   // epoch_bank->epoch_schedule = slot_ctx->sysvar_cache->val_epoch_schedule;
@@ -1050,6 +1051,8 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   fd_runtime_block_execute_finalize_tpool
   */
 
+ (void)epoch_bank;
+  return 1;
 }
 
 void
@@ -1523,6 +1526,13 @@ fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only con
     fd_exec_slot_ctx_t *  slot_ctx      = fd_exec_slot_ctx_join ( fd_exec_slot_ctx_new ( slot_ctx_mem, fd_alloc_virtual( alloc ) ) );
 
     int res = _block_context_create_and_exec( runner, slot_ctx, input );
+    
+    // TODO
+    (void)res;
+    (void)output;
+    (void)output_buf;
+    (void)output_bufsz;
+    return 0;
 
   } FD_SCRATCH_SCOPE_END;
 
