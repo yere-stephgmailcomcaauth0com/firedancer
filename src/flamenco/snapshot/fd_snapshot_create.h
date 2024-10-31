@@ -586,7 +586,39 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   /* TODO: Need to write out the snapshot hash to the name of the file as well. */
 
   /* NOW POPulate the STATUS CACHE */
-  //fd_bank_slot_deltas_t slot_deltas;
+  fd_bank_slot_deltas_t slot_deltas_new = {0};
+  fd_txncache_get_entries( slot_ctx->status_cache,
+                            &slot_deltas_new,
+                            slot_ctx->valloc );
+  ulong bank_slot_deltas_sz = fd_bank_slot_deltas_size( &slot_deltas_new );
+  uchar * out_status_cache = fd_valloc_malloc( slot_ctx->valloc, 8UL, bank_slot_deltas_sz );
+  fd_bincode_encode_ctx_t encode_status_cache = {
+    .data    = out_status_cache,
+    .dataend = out_status_cache + bank_slot_deltas_sz,
+  };
+  FD_TEST( 0==fd_bank_slot_deltas_encode( &slot_deltas_new, &encode_status_cache ) );
+
+
+  fd_bincode_decode_ctx_t decode_asdf = {
+    .data    = out_status_cache,
+    .dataend = out_status_cache + bank_slot_deltas_sz,
+    .valloc  = slot_ctx->valloc,
+  };
+
+  fd_bank_slot_deltas_t two = {0};
+  FD_TEST( 0==fd_bank_slot_deltas_decode( &two, &decode_asdf ) );
+  FD_LOG_WARNING(("BANK SLOT DELTAS _SZ %lu", bank_slot_deltas_sz));
+
+
+
+  FILE * sc_file = fopen( "/data/ibhatt/dump/mainnet-254462437/own_snapshot/snapshots/status_cache", "wb" );
+  ulong  bytes_written= fwrite( out_status_cache, 1, bank_slot_deltas_sz, sc_file );
+  if( bytes_written != bank_slot_deltas_sz ) {
+    FD_LOG_ERR(("FAILED TO WRITE OUT"));
+  }
+  fclose(sc_file);
+
+
 
 
   FD_LOG_WARNING(("ACCOUNTS DB HEADER %lu %lu %lu", new_manifest.accounts_db.storages_len, new_manifest.accounts_db.version, new_manifest.accounts_db.slot));
@@ -602,8 +634,8 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
       .dataend = out_manifest + new_manifest_sz + 1 };
   FD_TEST( 0==fd_solana_manifest_serializable_encode( &new_manifest, &encode ) );
 
-  FILE * file = fopen( "/data/ibhatt/dump/mainnet-254462437/own_snapshot/snapshots/254462437/254462437", "wb" );
-  ulong  bytes_written= fwrite( out_manifest, 1, new_manifest_sz, file );
+  FILE * file   = fopen( "/data/ibhatt/dump/mainnet-254462437/own_snapshot/snapshots/254462437/254462437", "wb" );
+  bytes_written = fwrite( out_manifest, 1, new_manifest_sz, file );
   if( bytes_written != new_manifest_sz ) {
     FD_LOG_ERR(("FAILED TO WRITE OUT"));
   }

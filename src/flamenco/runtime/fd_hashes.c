@@ -549,10 +549,10 @@ fd_update_hash_bank_tpool( fd_exec_slot_ctx_t * slot_ctx,
       continue;
     }
 
-    //FD_LOG_WARNING(("REMOVING %s", FD_BASE58_ENC_32_ALLOCA(task_info->rec->pair.key)));;
-    (void)funk;
-    fd_account_meta_t * metadata = fd_funk_val( task_info->rec, fd_funk_wksp( funk ) );
-    FD_LOG_WARNING(("REMOVING %s %u %lu", FD_BASE58_ENC_32_ALLOCA(task_info->rec->pair.key), task_info->rec->val_sz, metadata->dlen));
+    // FD_LOG_WARNING(("REMOVING %s", FD_BASE58_ENC_32_ALLOCA(task_info->rec->pair.key)));;
+    // (void)funk;
+    // fd_account_meta_t * metadata = fd_funk_val( task_info->rec, fd_funk_wksp( funk ) );
+    // FD_LOG_WARNING(("REMOVING %s %u %lu", FD_BASE58_ENC_32_ALLOCA(task_info->rec->pair.key), task_info->rec->val_sz, metadata->dlen));
 
     if( slot_ctx->slot_bank.slot < 254462500 ) {
       fd_funk_rec_remove(funk, fd_funk_rec_modify(funk, task_info->rec), 1);

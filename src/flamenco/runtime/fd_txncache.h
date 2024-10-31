@@ -1,6 +1,8 @@
 #ifndef HEADER_fd_src_flamenco_runtime_txncache_h
 #define HEADER_fd_src_flamenco_runtime_txncache_h
 
+#include "../types/fd_types.h"
+
 /* A txn cache is a concurrent map for saving the result (status) of
    transactions that have executed.  In addition to supporting fast
    concurrent insertion and query of transaction results, the txn
@@ -393,6 +395,11 @@ fd_txncache_set_txnhash_offset( fd_txncache_t * tc,
 int
 fd_txncache_is_rooted_slot( fd_txncache_t * tc,
                             ulong slot );
+
+int
+fd_txncache_get_entries( fd_txncache_t * tc,
+                         fd_bank_slot_deltas_t * bank_slot_deltas,
+                         fd_valloc_t valloc );
 
 FD_PROTOTYPES_END
 

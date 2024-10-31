@@ -2917,6 +2917,11 @@ fd_runtime_block_eval_tpool( fd_exec_slot_ctx_t * slot_ctx,
                              ulong                spad_cnt ) {
   (void)scheduler;
 
+  if( slot_ctx->status_cache ) {
+    FD_LOG_WARNING(("REGISTERING SLOT %lu", slot_ctx->slot_bank.slot));
+    fd_txncache_register_root_slot( slot_ctx->status_cache, slot_ctx->slot_bank.slot );
+  }
+
   // int err = fd_runtime_publish_old_txns( slot_ctx, capture_ctx, tpool );
   // if( err != 0 ) {
     // return err;

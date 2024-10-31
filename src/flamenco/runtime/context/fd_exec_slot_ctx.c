@@ -460,7 +460,7 @@ fd_exec_slot_ctx_recover_status_cache( fd_exec_slot_ctx_t *    ctx,
     ulong num_entries = 0;
     for( ulong i = 0; i < slot_deltas->slot_deltas_len; i++ ) {
       fd_slot_delta_t * slot_delta = &slot_deltas->slot_deltas[i];
-      //FD_LOG_WARNING(("SLOT DELTA %lu %lu %lu", slot_delta->slot, (ulong)slot_delta->is_root, slot_delta->slot_delta_vec_len));
+      FD_LOG_WARNING(("SLOT DELTA %lu %lu %lu", slot_delta->slot, (ulong)slot_delta->is_root, slot_delta->slot_delta_vec_len));
       for( ulong j = 0; j < slot_delta->slot_delta_vec_len; j++ ) {
         //FD_LOG_WARNING(("VALUE", slot_delta->slot_delta_vec[j].value.statuses/)
         num_entries += slot_delta->slot_delta_vec[j].value.statuses_len;
@@ -522,6 +522,43 @@ fd_exec_slot_ctx_recover_status_cache( fd_exec_slot_ctx_t *    ctx,
         fd_txncache_set_txnhash_offset( ctx->status_cache, slot, blockhash->uc, pair->value.txn_idx );
       }
     }
+
+
+    // fd_bank_slot_deltas_t slot_deltas_new = {0};
+    // fd_txncache_get_entries( ctx->status_cache,
+    //                          &slot_deltas_new,
+    //                          ctx->valloc );
+
+    // ulong num_entries_two = 0;
+    // for( ulong i = 0; i < slot_deltas_new.slot_deltas_len; i++ ) {
+    //   fd_slot_delta_t * slot_delta = &slot_deltas_new.slot_deltas[i];
+    //   FD_LOG_WARNING(("SLOT DELTA %lu %lu %lu", slot_delta->slot, (ulong)slot_delta->is_root, slot_delta->slot_delta_vec_len));
+    //   for( ulong j = 0; j < slot_delta->slot_delta_vec_len; j++ ) {
+    //     //FD_LOG_WARNING(("VALUE", slot_delta->slot_delta_vec[j].value.statuses/)
+    //     num_entries_two += slot_delta->slot_delta_vec[j].value.statuses_len;
+    //   }
+    // }
+    // FD_LOG_WARNING(("NUM ENTRIES %lu %lu", num_entries, num_entries_two));
+
+    // ulong sz = fd_bank_slot_deltas_size( &slot_deltas_new );
+    // uchar * data = fd_valloc_malloc( ctx->valloc, 8UL, sz );
+    // fd_bincode_encode_ctx_t encode_ctx = {
+    //   .data = data,
+    //   .dataend = data + sz,
+    // };
+    // FD_TEST( 0==fd_bank_slot_deltas_encode( &slot_deltas_new, &encode_ctx ) );
+    // FD_LOG_WARNING(("ENCODED"));
+
+    // fd_bincode_decode_ctx_t decode_ctx = {
+    //   .data = data,
+    //   .dataend = data + sz,
+    //   .valloc = ctx->valloc,
+    // };
+    // FD_TEST( 0==fd_bank_slot_deltas_decode( &slot_deltas_new, &decode_ctx ) );
+    // FD_LOG_WARNING(("DECODED"));
+
+
+
   } FD_SCRATCH_SCOPE_END;
   return ctx;
 }
