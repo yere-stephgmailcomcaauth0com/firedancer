@@ -417,8 +417,6 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   /* Populate the fields of the new manifest */
   fd_solana_manifest_serializable_t new_manifest = {0};
-  //fd_solana_manifest_t              new_manifest = {0};
-  fd_solana_manifest_t            * old_manifest = slot_ctx->solana_manifest;
   
   /* Copy in all the fields of the bank */
 
@@ -445,29 +443,13 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   /* Ancestor can be omitted to boot off of for both clients */
   new_manifest.bank.ancestors_len         = 0UL; /* DONE!*/
   new_manifest.bank.ancestors             = NULL; /* DONE! */
-  
-  // new_manifest.bank.ancestors_len         = old_manifest->bank.ancestors_len;
-  // new_manifest.bank.ancestors             = old_manifest->bank.ancestors;
 
   fd_pubkey_t pubkey_empty = {0};
   fd_unused_accounts_t unused_accounts = {0};
 
-  // FD_LOG_WARNING(("FIREDANCER slot, epoch %lu %lu", slot_ctx->slot_bank.slot, fd_slot_to_epoch( &epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot, NULL)));
-  // FD_LOG_WARNING(("AGAVE slot, epoch %lu %lu", old_manifest->bank.slot, old_manifest->bank.epoch));
-  // FD_LOG_WARNING(("BLOCK HEIGHT %lu %lu", slot_ctx->slot_bank.block_height, old_manifest->bank.block_height));
-  // FD_LOG_WARNING(("ACCOUNTS DATA LEN %lu", old_manifest->bank.accounts_data_len));
-  // FD_LOG_WARNING(("PREVIOUS SLOT %lu %lu", slot_ctx->slot_bank.prev_slot, old_manifest->bank.parent_slot));
-  // FD_LOG_WARNING(("signature count %lu %lu %lu", slot_ctx->signature_cnt, slot_ctx->parent_signature_cnt, old_manifest->bank.signature_count));
-
   /* TODO:FIXME: Will likely need to adjust how we calculate the slot and prev slot. Maybe
      we have to get forks into play? We currently generate the snapshot before the start of
      a new slot. I think that this is mostly okay for now. See parent_signature_cnt too */
-
-  FD_LOG_WARNING(("TICKS PER SLOT %lu %lu", epoch_bank->ticks_per_slot, old_manifest->bank.ticks_per_slot));
-  FD_LOG_WARNING(("MAX BANK TICK HEIGHT %lu %lu", slot_ctx->slot_bank.max_tick_height, old_manifest->bank.max_tick_height));
-  FD_LOG_WARNING(("MAX BANK TICK HEIGHT %lu %lu", slot_ctx->slot_bank.max_tick_height, old_manifest->bank.max_tick_height));
-  FD_LOG_WARNING(("TICK HEIGHT %lu", old_manifest->bank.tick_height));
-  FD_LOG_WARNING(("TICK HEIGHT %lu", old_manifest->bank.max_tick_height));
 
   new_manifest.bank.hash                  = slot_ctx->slot_bank.banks_hash; /* DONE! */
   new_manifest.bank.parent_hash           = slot_ctx->prev_banks_hash; /* DONE! */
@@ -488,7 +470,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.hashes_per_tick       = &epoch_bank->hashes_per_tick; /* DONE */
 
-  new_manifest.bank.ticks_per_slot        = old_manifest->bank.ticks_per_slot;
+  new_manifest.bank.ticks_per_slot        = 64UL;
 
   new_manifest.bank.ns_per_slot           = epoch_bank->ns_per_slot; /* DONE! */
 
@@ -528,7 +510,6 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
 
   new_manifest.bank.unused_accounts       = unused_accounts; /* DONE! */
 
-  FD_LOG_WARNING(("UNVERSIONED EPOCH STAKES %lu", old_manifest->bank.epoch_stakes_len));
   FD_LOG_WARNING(("new_manifest ticks %lu %lu", new_manifest.bank.tick_height, new_manifest.bank.max_tick_height));
   /* DONE! */
   /* We need to copy over the stakes for two epochs*/
@@ -566,15 +547,6 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   fd_hash_t acc_hash = {0};
   fd_snapshot_hash( slot_ctx, NULL, &acc_hash, 0);
   FD_LOG_WARNING(("ACCOUNTS DB HASH %s", FD_BASE58_ENC_32_ALLOCA(&acc_hash)));
-
-  FD_LOG_WARNING(("bank hash info %s %s stats %lu %lu %lu %lu %lu", 
-                  FD_BASE58_ENC_32_ALLOCA(&old_manifest->accounts_db.bank_hash_info.snapshot_hash), 
-                  FD_BASE58_ENC_32_ALLOCA(&old_manifest->accounts_db.bank_hash_info.hash), 
-                  old_manifest->accounts_db.bank_hash_info.stats.num_updated_accounts, 
-                  old_manifest->accounts_db.bank_hash_info.stats.num_removed_accounts,
-                  old_manifest->accounts_db.bank_hash_info.stats.num_lamports_stored,
-                  old_manifest->accounts_db.bank_hash_info.stats.total_data_len,
-                  old_manifest->accounts_db.bank_hash_info.stats.num_executable_accounts));
 
   fd_snapshot_create_populate_acc_vec_idx( slot_ctx, &new_manifest );
   //fd_hash_t hash = {0};
@@ -624,9 +596,7 @@ fd_snapshot_create_manifest( fd_exec_slot_ctx_t * slot_ctx ) {
   FD_LOG_WARNING(("ACCOUNTS DB HEADER %lu %lu %lu", new_manifest.accounts_db.storages_len, new_manifest.accounts_db.version, new_manifest.accounts_db.slot));
 
   // /* Encode and output the manifest to a file */
-  ulong old_manifest_sz = fd_solana_manifest_size( old_manifest );
   ulong new_manifest_sz = fd_solana_manifest_serializable_size( &new_manifest ); 
-  FD_LOG_WARNING(("OLD MANIFEST SIZE %lu", old_manifest_sz));
   FD_LOG_WARNING(("NEW MANIFEST SIZE %lu", new_manifest_sz));
   uchar * out_manifest = fd_scratch_alloc( 1UL, new_manifest_sz );
   fd_bincode_encode_ctx_t encode =

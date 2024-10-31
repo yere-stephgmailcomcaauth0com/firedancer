@@ -1180,11 +1180,7 @@ fd_txn_reclaim_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
     }
 
     acc_rec->meta->slot = txn_ctx->slot_ctx->slot_bank.slot;
-    uchar key[32];
-    fd_base58_decode_32("JC3jTygxN7A3fEGPK9rMtN26f5HobTCydrkrQfG2B2M7", key);
-    if( !memcmp( key, acc_rec->pubkey, sizeof(fd_pubkey_t))) {
-      FD_LOG_WARNING(("ASDF ASDF ASDF ASDF"));
-    }
+
 
     if( acc_rec->meta->info.lamports == 0 ) {
       acc_rec->meta->dlen = 0;

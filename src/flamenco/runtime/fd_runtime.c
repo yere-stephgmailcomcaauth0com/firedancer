@@ -142,7 +142,6 @@ fd_runtime_init_bank_from_genesis( fd_exec_slot_ctx_t *  slot_ctx,
           fd_vote_accounts_pair_t_map_acquire(vacc_pool);
       FD_TEST(node);
 
-
       fd_vote_block_timestamp_t last_timestamp;
       fd_pubkey_t node_pubkey;
       FD_SCRATCH_SCOPE_BEGIN {
@@ -684,28 +683,21 @@ fd_runtime_microblock_collect_txns( fd_microblock_info_t const * microblock_info
 }
 
 ulong
-fd_runtime_microblock_batch_collect_txns( fd_exec_slot_ctx_t * slot_ctx,
-                                          fd_microblock_batch_info_t const * microblock_batch_info,
+fd_runtime_microblock_batch_collect_txns( fd_microblock_batch_info_t const * microblock_batch_info,
                                           fd_txn_p_t * out_txns ) {
   for( ulong i = 0; i < microblock_batch_info->microblock_cnt; i++ ) {
     ulong txns_collected = fd_runtime_microblock_collect_txns( &microblock_batch_info->microblock_infos[i], out_txns );
     out_txns += txns_collected;
-    fd_microblock_info_t const * microblock_info = &microblock_batch_info->microblock_infos[ i ];
-    if( microblock_info->microblock_hdr.txn_cnt == 0UL ) {
-      /* TODO: This check is wrong because sometimes there are > 64 ticks. If this mblk is a tick */
-      slot_ctx->tick_count++;
-    }
-}
+  }
 
   return microblock_batch_info->txn_cnt;
 }
 
 ulong
-fd_runtime_block_collect_txns( fd_exec_slot_ctx_t * slot_ctx,
-                               fd_block_info_t const * block_info,
+fd_runtime_block_collect_txns( fd_block_info_t const * block_info,
                                fd_txn_p_t * out_txns ) {
   for( ulong i = 0; i < block_info->microblock_batch_cnt; i++ ) {
-    ulong txns_collected = fd_runtime_microblock_batch_collect_txns( slot_ctx, &block_info->microblock_batch_infos[i], out_txns );
+    ulong txns_collected = fd_runtime_microblock_batch_collect_txns( &block_info->microblock_batch_infos[i], out_txns );
     out_txns += txns_collected;
   }
 
@@ -1864,7 +1856,6 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t *         slot_ctx,
           fd_borrowed_account_t * acc_rec = &txn_ctx->borrowed_accounts[i];
 
           if( dirty_vote_acc && !memcmp( acc_rec->const_meta->info.owner, &fd_solana_vote_program_id, sizeof(fd_pubkey_t) ) ) {
-            //FD_LOG_WARNING(("DIRTY VOTE ACC %s  deact epoch %lu", FD_BASE58_ENC_32_ALLOCA(acc_rec->pubkey), ));
             fd_vote_store_account( slot_ctx, acc_rec );
             FD_SCRATCH_SCOPE_BEGIN {
               fd_vote_state_versioned_t vsv[1];
@@ -1897,7 +1888,6 @@ fd_runtime_finalize_txns_tpool( fd_exec_slot_ctx_t *         slot_ctx,
           }
 
           if( dirty_stake_acc && !memcmp( acc_rec->const_meta->info.owner, &fd_solana_stake_program_id, sizeof(fd_pubkey_t) ) ) {
-            FD_LOG_WARNING(("DIRTY STAKE ACCOUNT %s", FD_BASE58_ENC_32_ALLOCA(acc_rec->pubkey)));
             // TODO: does this correctly handle stake account close?
             fd_store_stake_delegation( slot_ctx, acc_rec );
           }
@@ -2420,7 +2410,6 @@ fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
       fd_solcap_writer_set_slot( capture_ctx->capture, slot_ctx->slot_bank.slot );
     }
 
-    FD_LOG_WARNING(("TICK COUNT %lu %lu", slot_ctx->tick_count, slot_ctx->tick_height));
     slot_ctx->tick_count = 0UL;
 
     long block_execute_time = -fd_log_wallclock();
@@ -2434,11 +2423,13 @@ fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
     fd_txn_p_t * txn_ptrs = fd_scratch_alloc( alignof(fd_txn_p_t), txn_cnt * sizeof(fd_txn_p_t) );
 
     /* This now collects the tick entries in a block */
-    fd_runtime_block_collect_txns( slot_ctx, block_info, txn_ptrs );
+    fd_runtime_block_collect_txns( block_info, txn_ptrs );
 
-    /* TODO: We need to call verify_ticks here. */
-    slot_ctx->tick_height += 64UL; /* TODO: We should be using hte computed quantity of ticks here.*/
-    slot_ctx->slot_bank.max_tick_height += 64;
+    /* TODO: Currently the tick height is manually updated for each executed 
+       slot as a hack to support snapshot loading. This code should be removed 
+       once correct tick calculation is implemented. */
+    slot_ctx->tick_height               += 64UL;
+    slot_ctx->slot_bank.max_tick_height += 64UL;
 
     res = fd_runtime_execute_txns_in_waves_tpool( slot_ctx, capture_ctx, txn_ptrs, txn_cnt, tpool, spads, spad_cnt );
     if( res != FD_RUNTIME_EXECUTE_SUCCESS ) {
@@ -2918,7 +2909,6 @@ fd_runtime_block_eval_tpool( fd_exec_slot_ctx_t * slot_ctx,
   (void)scheduler;
 
   if( slot_ctx->status_cache ) {
-    FD_LOG_WARNING(("REGISTERING SLOT %lu", slot_ctx->slot_bank.slot));
     fd_txncache_register_root_slot( slot_ctx->status_cache, slot_ctx->slot_bank.slot );
   }
 
@@ -3757,7 +3747,6 @@ fd_runtime_cleanup_incinerator( fd_exec_slot_ctx_t * slot_ctx ) {
   fd_funk_t * funk = slot_ctx->acc_mgr->funk;
   fd_funk_rec_t const * rec = fd_funk_rec_query( funk, slot_ctx->funk_txn, &id );
   if( rec ) {
-    FD_LOG_WARNING(("REMOVING %s %u", FD_BASE58_ENC_32_ALLOCA(rec->pair.key), rec->val_sz));
     fd_funk_rec_remove( funk, fd_funk_rec_modify( funk, rec ), 1 );
   }
 }
@@ -4169,7 +4158,6 @@ void fd_process_new_epoch(
     fd_exec_slot_ctx_t *slot_ctx,
     ulong parent_epoch )
 {
-  FD_LOG_WARNING(("PROCESS NEW EPOCH"));
   ulong slot;
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
   ulong epoch = fd_slot_to_epoch(&epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot, &slot);
