@@ -6,6 +6,7 @@
 #include "../fd_acc_mgr.h"
 #include "../fd_account.h"
 #include "../fd_executor.h"
+#include "../fd_hashes.h"
 #include "../fd_runtime.h"
 #include "../program/fd_bpf_loader_program.h"
 #include "../program/fd_bpf_program_util.h"
@@ -1038,12 +1039,12 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   fd_runtime_sysvar_cache_load( slot_ctx );
 
   /* Finish init slot and epoch bank */
-  // epoch_bank->epoch_schedule = slot_ctx->sysvar_cache->val_epoch_schedule;
-  // epoch_bank->rent_epoch_schedule = slot_ctx->sysvar_cache->val_epoch_schedule;
-  // epoch_bank->rent = slot_ctx->sysvar_cache->val_rent;
+  epoch_bank->epoch_schedule = *slot_ctx->sysvar_cache->val_epoch_schedule;
+  epoch_bank->rent_epoch_schedule = *slot_ctx->sysvar_cache->val_epoch_schedule;
+  epoch_bank->rent = *slot_ctx->sysvar_cache->val_rent;
 
-  /* Calculate epoch account hash values */
-  // fd_calculate_epoch_accounts_hash_values( slot_ctx );
+  /* Calculate epoch account hash values. This sets epoch_bank.eah_{start_slot, stop_slot, interval} */
+  fd_calculate_epoch_accounts_hash_values( slot_ctx );
 
   /* Prepare. Execute. Finalize.
   fd_runtime_block_sysvar_update_pre_execute
