@@ -127,6 +127,7 @@ fd_snapshot_restore_delete( fd_snapshot_restore_t * self ) {
 
 static int
 fd_snapshot_expect_account_hdr( fd_snapshot_restore_t * restore ) {
+
   ulong accv_sz = restore->accv_sz;
   if( accv_sz < sizeof(fd_solana_account_hdr_t) ) {
     if( FD_LIKELY( accv_sz==0UL ) ) {
@@ -196,10 +197,6 @@ fd_snapshot_restore_account_hdr( fd_snapshot_restore_t * restore ) {
   restore->acc_sz  = data_sz;
   restore->acc_pad = fd_ulong_align_up( data_sz, FD_SNAPSHOT_ACC_ALIGN ) - data_sz;
 
-  // if( hdr->meta.data_len == 0 && hdr->info.lamports == 0 ) {
-    // FD_LOG_WARNING(("Pubkey %s at slot %lu", FD_BASE58_ENC_32_ALLOCA(key), restore->accv_slot));
-  // }
-
   /* Next step */
   if( data_sz == 0UL ) {
     return fd_snapshot_expect_account_hdr( restore );
@@ -237,7 +234,6 @@ fd_snapshot_accv_index( fd_snapshot_accv_map_t *               map,
 
       /* Insert new AppendVec */
       fd_snapshot_accv_key_t key = { .slot = slot->slot, .id = accv->id };
-      //FD_LOG_WARNING(("INSERTING %lu %lu", slot->slot, accv->id));
       fd_snapshot_accv_map_t * rec = fd_snapshot_accv_map_insert( map, key );
       if( FD_UNLIKELY( !rec ) ) {
         FD_LOG_WARNING(( "fd_snapshot_accv_map_insert failed" ));
@@ -272,9 +268,6 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
         .valloc  = restore->valloc };
   int decode_err = fd_solana_manifest_decode( manifest, &decode );
 
-  FD_LOG_WARNING(("BUFFER SIZE %lu", restore->buf_sz));
-  FD_LOG_WARNING(("MANIFEST SIZE %lu", fd_solana_manifest_size( manifest)));
-
   if( FD_UNLIKELY( decode_err!=FD_BINCODE_SUCCESS ) ) {
     /* TODO: The types generator does not yet handle OOM correctly.
              OOM failures won't always end up here, but could also
@@ -285,10 +278,9 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
 
   /* Move over accounts DB fields */
 
-  //fd_solana_accounts_db_fields_t accounts_db = manifest->accounts_db;
-  //fd_memset( &manifest->accounts_db, 0, sizeof(fd_solana_accounts_db_fields_t) );
+  fd_solana_accounts_db_fields_t accounts_db = manifest->accounts_db;
+  fd_memset( &manifest->accounts_db, 0, sizeof(fd_solana_accounts_db_fields_t) );
   int err = fd_snapshot_accv_index( restore->accv_map, &manifest->accounts_db );
-  FD_TEST( !err );
 
   /* Remember slot number */
 
@@ -302,15 +294,16 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
 
   /* Read AccountVec map */
 
-  // // if( FD_LIKELY( !err ) )
-  //   // err = fd_snapshot_accv_index( restore->accv_map, &manifest->accounts_db );
+  if( FD_LIKELY( !err ) ) {
+    err = fd_snapshot_accv_index( restore->accv_map, &manifest->accounts_db );
+  }
 
-  // /* Discard superfluous fields that the callback didn't move */
+  /* Discard superfluous fields that the callback didn't move */
 
-  // fd_bincode_destroy_ctx_t FD_FN_UNUSED destroy = { .valloc = restore->valloc };
-  // //fd_solana_accounts_db_fields_destroy( &accounts_db, &destroy );
+  fd_bincode_destroy_ctx_t destroy = { .valloc = restore->valloc };
+  fd_solana_accounts_db_fields_destroy( &accounts_db, &destroy );
 
-  // /* Discard buffer to reclaim heap space */
+  /* Discard buffer to reclaim heap space */
 
   fd_snapshot_restore_discard_buf( restore );
 
