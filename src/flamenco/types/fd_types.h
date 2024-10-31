@@ -2420,9 +2420,6 @@ struct __attribute__((aligned(16UL))) fd_epoch_bank {
   fd_inflation_t inflation;
   fd_epoch_schedule_t epoch_schedule;
   fd_rent_t rent;
-  ulong eah_start_slot;
-  ulong eah_stop_slot;
-  ulong eah_interval;
   fd_hash_t genesis_hash;
   uint cluster_type;
   uint cluster_version[3];
@@ -2444,9 +2441,6 @@ struct __attribute__((aligned(16UL))) fd_epoch_bank_off {
   uint inflation_off;
   uint epoch_schedule_off;
   uint rent_off;
-  uint eah_start_slot_off;
-  uint eah_stop_slot_off;
-  uint eah_interval_off;
   uint genesis_hash_off;
   uint cluster_type_off;
   uint cluster_version_off;
@@ -2479,6 +2473,9 @@ struct __attribute__((aligned(128UL))) fd_slot_bank {
   fd_vote_accounts_t vote_account_keys;
   ulong lamports_per_signature;
   ulong transaction_count;
+  ulong eah_start_slot;
+  ulong eah_stop_slot;
+  ulong eah_interval;
   fd_slot_lthash_t lthash;
   fd_block_hash_queue_t block_hash_queue;
   ulong use_preceeding_epoch_stakes;
@@ -2509,6 +2506,9 @@ struct __attribute__((aligned(128UL))) fd_slot_bank_off {
   uint vote_account_keys_off;
   uint lamports_per_signature_off;
   uint transaction_count_off;
+  uint eah_start_slot_off;
+  uint eah_stop_slot_off;
+  uint eah_interval_off;
   uint lthash_off;
   uint block_hash_queue_off;
   uint use_preceeding_epoch_stakes_off;

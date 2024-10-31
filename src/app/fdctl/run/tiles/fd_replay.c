@@ -313,7 +313,7 @@ void
 publish_stake_weights( fd_replay_tile_ctx_t * ctx,
                        fd_stem_context_t *    stem,
                        fd_exec_slot_ctx_t *   slot_ctx ) {
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   if( slot_ctx->slot_bank.epoch_stakes.vote_accounts_root!=NULL ) {
     ulong * stake_weights_msg         = fd_chunk_to_laddr( ctx->stake_weights_out_mem, ctx->stake_weights_out_chunk );
     fd_stake_weight_t * stake_weights = (fd_stake_weight_t *)&stake_weights_msg[5];
@@ -544,10 +544,10 @@ funk_publish( fd_replay_tile_ctx_t * ctx, ulong smr ) {
   }
 
   if( FD_LIKELY( FD_FEATURE_ACTIVE( ctx->slot_ctx, epoch_accounts_hash ) ) ) {
-    fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( ctx->slot_ctx->epoch_ctx );
-    if( smr >= epoch_bank->eah_start_slot ) {
+    fd_slot_bank_t * slot_bank = &ctx->slot_ctx->slot_bank;
+    if( smr >= slot_bank->eah_start_slot ) {
       fd_accounts_hash( ctx->slot_ctx, ctx->tpool, &ctx->slot_ctx->slot_bank.epoch_account_hash );
-      epoch_bank->eah_start_slot = FD_SLOT_NULL;
+      slot_bank->eah_start_slot = FD_SLOT_NULL;
     }
   }
 
@@ -719,7 +719,9 @@ send_tower_sync( fd_replay_tile_ctx_t * ctx ) {
 }
 
 static uint
-is_epoch_boundary( fd_epoch_bank_t * epoch_bank, ulong curr_slot, ulong prev_slot ) {
+is_epoch_boundary( fd_epoch_bank_t const * epoch_bank,
+                   ulong                   curr_slot,
+                   ulong                   prev_slot ) {
   ulong slot_idx;
   ulong prev_epoch = fd_slot_to_epoch( &epoch_bank->epoch_schedule, prev_slot, &slot_idx );
   ulong new_epoch  = fd_slot_to_epoch( &epoch_bank->epoch_schedule, curr_slot, &slot_idx );
@@ -749,7 +751,7 @@ prepare_new_block_execution( fd_replay_tile_ctx_t * ctx,
 
   // fork is advancing
   FD_LOG_NOTICE(( "new block execution - slowt: %lu, parent_slot: %lu", curr_slot, ctx->parent_slot ));
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( fork->slot_ctx.epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( fork->slot_ctx.epoch_ctx );
 
   /* if it is an epoch boundary, push out stake weights */
   if( fork->slot_ctx.slot_bank.slot != 0 ) {
@@ -770,10 +772,12 @@ prepare_new_block_execution( fd_replay_tile_ctx_t * ctx,
     if( FD_UNLIKELY( found ) ) {
       fd_exec_epoch_ctx_bank_mem_clear( epoch_fork->epoch_ctx );
     }
-    fd_exec_epoch_ctx_t * prev_epoch_ctx = fork->slot_ctx.epoch_ctx;
+    fd_exec_epoch_ctx_t const * prev_epoch_ctx = fork->slot_ctx.epoch_ctx;
 
     fd_exec_epoch_ctx_from_prev( epoch_fork->epoch_ctx, prev_epoch_ctx );
     fork->slot_ctx.epoch_ctx = epoch_fork->epoch_ctx;
+
+    fd_runtime_do_epoch_boundary( epoch_fork->epoch_ctx, &fork->slot_ctx );
   }
   fork->slot_ctx.status_cache        = ctx->status_cache;
   fd_funk_txn_xid_t xid = { 0 };
@@ -1222,10 +1226,10 @@ read_snapshot( void * _ctx, char const * snapshotfile, char const * incremental 
   const char * snapshot = snapshotfile;
   if( strcmp( snapshot, "funk" ) == 0 || strncmp( snapshot, "wksp:", 5 ) == 0) {
     /* Funk already has a snapshot loaded */
-    fd_runtime_recover_banks( ctx->slot_ctx, 0, 1 );
+    fd_runtime_recover_banks( ctx->slot_ctx, ctx->epoch_ctx, 0, 1 );
   } else {
     FD_MCNT_SET( REPLAY, SNAPSHOT_STATUS_SNAPSHOT_BEGIN, 1 );
-    fd_snapshot_load( snapshot, ctx->slot_ctx, ctx->tpool, false, false, FD_SNAPSHOT_TYPE_FULL );
+    fd_snapshot_load( snapshot, ctx->slot_ctx, ctx->epoch_ctx, ctx->tpool, false, false, FD_SNAPSHOT_TYPE_FULL );
     FD_MCNT_SET( REPLAY, SNAPSHOT_STATUS_SNAPSHOT_END, 1 );
   }
 
@@ -1233,11 +1237,11 @@ read_snapshot( void * _ctx, char const * snapshotfile, char const * incremental 
 
   if( strlen( incremental ) > 0 ) {
     FD_MCNT_SET( REPLAY, SNAPSHOT_STATUS_INCREMENTAL_BEGIN, 1 );
-    fd_snapshot_load( incremental, ctx->slot_ctx, ctx->tpool, false, false, FD_SNAPSHOT_TYPE_INCREMENTAL );
+    fd_snapshot_load( incremental, ctx->slot_ctx,  ctx->epoch_ctx, ctx->tpool, false, false, FD_SNAPSHOT_TYPE_INCREMENTAL );
     FD_MCNT_SET( REPLAY, SNAPSHOT_STATUS_INCREMENTAL_END, 1 );
   }
 
-  fd_runtime_update_leaders( ctx->slot_ctx, ctx->slot_ctx->slot_bank.slot );
+  fd_runtime_update_leaders( ctx->epoch_ctx, ctx->slot_ctx, ctx->slot_ctx->slot_bank.slot );
   FD_LOG_NOTICE(( "starting fd_bpf_scan_and_create_bpf_program_cache_entry..." ));
   fd_funk_start_write( ctx->slot_ctx->acc_mgr->funk );
   fd_bpf_scan_and_create_bpf_program_cache_entry_tpool( ctx->slot_ctx, ctx->slot_ctx->funk_txn, ctx->tpool, 0 );
@@ -1255,7 +1259,7 @@ init_after_snapshot( fd_replay_tile_ctx_t * ctx ) {
 
   ulong snapshot_slot = ctx->slot_ctx->slot_bank.slot;
   if( FD_UNLIKELY( !snapshot_slot ) ) {
-    fd_runtime_update_leaders(ctx->slot_ctx, ctx->slot_ctx->slot_bank.slot);
+    fd_runtime_update_leaders(ctx->epoch_ctx, ctx->slot_ctx, ctx->slot_ctx->slot_bank.slot);
     FD_LOG_WARNING(( "Updated leader %s", FD_BASE58_ENC_32_ALLOCA( ctx->slot_ctx->leader->uc) ));
 
     ctx->slot_ctx->slot_bank.prev_slot = 0UL;
@@ -1266,6 +1270,9 @@ init_after_snapshot( fd_replay_tile_ctx_t * ctx ) {
       fd_sha256_hash( ctx->slot_ctx->slot_bank.poh.uc, 32UL, ctx->slot_ctx->slot_bank.poh.uc );
     }
 
+    if( FD_UNLIKELY( fd_runtime_is_at_epoch_boundary( ctx->slot_ctx ) ) ) {
+      fd_runtime_do_epoch_boundary( ctx->epoch_ctx, ctx->slot_ctx );
+    }
     FD_TEST( fd_runtime_block_execute_prepare( ctx->slot_ctx ) == 0 );
     fd_block_info_t info = {.signature_cnt = 0 };
     FD_TEST( fd_runtime_block_execute_finalize_tpool( ctx->slot_ctx, NULL, &info, ctx->tpool ) == 0 );
@@ -1351,7 +1358,7 @@ init_snapshot( fd_replay_tile_ctx_t * ctx,
       read_snapshot( ctx, ctx->snapshot, ctx->incremental );
     }
 
-    fd_runtime_read_genesis( ctx->slot_ctx, ctx->genesis, is_snapshot, ctx->capture_ctx );
+    fd_runtime_read_genesis( ctx->slot_ctx, ctx->epoch_ctx, ctx->genesis, is_snapshot, ctx->capture_ctx );
     ctx->epoch_ctx->bank_hash_cmp = ctx->bank_hash_cmp;
     init_after_snapshot( ctx );
 

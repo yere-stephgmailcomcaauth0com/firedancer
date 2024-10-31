@@ -90,9 +90,10 @@ fd_runtime_txn_lamports_per_signature( fd_exec_txn_ctx_t * txn_ctx,
                                        fd_rawtxn_b_t const * txn_raw );
 
 void
-fd_runtime_init_bank_from_genesis( fd_exec_slot_ctx_t * slot_ctx,
+fd_runtime_init_bank_from_genesis( fd_exec_slot_ctx_t *  slot_ctx,
+                                   fd_exec_epoch_ctx_t * epoch_ctx,
                                    fd_genesis_solana_t * genesis_block,
-                                   fd_hash_t const * genesis_hash );
+                                   fd_hash_t const *     genesis_hash );
 
 void
 fd_runtime_init_program( fd_exec_slot_ctx_t * slot_ctx );
@@ -176,17 +177,28 @@ fd_runtime_lamports_per_signature_for_blockhash( fd_exec_slot_ctx_t const * slot
 // fd_global_import_solana_manifest( fd_exec_slot_ctx_t * slot_ctx,
 //                                   fd_solana_manifest_t * manifest);
 
+int
+fd_runtime_is_at_epoch_boundary( fd_exec_slot_ctx_t const * slot_ctx );
 
 void
-fd_process_new_epoch( fd_exec_slot_ctx_t * slot_ctx,
-                      ulong parent_epoch );
+fd_runtime_do_epoch_boundary( fd_exec_epoch_ctx_t * epoch_ctx,
+                              fd_exec_slot_ctx_t *  slot_ctx );
 
 void
-fd_runtime_update_leaders( fd_exec_slot_ctx_t * slot_ctx, ulong slot );
+fd_process_new_epoch( fd_exec_epoch_ctx_t * epoch_ctx,
+                      fd_exec_slot_ctx_t *  slot_ctx,
+                      ulong                 parent_epoch );
+
+void
+fd_runtime_update_leaders( fd_exec_epoch_ctx_t * epoch_ctx,
+                           fd_exec_slot_ctx_t * slot_ctx,
+                           ulong slot );
 
 /* rollback runtime to the state where the given slot just FINISHED executing */
 int
-fd_runtime_rollback_to( fd_exec_slot_ctx_t * slot_ctx, ulong slot );
+fd_runtime_rollback_to( fd_exec_slot_ctx_t *  slot_ctx,
+                        fd_exec_epoch_ctx_t * epoch_ctx,
+                        ulong                 slot );
 
 int
 fd_runtime_sysvar_cache_load( fd_exec_slot_ctx_t * slot_ctx );
@@ -197,7 +209,7 @@ fd_runtime_cleanup_incinerator( fd_exec_slot_ctx_t * slot_ctx );
 int
 fd_runtime_prep_and_exec_txns_tpool( fd_exec_slot_ctx_t * slot_ctx,
                                      fd_execute_txn_task_info_t * task_info,
-                                     ulong txn_cnt,
+                                    ulong txn_cnt,
                                      fd_tpool_t * tpool );
 
 int
@@ -260,7 +272,8 @@ fd_runtime_collect_rent_accounts_prune( ulong slot,
                                         fd_capture_ctx_t * capture_ctx );
 
 void
-fd_runtime_read_genesis( fd_exec_slot_ctx_t * slot_ctx,
+fd_runtime_read_genesis( fd_exec_slot_ctx_t *  slot_ctx,
+                         fd_exec_epoch_ctx_t * epoch_ctx,
                          char const * genesis_filepath,
                          uchar is_snapshot,
                          fd_capture_ctx_t   * capture_ctx );

@@ -63,7 +63,7 @@ fd_topo_initialize( config_t * config ) {
   ulong bank_tile_cnt   = config->layout.bank_tile_count;
 
   ulong replay_tpool_thread_count = config->tiles.replay.tpool_thread_count;
-
+ 
   fd_topo_t * topo = { fd_topob_new( &config->topo, config->name ) };
 
   /*             topo, name */

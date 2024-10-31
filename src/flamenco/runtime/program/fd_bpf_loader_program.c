@@ -790,8 +790,8 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
 
       fd_bpf_upgradeable_loader_state_t loader_state   = {0};
       fd_pubkey_t *                     new_program_id = NULL;
-      fd_epoch_bank_t *                 epoch_bank     = fd_exec_epoch_ctx_epoch_bank( instr_ctx->slot_ctx->epoch_ctx );
-      fd_rent_t       *                 rent           = &epoch_bank->rent;
+      fd_epoch_bank_t const *           epoch_bank     = fd_exec_epoch_ctx_epoch_bank_const( instr_ctx->slot_ctx->epoch_ctx );
+      fd_rent_t const *                 rent           = &epoch_bank->rent;
       FD_BORROWED_ACCOUNT_TRY_BORROW_IDX( instr_ctx, 2UL, program ) {
 
       err = fd_bpf_loader_v3_program_get_state( instr_ctx, program, &loader_state );
@@ -1152,8 +1152,8 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
 
       FD_BORROWED_ACCOUNT_TRY_BORROW_IDX( instr_ctx, 0UL, programdata ) {
 
-      fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( instr_ctx->slot_ctx->epoch_ctx );
-      fd_rent_t       * rent       = &epoch_bank->rent;
+      fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( instr_ctx->slot_ctx->epoch_ctx );
+      fd_rent_t const * rent             = &epoch_bank->rent;
 
       programdata_balance_required = fd_ulong_max( 1UL, fd_rent_exempt_minimum_balance( rent, programdata->const_meta->dlen ) );
 
@@ -1685,8 +1685,8 @@ process_loader_upgradeable_instruction( fd_exec_instr_ctx_t * instr_ctx ) {
       }
 
       /* https://github.com/anza-xyz/agave/blob/574bae8fefc0ed256b55340b9d87b7689bcdf222/programs/bpf_loader/src/lib.rs#L1232-L1256 */
-      fd_epoch_bank_t * epoch_bank       = fd_exec_epoch_ctx_epoch_bank( instr_ctx->slot_ctx->epoch_ctx );
-      fd_rent_t       * rent             = &epoch_bank->rent;
+      fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( instr_ctx->slot_ctx->epoch_ctx );
+      fd_rent_t const * rent             = &epoch_bank->rent;
       ulong             balance          = programdata_account->const_meta->info.lamports;
       ulong             min_balance      = fd_ulong_max( fd_rent_exempt_minimum_balance( rent, new_len ), 1UL );
       ulong             required_payment = fd_ulong_sat_sub( min_balance, balance );

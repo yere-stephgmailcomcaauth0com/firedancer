@@ -33,8 +33,8 @@ fd_epoch_schedule_derive( fd_epoch_schedule_t * schedule,
 }
 
 static void
-write_epoch_schedule( fd_exec_slot_ctx_t  * slot_ctx,
-                      fd_epoch_schedule_t * epoch_schedule ) {
+write_epoch_schedule( fd_exec_slot_ctx_t  *       slot_ctx,
+                      fd_epoch_schedule_t const * epoch_schedule ) {
   ulong sz  = fd_epoch_schedule_size( epoch_schedule );
   FD_LOG_INFO(("Writing epoch schedule size %lu", sz));
   /* TODO remove alloca */
@@ -75,7 +75,7 @@ fd_sysvar_epoch_schedule_read( fd_epoch_schedule_t *      result,
 
 void
 fd_sysvar_epoch_schedule_init( fd_exec_slot_ctx_t * slot_ctx ) {
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   write_epoch_schedule( slot_ctx, &epoch_bank->epoch_schedule );
 }
 

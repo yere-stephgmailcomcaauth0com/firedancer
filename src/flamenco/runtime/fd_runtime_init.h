@@ -41,14 +41,20 @@ fd_runtime_save_epoch_bank_archival( fd_exec_slot_ctx_t * slot_ctx );
    snapshot. */
 
 void
-fd_features_restore( fd_exec_slot_ctx_t * slot_ctx );
+fd_features_restore( fd_exec_epoch_ctx_t *   epoch_ctx,
+                     fd_acc_mgr_t *          acc_mgr,
+                     fd_funk_txn_t *         funk_txn );
 
 /* Recover slot_bank and epoch_bnck from funky */
 void
-fd_runtime_recover_banks( fd_exec_slot_ctx_t * slot_ctx, int delete_first, int clear_first );
+fd_runtime_recover_banks( fd_exec_slot_ctx_t *  slot_ctx,
+                          fd_exec_epoch_ctx_t * epoch_ctx,
+                          int                   delete_first, 
+                          int                   clear_first );
 
 void
-fd_runtime_delete_banks( fd_exec_slot_ctx_t * slot_ctx );
+fd_runtime_delete_banks( fd_exec_slot_ctx_t *  slot_ctx,
+                         fd_exec_epoch_ctx_t * epoch_ctx );
 
 FD_PROTOTYPES_END
 

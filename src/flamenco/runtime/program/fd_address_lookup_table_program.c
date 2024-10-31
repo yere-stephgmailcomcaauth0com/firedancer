@@ -282,8 +282,8 @@ create_lookup_table( fd_exec_instr_ctx_t *       ctx,
 
   /* https://github.com/solana-labs/solana/blob/v1.17.4/programs/address-lookup-table/src/processor.rs#L137-L142 */
 
-  fd_epoch_bank_t * epoch_bank        = fd_exec_epoch_ctx_epoch_bank( ctx->slot_ctx->epoch_ctx );
-  fd_rent_t       * rent              = &epoch_bank->rent;
+  fd_epoch_bank_t const * epoch_bank        = fd_exec_epoch_ctx_epoch_bank_const( ctx->slot_ctx->epoch_ctx );
+  fd_rent_t const       * rent              = &epoch_bank->rent;
   ulong             tbl_acct_data_len = 0x38UL;
   ulong             required_lamports = fd_rent_exempt_minimum_balance( rent, tbl_acct_data_len );
                     required_lamports = fd_ulong_max( required_lamports, 1UL );
@@ -640,11 +640,11 @@ extend_lookup_table( fd_exec_instr_ctx_t *       ctx,
 
 
   /* https://github.com/solana-labs/solana/blob/v1.17.4/programs/address-lookup-table/src/processor.rs#L317-L321 */
-  fd_epoch_bank_t * epoch_bank        = fd_exec_epoch_ctx_epoch_bank( ctx->slot_ctx->epoch_ctx );
-  fd_rent_t       * rent              = &epoch_bank->rent;
-  ulong             required_lamports = fd_rent_exempt_minimum_balance( rent, new_table_data_sz );
-                    required_lamports = fd_ulong_max    ( required_lamports, 1UL );
-                    required_lamports = fd_ulong_sat_sub( required_lamports, lut_lamports );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( ctx->slot_ctx->epoch_ctx );
+  fd_rent_t const *       rent       = &epoch_bank->rent;
+  ulong                   required_lamports = fd_rent_exempt_minimum_balance( rent, new_table_data_sz );
+                          required_lamports = fd_ulong_max    ( required_lamports, 1UL );
+                          required_lamports = fd_ulong_sat_sub( required_lamports, lut_lamports );
 
   if( required_lamports ) {
     fd_pubkey_t const * payer_key = NULL;

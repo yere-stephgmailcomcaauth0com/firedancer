@@ -2835,22 +2835,11 @@ remove_vote_account( fd_exec_slot_ctx_t * slot_ctx, fd_borrowed_account_t * vote
   fd_vote_accounts_pair_t_mapnode_t key;
   fd_memcpy( key.elem.key.uc, vote_account->pubkey->uc, sizeof(fd_pubkey_t) );
 
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
-  fd_vote_accounts_t * epoch_vote_accounts = &epoch_bank->stakes.vote_accounts;
-  if (epoch_vote_accounts->vote_accounts_pool == NULL) {
-    FD_LOG_DEBUG(("Vote accounts pool does not exist"));
-    return;
-  }
-  fd_vote_accounts_pair_t_mapnode_t * entry = fd_vote_accounts_pair_t_map_find(epoch_vote_accounts->vote_accounts_pool, epoch_vote_accounts->vote_accounts_root, &key);
-  if (FD_LIKELY( entry )) {
-    fd_vote_accounts_pair_t_map_remove( epoch_vote_accounts->vote_accounts_pool, &epoch_vote_accounts->vote_accounts_root, entry);
-  }
-
   if (slot_ctx->slot_bank.vote_account_keys.vote_accounts_pool == NULL) {
     FD_LOG_DEBUG(("Vote accounts pool does not exist"));
     return;
   }
-  entry = fd_vote_accounts_pair_t_map_find(slot_ctx->slot_bank.vote_account_keys.vote_accounts_pool, slot_ctx->slot_bank.vote_account_keys.vote_accounts_root, &key);
+  fd_vote_accounts_pair_t_mapnode_t * entry = fd_vote_accounts_pair_t_map_find(slot_ctx->slot_bank.vote_account_keys.vote_accounts_pool, slot_ctx->slot_bank.vote_account_keys.vote_accounts_root, &key);
   if (FD_UNLIKELY( entry )) {
     fd_vote_accounts_pair_t_map_remove( slot_ctx->slot_bank.vote_account_keys.vote_accounts_pool, &slot_ctx->slot_bank.vote_account_keys.vote_accounts_root, entry);
   }
@@ -2876,8 +2865,8 @@ upsert_vote_account( fd_exec_slot_ctx_t * slot_ctx, fd_borrowed_account_t * vote
     }
 
     if ( vote_state_versions_is_correct_and_initialized( vote_account ) ) {
-      fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
-      fd_stakes_t * stakes = &epoch_bank->stakes;
+      fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
+      fd_stakes_t const * stakes = &epoch_bank->stakes;
 
       fd_vote_accounts_pair_t_mapnode_t key;
       fd_memcpy(&key.elem.key, vote_account->pubkey->uc, sizeof(fd_pubkey_t));

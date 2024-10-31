@@ -264,12 +264,13 @@ fd_exec_epoch_ctx_bank_mem_setup( fd_exec_epoch_ctx_t * self ) {
 }
 
 void
-fd_exec_epoch_ctx_from_prev( fd_exec_epoch_ctx_t * self, fd_exec_epoch_ctx_t * prev ) {
+fd_exec_epoch_ctx_from_prev( fd_exec_epoch_ctx_t *       self,
+                             fd_exec_epoch_ctx_t const * prev ) {
   fd_memcpy( &self->features, &prev->features, sizeof(fd_features_t) );
   self->bank_hash_cmp = prev->bank_hash_cmp;
 
-  fd_epoch_bank_t * old_epoch_bank = fd_exec_epoch_ctx_epoch_bank( prev );
-  fd_epoch_bank_t * new_epoch_bank = fd_exec_epoch_ctx_bank_mem_setup( self );
+  fd_epoch_bank_t const * old_epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( prev );
+  fd_epoch_bank_t *       new_epoch_bank = fd_exec_epoch_ctx_bank_mem_setup( self );
 
   FD_SCRATCH_SCOPE_BEGIN {
 
@@ -283,6 +284,6 @@ fd_exec_epoch_ctx_from_prev( fd_exec_epoch_ctx_t * self, fd_exec_epoch_ctx_t * p
     fd_epoch_bank_decode( new_epoch_bank, &decode);
 
     sz = fd_ulong_align_up( fd_epoch_leaders_footprint( MAX_PUB_CNT, MAX_SLOTS_CNT ), fd_epoch_leaders_align() );
-    fd_memcpy( fd_exec_epoch_ctx_leaders( self ), fd_exec_epoch_ctx_leaders( prev ), sz );
+    fd_memcpy( fd_exec_epoch_ctx_leaders( self ), fd_exec_epoch_ctx_leaders_const( prev ), sz );
   } FD_SCRATCH_SCOPE_END;
 }

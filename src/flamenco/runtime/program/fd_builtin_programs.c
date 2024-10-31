@@ -43,7 +43,7 @@ fd_write_builtin_bogus_account( fd_exec_slot_ctx_t * slot_ctx,
 void
 write_inline_spl_native_mint_program_account( fd_exec_slot_ctx_t * slot_ctx ) {
   // really?! really!?
-  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   if( epoch_bank->cluster_type != 3)
     return;
 

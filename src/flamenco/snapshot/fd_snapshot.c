@@ -42,23 +42,32 @@ fd_hashes_load(fd_exec_slot_ctx_t * slot_ctx) {
   fd_runtime_save_epoch_bank( slot_ctx );
 }
 
+struct fd_snapshot_restore_cb_ctx {
+  fd_exec_slot_ctx_t *  slot_ctx;
+  fd_exec_epoch_ctx_t * epoch_ctx;
+};
+typedef struct fd_snapshot_restore_cb_ctx fd_snapshot_restore_cb_ctx_t;
 
 static int
-restore_manifest( void *                 ctx,
+restore_manifest( void *                 _ctx,
                   fd_solana_manifest_t * manifest ) {
-  return (!!fd_exec_slot_ctx_recover( ctx, manifest ) ? 0 : EINVAL);
+  fd_snapshot_restore_cb_ctx_t * ctx = (fd_snapshot_restore_cb_ctx_t *)_ctx;
+  return (!!fd_exec_slot_ctx_recover( ctx->slot_ctx, ctx->epoch_ctx, manifest ) ? 0 : EINVAL);
 }
 
 static int
-restore_status_cache( void *                 ctx,
+restore_status_cache( void *                  _ctx,
                       fd_bank_slot_deltas_t * slot_deltas ) {
-  return (!!fd_exec_slot_ctx_recover_status_cache( ctx, slot_deltas ) ? 0 : EINVAL);
+  fd_snapshot_restore_cb_ctx_t * ctx = (fd_snapshot_restore_cb_ctx_t *)_ctx;
+
+  return (!!fd_exec_slot_ctx_recover_status_cache( ctx->slot_ctx, slot_deltas ) ? 0 : EINVAL);
 }
 
 static void
-load_one_snapshot( fd_exec_slot_ctx_t * slot_ctx,
-                   char *               source_cstr,
-                   fd_snapshot_name_t * name_out ) {
+load_one_snapshot( fd_exec_slot_ctx_t *  slot_ctx,
+                   fd_exec_epoch_ctx_t * epoch_ctx,
+                   char *                source_cstr,
+                   fd_snapshot_name_t *  name_out ) {
 
   /* FIXME don't hardcode this param */
   static ulong const zstd_window_sz = 33554432UL;
@@ -72,13 +81,13 @@ load_one_snapshot( fd_exec_slot_ctx_t * slot_ctx,
     if( FD_UNLIKELY( fd_funk_unarchive( slot_ctx->acc_mgr->funk, src->file.path ) ) ) {
       FD_LOG_ERR(( "Failed to load snapshot" ));
     }
-    fd_runtime_recover_banks( slot_ctx, 0, 1 );
+    fd_runtime_recover_banks( slot_ctx, epoch_ctx, 0, 1 );
     memset( name_out, 0, sizeof(fd_snapshot_name_t) );
     name_out->type = FD_SNAPSHOT_TYPE_FULL;
     name_out->slot = slot_ctx->slot_bank.slot;
     return;
   }
-  fd_exec_epoch_ctx_bank_mem_clear( slot_ctx->epoch_ctx );
+  fd_exec_epoch_ctx_bank_mem_clear( epoch_ctx );
 
   fd_valloc_t     valloc   = slot_ctx->valloc;
   fd_acc_mgr_t *  acc_mgr  = slot_ctx->acc_mgr;
@@ -87,7 +96,12 @@ load_one_snapshot( fd_exec_slot_ctx_t * slot_ctx,
   void * restore_mem = fd_valloc_malloc( valloc, fd_snapshot_restore_align(), fd_snapshot_restore_footprint() );
   void * loader_mem  = fd_valloc_malloc( valloc, fd_snapshot_loader_align(),  fd_snapshot_loader_footprint( zstd_window_sz ) );
 
-  fd_snapshot_restore_t * restore = fd_snapshot_restore_new( restore_mem, acc_mgr, funk_txn, valloc, slot_ctx, restore_manifest, restore_status_cache );
+  fd_snapshot_restore_cb_ctx_t cb_ctx = {
+    .slot_ctx  = slot_ctx,
+    .epoch_ctx = epoch_ctx,
+  };
+
+  fd_snapshot_restore_t * restore = fd_snapshot_restore_new( restore_mem, acc_mgr, funk_txn, valloc, &cb_ctx, restore_manifest, restore_status_cache );
   fd_snapshot_loader_t *  loader  = fd_snapshot_loader_new ( loader_mem, zstd_window_sz );
 
   if( FD_UNLIKELY( !restore || !loader ) ) {
@@ -120,12 +134,13 @@ load_one_snapshot( fd_exec_slot_ctx_t * slot_ctx,
 
 
 void
-fd_snapshot_load( const char *         snapshotfile,
-                  fd_exec_slot_ctx_t * slot_ctx,
-                  fd_tpool_t *         tpool,
-                  uint                 verify_hash,
-                  uint                 check_hash,
-                  int                  snapshot_type ) {
+fd_snapshot_load( const char *          snapshotfile,
+                  fd_exec_slot_ctx_t *  slot_ctx,
+                  fd_exec_epoch_ctx_t * epoch_ctx,
+                  fd_tpool_t *          tpool,
+                  uint                  verify_hash,
+                  uint                  check_hash,
+                  int                   snapshot_type ) {
 
   switch (snapshot_type) {
   case FD_SNAPSHOT_TYPE_UNSPECIFIED:
@@ -162,7 +177,7 @@ fd_snapshot_load( const char *         snapshotfile,
   char * snapshot_cstr = fd_scratch_alloc( 1UL, slen + 1 );
   fd_cstr_fini( fd_cstr_append_text( fd_cstr_init( snapshot_cstr ), snapshotfile, slen ) );
   fd_snapshot_name_t name = {0};
-  load_one_snapshot( slot_ctx, snapshot_cstr, &name );
+  load_one_snapshot( slot_ctx, epoch_ctx, snapshot_cstr, &name );
   fd_hash_t const * fhash = &name.fhash;
   fd_scratch_pop();
 
@@ -171,7 +186,7 @@ fd_snapshot_load( const char *         snapshotfile,
   }
 
   // In order to calculate the snapshot hash, we need to know what features are active...
-  fd_features_restore( slot_ctx );
+  fd_features_restore( epoch_ctx, slot_ctx->acc_mgr, slot_ctx->funk_txn );
   fd_calculate_epoch_accounts_hash_values( slot_ctx );
 
   if( verify_hash ) {

@@ -872,7 +872,7 @@ fd_gossip_random_pull( fd_gossip_t * glob, fd_pending_event_arg_t * arg ) {
   (void)arg;
 
   /* Try again in 5 sec */
-  fd_pending_event_t * ev = fd_gossip_add_pending(glob, glob->now + (long)100e6);
+  fd_pending_event_t * ev = fd_gossip_add_pending(glob, glob->now + (long)5000e6);
   if (ev) {
     ev->fun = fd_gossip_random_pull;
   }
@@ -1836,8 +1836,7 @@ fd_gossip_push( fd_gossip_t * glob, fd_pending_event_arg_t * arg ) {
   /* Flush partially full packets */
   for (ulong i = 0; i < glob->push_states_cnt; ++i) {
     fd_push_state_t* s = glob->push_states[i];
-    if (s->packet_end != s->packet_end_init) {
-      ulong * crds_len = (ulong *)(s->packet_end_init - sizeof(ulong));
+    if (s->packet_end != s->packet_end_init) {      ulong * crds_len = (ulong *)(s->packet_end_init - sizeof(ulong));
       ulong sz = (ulong)(s->packet_end - s->packet);
       fd_gossip_send_raw(glob, &s->addr, s->packet, sz);
       char tmp[100];

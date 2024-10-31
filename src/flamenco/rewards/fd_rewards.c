@@ -53,8 +53,8 @@ validator( fd_inflation_t const * inflation, double year) {
     - full_inflation_enable, if full_inflation_vote has been activated
 
     https://github.com/anza-xyz/agave/blob/7117ed9653ce19e8b2dea108eff1f3eb6a3378a7/runtime/src/bank.rs#L2095 */
-static FD_FN_CONST ulong
-get_inflation_start_slot( fd_exec_slot_ctx_t * slot_ctx ) {
+static FD_FN_PURE ulong
+get_inflation_start_slot( fd_exec_slot_ctx_t const * slot_ctx ) {
     ulong devnet_and_testnet = FD_FEATURE_ACTIVE(slot_ctx, devnet_and_testnet) ? slot_ctx->epoch_ctx->features.devnet_and_testnet : ULONG_MAX;
 
     ulong enable = ULONG_MAX;
@@ -74,10 +74,10 @@ get_inflation_start_slot( fd_exec_slot_ctx_t * slot_ctx ) {
 }
 
 /* https://github.com/anza-xyz/agave/blob/7117ed9653ce19e8b2dea108eff1f3eb6a3378a7/runtime/src/bank.rs#L2110 */
-static ulong
-get_inflation_num_slots( fd_exec_slot_ctx_t * slot_ctx,
+FD_FN_PURE static ulong
+get_inflation_num_slots( fd_exec_slot_ctx_t const *  slot_ctx,
                          fd_epoch_schedule_t const * epoch_schedule,
-                         ulong slot ) {
+                         ulong                       slot ) {
     ulong inflation_activation_slot = get_inflation_start_slot( slot_ctx );
     ulong inflation_start_slot = fd_epoch_slot0(
         epoch_schedule,
@@ -92,9 +92,9 @@ get_inflation_num_slots( fd_exec_slot_ctx_t * slot_ctx,
 }
 
 /* https://github.com/anza-xyz/agave/blob/7117ed9653ce19e8b2dea108eff1f3eb6a3378a7/runtime/src/bank.rs#L2121 */
-static double
-slot_in_year_for_inflation( fd_exec_slot_ctx_t * slot_ctx ) {
-    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+FD_FN_PURE static double
+slot_in_year_for_inflation( fd_exec_slot_ctx_t const * slot_ctx ) {
+    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
     ulong num_slots = get_inflation_num_slots( slot_ctx, &epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot );
     return (double)num_slots / (double)epoch_bank->slots_per_year;
 }
@@ -293,14 +293,14 @@ epoch_duration_in_years(
 /* https://github.com/anza-xyz/agave/blob/7117ed9653ce19e8b2dea108eff1f3eb6a3378a7/runtime/src/bank.rs#L2128 */
 static void
 calculate_previous_epoch_inflation_rewards(
-    fd_exec_slot_ctx_t * slot_ctx,
+    fd_exec_slot_ctx_t const * slot_ctx,
     ulong prev_epoch_capitalization,
     ulong prev_epoch,
     fd_prev_epoch_inflation_rewards_t * rewards
 ) {
     double slot_in_year = slot_in_year_for_inflation( slot_ctx );
 
-    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
     rewards->validator_rate = validator( &epoch_bank->inflation, slot_in_year );
     rewards->foundation_rate = foundation( &epoch_bank->inflation, slot_in_year );
     rewards->prev_epoch_duration_in_years = epoch_duration_in_years(epoch_bank, prev_epoch);
@@ -310,7 +310,7 @@ calculate_previous_epoch_inflation_rewards(
 
 /* https://github.com/anza-xyz/agave/blob/cbc8320d35358da14d79ebcada4dfb6756ffac79/programs/stake/src/lib.rs#L29 */
 static ulong
-get_minimum_stake_delegation( fd_exec_slot_ctx_t * slot_ctx ) {
+get_minimum_stake_delegation( fd_exec_slot_ctx_t const * slot_ctx ) {
     if ( !FD_FEATURE_ACTIVE( slot_ctx, stake_minimum_delegation_for_rewards ) ) {
         return 0UL;
     }
@@ -336,7 +336,7 @@ calculate_reward_points_partitioned(
     /* TODO: check this cache is correct */
 
     uint128 points = 0;
-    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
 
     ulong minimum_stake_delegation = get_minimum_stake_delegation( slot_ctx );
 
@@ -380,7 +380,7 @@ calculate_reward_points_partitioned(
             fd_vote_accounts_pair_t_mapnode_t key;
             fd_pubkey_t const * voter_acc = &n->elem.delegation.voter_pubkey;
             fd_memcpy( &key.elem.key, voter_acc, sizeof(fd_pubkey_t) );
-            fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( 
+            fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( 
                 slot_ctx->epoch_ctx );
             if ( FD_UNLIKELY( fd_vote_accounts_pair_t_map_find( 
                 epoch_bank->stakes.vote_accounts.vote_accounts_pool,
@@ -464,7 +464,7 @@ calculate_reward_points_partitioned(
             fd_vote_accounts_pair_t_mapnode_t key;
             fd_pubkey_t const * voter_acc = &stake_state->inner.stake.stake.delegation.voter_pubkey;
             fd_memcpy( &key.elem.key, voter_acc, sizeof(fd_pubkey_t) );
-            fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( 
+            fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( 
                 slot_ctx->epoch_ctx );
             if ( FD_UNLIKELY( fd_vote_accounts_pair_t_map_find( 
                 epoch_bank->stakes.vote_accounts.vote_accounts_pool,
@@ -525,7 +525,7 @@ calculate_stake_vote_rewards_account(
 ) {
     FD_SCRATCH_SCOPE_BEGIN {
 
-        fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+        fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
         ulong minimum_stake_delegation = get_minimum_stake_delegation( slot_ctx );
 
         FD_BORROWED_ACCOUNT_DECL( stake_acc_rec );
@@ -657,7 +657,7 @@ calculate_stake_vote_rewards(
     fd_point_value_t *                         point_value,
     fd_calculate_stake_vote_rewards_result_t * result
 ) {
-    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+    fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
     ulong rewards_max_count = fd_ulong_sat_add( 
         fd_delegation_pair_t_map_size( epoch_bank->stakes.stake_delegations_pool, epoch_bank->stakes.stake_delegations_root ),
         fd_stake_accounts_pair_t_map_size( slot_ctx->slot_bank.stake_account_keys.stake_accounts_pool, slot_ctx->slot_bank.stake_account_keys.stake_accounts_root ) );
@@ -781,7 +781,7 @@ hash_rewards_into_partitions(
        These will all use the same pool - we do not re-allocate the stake rewards, only move them into partitions. */
     result->partitioned_stake_rewards.pool = stake_reward_calculation->pool;
     ulong num_partitions = get_reward_distribution_num_blocks( 
-        &fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx )->epoch_schedule,
+        &fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx )->epoch_schedule,
         slot_ctx->slot_bank.slot,
         stake_reward_calculation->stake_rewards_len);
     result->partitioned_stake_rewards.partitions_len = num_partitions;
@@ -1164,7 +1164,7 @@ fd_rewards_recalculate_partitioned_rewards(
            preceeding epoch.
            
            https://github.com/anza-xyz/agave/blob/2316fea4c0852e59c071f72d72db020017ffd7d0/runtime/src/bank/partitioned_epoch_rewards/calculation.rs#L566 */
-        fd_epoch_schedule_t * epoch_schedule = &fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx )->epoch_schedule;
+        fd_epoch_schedule_t const * epoch_schedule = &fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx )->epoch_schedule;
         ulong epoch = fd_slot_to_epoch( epoch_schedule, slot_ctx->slot_bank.slot, NULL );
         ulong rewarded_epoch = fd_ulong_sat_sub( epoch, 1UL );
 

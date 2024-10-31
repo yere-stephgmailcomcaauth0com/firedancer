@@ -123,8 +123,14 @@ fd_exec_epoch_ctx_leaders( fd_exec_epoch_ctx_t * ctx ) {
   return (fd_epoch_leaders_t *)((uchar *)ctx + ctx->layout.leaders_off);
 }
 
+FD_FN_PURE static inline fd_epoch_leaders_t const *
+fd_exec_epoch_ctx_leaders_const( fd_exec_epoch_ctx_t const * ctx ) {
+  return (fd_epoch_leaders_t const *)((uchar *)ctx + ctx->layout.leaders_off);
+}
+
 void
-fd_exec_epoch_ctx_from_prev( fd_exec_epoch_ctx_t * self, fd_exec_epoch_ctx_t * prev );
+fd_exec_epoch_ctx_from_prev( fd_exec_epoch_ctx_t *       self, 
+                             fd_exec_epoch_ctx_t const * prev );
 
 FD_PROTOTYPES_END
 

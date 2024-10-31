@@ -242,7 +242,7 @@ slot_ctx_restore( ulong                 slot,
     FD_LOG_ERR(( "failed to read banks record: invalid magic number" ));
   }
   FD_TEST( !fd_runtime_sysvar_cache_load( slot_ctx_out ) );
-  slot_ctx_out->leader = fd_epoch_leaders_get( fd_exec_epoch_ctx_leaders( slot_ctx_out->epoch_ctx ),
+  slot_ctx_out->leader = fd_epoch_leaders_get( fd_exec_epoch_ctx_leaders_const( slot_ctx_out->epoch_ctx ),
                                                slot );
 
   // TODO how do i get this info, ignoring rewards for now

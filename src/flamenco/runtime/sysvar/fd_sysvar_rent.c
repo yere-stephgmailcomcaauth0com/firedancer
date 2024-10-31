@@ -42,7 +42,7 @@ fd_sysvar_rent_read( fd_rent_t *                result,
 
 static void
 write_rent( fd_exec_slot_ctx_t * slot_ctx,
-            fd_rent_t const * rent ) {
+            fd_rent_t const *    rent ) {
 
   uchar enc[ 32 ];
 
@@ -61,7 +61,7 @@ write_rent( fd_exec_slot_ctx_t * slot_ctx,
 
 void
 fd_sysvar_rent_init( fd_exec_slot_ctx_t * slot_ctx ) {
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   write_rent( slot_ctx, &epoch_bank->rent );
 }
 

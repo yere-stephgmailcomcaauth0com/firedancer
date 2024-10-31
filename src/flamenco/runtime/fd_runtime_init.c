@@ -26,7 +26,7 @@ fd_runtime_slot_bank_key( void ) {
 
 int
 fd_runtime_save_epoch_bank( fd_exec_slot_ctx_t * slot_ctx ) {
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   ulong sz = sizeof(uint) + fd_epoch_bank_size(epoch_bank);
   fd_funk_rec_key_t id = fd_runtime_epoch_bank_key();
   int opt_err = 0;
@@ -58,7 +58,7 @@ fd_runtime_save_epoch_bank( fd_exec_slot_ctx_t * slot_ctx ) {
 
 int
 fd_runtime_save_epoch_bank_archival( fd_exec_slot_ctx_t * slot_ctx ) {
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   ulong sz = sizeof(uint) + fd_epoch_bank_size(epoch_bank)*2; /* Conservatively estimate double the bincode size */
   fd_funk_rec_key_t id = fd_runtime_epoch_bank_key();
   int opt_err = 0;
@@ -87,8 +87,8 @@ fd_runtime_save_epoch_bank_archival( fd_exec_slot_ctx_t * slot_ctx ) {
   return FD_RUNTIME_EXECUTE_SUCCESS;
 }
 
-int fd_runtime_save_slot_bank(fd_exec_slot_ctx_t *slot_ctx)
-{
+int
+fd_runtime_save_slot_bank( fd_exec_slot_ctx_t * slot_ctx ) {
   ulong sz = sizeof(uint) + fd_slot_bank_size(&slot_ctx->slot_bank);
 
   fd_funk_rec_key_t id = fd_runtime_slot_bank_key();
@@ -152,10 +152,12 @@ int fd_runtime_save_slot_bank_archival(fd_exec_slot_ctx_t *slot_ctx)
 }
 
 void
-fd_runtime_recover_banks( fd_exec_slot_ctx_t * slot_ctx, int delete_first, int clear_first ) {
-  fd_funk_t *           funk         = slot_ctx->acc_mgr->funk;
-  fd_funk_txn_t *       txn          = slot_ctx->funk_txn;
-  fd_exec_epoch_ctx_t * epoch_ctx    = slot_ctx->epoch_ctx;
+fd_runtime_recover_banks( fd_exec_slot_ctx_t * slot_ctx, 
+                          fd_exec_epoch_ctx_t * epoch_ctx,
+                          int delete_first,
+                          int clear_first ) {
+  fd_funk_t *           funk            = slot_ctx->acc_mgr->funk;
+  fd_funk_txn_t *       txn             = slot_ctx->funk_txn;
   {
     fd_funk_rec_key_t id = fd_runtime_epoch_bank_key();
     fd_funk_rec_t const * rec = fd_funk_rec_query_global(funk, txn, &id, NULL);
@@ -232,13 +234,14 @@ fd_runtime_recover_banks( fd_exec_slot_ctx_t * slot_ctx, int delete_first, int c
 }
 
 void
-fd_runtime_delete_banks( fd_exec_slot_ctx_t * slot_ctx ) {
+fd_runtime_delete_banks( fd_exec_slot_ctx_t *  slot_ctx,
+                         fd_exec_epoch_ctx_t * epoch_ctx ) {
 
   /* As the collection pointers are not owned by fd_alloc, zero them
      out to prevent invalid frees by the destroy function. */
 
   fd_bincode_destroy_ctx_t ctx = { .valloc = slot_ctx->valloc };
-  fd_exec_epoch_ctx_epoch_bank_delete( slot_ctx->epoch_ctx );
+  fd_exec_epoch_ctx_epoch_bank_delete( epoch_ctx );
   fd_slot_bank_destroy( &slot_ctx->slot_bank, &ctx );
 }
 
@@ -248,12 +251,14 @@ fd_runtime_delete_banks( fd_exec_slot_ctx_t * slot_ctx ) {
    address. */
 
 static void
-fd_feature_restore( fd_exec_slot_ctx_t * slot_ctx,
+fd_feature_restore( fd_exec_epoch_ctx_t *   epoch_ctx,
+                    fd_acc_mgr_t *          acc_mgr,
+                    fd_funk_txn_t *         funk_txn,
                     fd_feature_id_t const * id,
-                    uchar const       acct[ static 32 ] ) {
+                    fd_pubkey_t const *     acct ) {
 
   FD_BORROWED_ACCOUNT_DECL(acct_rec);
-  int err = fd_acc_mgr_view(slot_ctx->acc_mgr, slot_ctx->funk_txn, (fd_pubkey_t *)acct, acct_rec);
+  int err = fd_acc_mgr_view( acc_mgr, funk_txn, (fd_pubkey_t *)acct, acct_rec );
   if (FD_UNLIKELY(err != FD_ACC_MGR_SUCCESS))
     return;
 
@@ -280,7 +285,7 @@ fd_feature_restore( fd_exec_slot_ctx_t * slot_ctx,
 
     if( feature->has_activated_at ) {
       FD_LOG_INFO(( "Feature %s activated at %lu", FD_BASE58_ENC_32_ALLOCA( acct ), feature->activated_at ));
-      fd_features_set(&slot_ctx->epoch_ctx->features, id, feature->activated_at);
+      fd_features_set(&epoch_ctx->features, id, feature->activated_at);
     } else {
       FD_LOG_DEBUG(( "Feature %s not activated at %lu", FD_BASE58_ENC_32_ALLOCA( acct ), feature->activated_at ));
     }
@@ -289,10 +294,12 @@ fd_feature_restore( fd_exec_slot_ctx_t * slot_ctx,
 }
 
 void
-fd_features_restore( fd_exec_slot_ctx_t * slot_ctx ) {
+fd_features_restore( fd_exec_epoch_ctx_t *   epoch_ctx,
+                     fd_acc_mgr_t *          acc_mgr,
+                     fd_funk_txn_t *         funk_txn ) {
   for( fd_feature_id_t const * id = fd_feature_iter_init();
                                    !fd_feature_iter_done( id );
                                id = fd_feature_iter_next( id ) ) {
-    fd_feature_restore( slot_ctx, id, id->id.key );
+    fd_feature_restore( epoch_ctx, acc_mgr, funk_txn, id, &id->id );
   }
 }

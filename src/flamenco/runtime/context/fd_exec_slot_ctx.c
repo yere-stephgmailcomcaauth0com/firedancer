@@ -109,7 +109,7 @@ fd_exec_slot_ctx_delete( void * mem ) {
 static int
 recover_clock( fd_exec_slot_ctx_t * slot_ctx ) {
 
-  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_epoch_bank_t const * epoch_bank = fd_exec_epoch_ctx_epoch_bank_const( slot_ctx->epoch_ctx );
   fd_vote_accounts_t const * vote_accounts = &epoch_bank->stakes.vote_accounts;
 
   fd_vote_accounts_pair_t_mapnode_t * vote_accounts_pool = vote_accounts->vote_accounts_pool;
@@ -140,9 +140,9 @@ recover_clock( fd_exec_slot_ctx_t * slot_ctx ) {
 
 static fd_exec_slot_ctx_t *
 fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
+                           fd_exec_epoch_ctx_t *  epoch_ctx,
                            fd_solana_manifest_t * manifest ) {
 
-  fd_exec_epoch_ctx_t * epoch_ctx   = slot_ctx->epoch_ctx;
   fd_epoch_bank_t *     epoch_bank  = fd_exec_epoch_ctx_epoch_bank( epoch_ctx );
   fd_valloc_t           slot_valloc = slot_ctx->valloc;
 
@@ -420,9 +420,10 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
 
 fd_exec_slot_ctx_t *
 fd_exec_slot_ctx_recover( fd_exec_slot_ctx_t *   slot_ctx,
+                          fd_exec_epoch_ctx_t *  epoch_ctx,
                           fd_solana_manifest_t * manifest ) {
 
-  fd_exec_slot_ctx_t * res = fd_exec_slot_ctx_recover_( slot_ctx, manifest );
+  fd_exec_slot_ctx_t * res = fd_exec_slot_ctx_recover_( slot_ctx, epoch_ctx, manifest );
 
   /* Regardless of result, always destroy manifest */
   fd_bincode_destroy_ctx_t destroy = { .valloc = slot_ctx->valloc };
