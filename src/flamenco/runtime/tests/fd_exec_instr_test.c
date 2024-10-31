@@ -208,6 +208,152 @@ _restore_feature_flags( fd_exec_epoch_ctx_t *              epoch_ctx,
   return 1;
 }
 
+static void
+_add_to_data(uchar ** data, void const * to_add, ulong size) {
+  while( size-- ) {
+    **data = *(uchar *)to_add;
+    (*data)++;
+    to_add = (uchar *)to_add + 1;
+  }
+}
+
+#define FD_CHECKED_ADD_TO_DATA( _begin, _cur_data, _to_add, _sz ) __extension__({  \
+  if( FD_UNLIKELY( (*_cur_data)+_sz>_begin+FD_TXN_MTU ) ) return ULONG_MAX;        \
+  _add_to_data( _cur_data, _to_add, _sz );                                         \
+})
+
+static void
+_add_compact_u16(uchar ** data, ushort to_add) {
+  fd_bincode_encode_ctx_t encode_ctx = { .data = *data, .dataend = *data + 3 };  // Up to 3 bytes
+  fd_bincode_compact_u16_encode( &to_add, &encode_ctx );
+  *data = (uchar *) encode_ctx.data;
+}
+
+#define FD_CHECKED_ADD_CU16_TO_DATA( _begin, _cur_data, _to_add ) __extension__({            \
+  do {                                                                                       \
+    fd_bincode_encode_ctx_t _encode_ctx = { .data = *_cur_data, .dataend = *_cur_data + 3 }; \
+    fd_bincode_compact_u16_encode( &_to_add, &_encode_ctx );                                 \
+    ulong _sz = (ulong) ((uchar *)_encode_ctx.data - *_cur_data );                            \
+    if( FD_UNLIKELY( (*_cur_data)+_sz>_begin+FD_TXN_MTU ) ) return ULONG_MAX;                \
+    _add_compact_u16( _cur_data, _to_add );                                                  \
+  } while(0);                                                                                \
+})
+
+/* Serializes a Protobuf SanitizedTransaction and returns the number of bytes consumed.
+   Returns ULONG_MAX if the number of bytes read exceeds 1232 (FD_TXN_MTU). 
+   _txn_raw_begin is assumed to be a pre-allocated buffer of at least 1232 bytes. */
+ulong
+_serialize_txn( uchar * txn_raw_begin, 
+                const fd_exec_test_sanitized_transaction_t * tx,
+                ushort * out_instr_cnt,
+                ushort * out_addr_table_cnt ) {
+  const uchar empty_bytes[64] = { 0 };
+  uchar * txn_raw_cur_ptr = txn_raw_begin;
+
+  /* Compact array of signatures (https://solana.com/docs/core/transactions#transaction)
+     Note that although documentation interchangably refers to the signature cnt as a compact-u16
+     and a u8, the max signature cnt is capped at 48 (due to txn size limits), so u8 and compact-u16
+     is represented the same way anyways and can be parsed identically. */
+  // Note: always create a valid txn with 1+ signatures, add an empty signature if none is provided
+  uchar signature_cnt = fd_uchar_max( 1, (uchar) tx->signatures_count );
+  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &signature_cnt, sizeof(uchar) );
+  for( uchar i = 0; i < signature_cnt; ++i ) {
+    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->signatures && tx->signatures[i] ? tx->signatures[i]->bytes : empty_bytes, FD_TXN_SIGNATURE_SZ );
+  }
+
+  /* Message */
+  /* For v0 transactions, the highest bit of the num_required_signatures is set, and an extra byte is used for the version.
+     https://solanacookbook.com/guides/versioned-transactions.html#versioned-transactions-transactionv0
+
+     We will always create a transaction with at least 1 signature, and cap the signature count to 127 to avoid
+     collisions with the header_b0 tag. */
+  uchar num_required_signatures = fd_uchar_max( 1, fd_uchar_min( 127, (uchar) tx->message.header.num_required_signatures ) );
+  if( !tx->message.is_legacy ) {
+    uchar header_b0 = (uchar) 0x80UL;
+    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &header_b0, sizeof(uchar) );
+  }
+
+  /* Header (3 bytes) (https://solana.com/docs/core/transactions#message-header) */
+  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &num_required_signatures, sizeof(uchar) );
+  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &tx->message.header.num_readonly_signed_accounts, sizeof(uchar) );
+  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &tx->message.header.num_readonly_unsigned_accounts, sizeof(uchar) );
+
+  /* Compact array of account addresses (https://solana.com/docs/core/transactions#compact-array-format) */
+  // Array length is a compact u16
+  ushort num_acct_keys = (ushort) tx->message.account_keys_count;
+  FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, num_acct_keys );
+  for( ushort i = 0; i < num_acct_keys; ++i ) {
+    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.account_keys[i]->bytes, sizeof(fd_pubkey_t) );
+  }
+
+  /* Recent blockhash (32 bytes) (https://solana.com/docs/core/transactions#recent-blockhash) */
+  // Note: add an empty blockhash if none is provided
+  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.recent_blockhash ? tx->message.recent_blockhash->bytes : empty_bytes, sizeof(fd_hash_t) );
+
+  /* Compact array of instructions (https://solana.com/docs/core/transactions#array-of-instructions) */
+  // Instruction count is a compact u16
+  ushort instr_count = (ushort) tx->message.instructions_count;
+  FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, instr_count );
+  for( ushort i = 0; i < instr_count; ++i ) {
+    // Program ID index
+    uchar program_id_index = (uchar) tx->message.instructions[i].program_id_index;
+    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &program_id_index, sizeof(uchar) );
+
+    // Compact array of account addresses
+    ushort acct_count = (ushort) tx->message.instructions[i].accounts_count;
+    FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, acct_count );
+    for( ushort j = 0; j < acct_count; ++j ) {
+      uchar account_index = (uchar) tx->message.instructions[i].accounts[j];
+      FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &account_index, sizeof(uchar) );
+    }
+
+    // Compact array of 8-bit data
+    pb_bytes_array_t * data = tx->message.instructions[i].data;
+    ushort data_len;
+    if( data ) {
+      data_len = (ushort) data->size;
+      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, data_len );
+      FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, data->bytes, data_len );
+    } else {
+      data_len = 0;
+      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, data_len );
+    }
+  }
+
+  /* Address table lookups (N/A for legacy transactions) */
+  ushort addr_table_cnt = 0;
+  if( !tx->message.is_legacy ) {
+    /* Compact array of address table lookups (https://solanacookbook.com/guides/versioned-transactions.html#compact-array-of-address-table-lookups) */
+    // NOTE: The diagram is slightly wrong - the account key is a 32 byte pubkey, not a u8
+    addr_table_cnt = (ushort) tx->message.address_table_lookups_count;
+    FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, addr_table_cnt );
+    for( ushort i = 0; i < addr_table_cnt; ++i ) {
+      // Account key
+      FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.address_table_lookups[i].account_key, sizeof(fd_pubkey_t) );
+
+      // Compact array of writable indexes
+      ushort writable_count = (ushort) tx->message.address_table_lookups[i].writable_indexes_count;
+      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, writable_count );
+      for( ushort j = 0; j < writable_count; ++j ) {
+        uchar writable_index = (uchar) tx->message.address_table_lookups[i].writable_indexes[j];
+        FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &writable_index, sizeof(uchar) );
+      }
+
+      // Compact array of readonly indexes
+      ushort readonly_count = (ushort) tx->message.address_table_lookups[i].readonly_indexes_count;
+      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, readonly_count );
+      for( ushort j = 0; j < readonly_count; ++j ) {
+        uchar readonly_index = (uchar) tx->message.address_table_lookups[i].readonly_indexes[j];
+        FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &readonly_index, sizeof(uchar) );
+      }
+    }
+  }
+  *out_instr_cnt = instr_count;
+  *out_addr_table_cnt = addr_table_cnt;
+  return (ulong)(txn_raw_cur_ptr - txn_raw_begin);
+}
+
+
 int
 fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
                                    fd_exec_instr_ctx_t *                ctx,
@@ -581,27 +727,11 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
   return 1;
 }
 
-static void
-_add_to_data(uchar ** data, void const * to_add, ulong size) {
-  while( size-- ) {
-    **data = *(uchar *)to_add;
-    (*data)++;
-    to_add = (uchar *)to_add + 1;
-  }
-}
-
-static void
-_add_compact_u16(uchar ** data, ushort to_add) {
-  fd_bincode_encode_ctx_t encode_ctx = { .data = *data, .dataend = *data + 3 };  // Up to 3 bytes
-  fd_bincode_compact_u16_encode( &to_add, &encode_ctx );
-  *data = (uchar *) encode_ctx.data;
-}
-
 static fd_execute_txn_task_info_t *
 _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
                               fd_exec_slot_ctx_t *               slot_ctx,
                               fd_exec_test_txn_context_t const * test_ctx ) {
-  uchar empty_bytes[64] = { 0 };
+  const uchar empty_bytes[64] = { 0 };
   fd_funk_t * funk = runner->funk;
 
   /* Generate unique ID for funk txn */
@@ -825,110 +955,16 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   fd_funk_end_write( runner->funk );
 
   /* Create the raw txn (https://solana.com/docs/core/transactions#transaction-size) */
-  uchar * txn_raw_begin = fd_scratch_alloc( alignof(uchar), 10000 ); // max txn size is 1232 but we allocate extra for safety
-  uchar * txn_raw_cur_ptr = txn_raw_begin;
-
-  /* Compact array of signatures (https://solana.com/docs/core/transactions#transaction)
-     Note that although documentation interchangably refers to the signature cnt as a compact-u16
-     and a u8, the max signature cnt is capped at 48 (due to txn size limits), so u8 and compact-u16
-     is represented the same way anyways and can be parsed identically. */
-  // Note: always create a valid txn with 1+ signatures, add an empty signature if none is provided
-  uchar signature_cnt = fd_uchar_max( 1, (uchar) test_ctx->tx.signatures_count );
-  _add_to_data( &txn_raw_cur_ptr, &signature_cnt, sizeof(uchar) );
-  for( uchar i = 0; i < signature_cnt; ++i ) {
-    _add_to_data( &txn_raw_cur_ptr, test_ctx->tx.signatures && test_ctx->tx.signatures[i] ? test_ctx->tx.signatures[i]->bytes : empty_bytes, FD_TXN_SIGNATURE_SZ );
-  }
-
-  /* Message */
-  /* For v0 transactions, the highest bit of the num_required_signatures is set, and an extra byte is used for the version.
-     https://solanacookbook.com/guides/versioned-transactions.html#versioned-transactions-transactionv0
-
-     We will always create a transaction with at least 1 signature, and cap the signature count to 127 to avoid
-     collisions with the header_b0 tag. */
-  uchar num_required_signatures = fd_uchar_max( 1, fd_uchar_min( 127, (uchar) test_ctx->tx.message.header.num_required_signatures ) );
-  if( !test_ctx->tx.message.is_legacy ) {
-    uchar header_b0 = (uchar) 0x80UL;
-    _add_to_data( &txn_raw_cur_ptr, &header_b0, sizeof(uchar) );
-  }
-
-  /* Header (3 bytes) (https://solana.com/docs/core/transactions#message-header) */
-  _add_to_data( &txn_raw_cur_ptr, &num_required_signatures, sizeof(uchar) );
-  _add_to_data( &txn_raw_cur_ptr, &test_ctx->tx.message.header.num_readonly_signed_accounts, sizeof(uchar) );
-  _add_to_data( &txn_raw_cur_ptr, &test_ctx->tx.message.header.num_readonly_unsigned_accounts, sizeof(uchar) );
-
-  /* Compact array of account addresses (https://solana.com/docs/core/transactions#compact-array-format) */
-  // Array length is a compact u16
-  ushort num_acct_keys = (ushort) test_ctx->tx.message.account_keys_count;
-  _add_compact_u16( &txn_raw_cur_ptr, num_acct_keys );
-  for( ushort i = 0; i < num_acct_keys; ++i ) {
-    _add_to_data( &txn_raw_cur_ptr, test_ctx->tx.message.account_keys[i]->bytes, sizeof(fd_pubkey_t) );
-  }
-
-  /* Recent blockhash (32 bytes) (https://solana.com/docs/core/transactions#recent-blockhash) */
-  // Note: add an empty blockhash if none is provided
-  _add_to_data( &txn_raw_cur_ptr, test_ctx->tx.message.recent_blockhash ? test_ctx->tx.message.recent_blockhash->bytes : empty_bytes, sizeof(fd_hash_t) );
-
-  /* Compact array of instructions (https://solana.com/docs/core/transactions#array-of-instructions) */
-  // Instruction count is a compact u16
-  ushort instr_count = (ushort) test_ctx->tx.message.instructions_count;
-  _add_compact_u16( &txn_raw_cur_ptr, instr_count );
-  for( ushort i = 0; i < instr_count; ++i ) {
-    // Program ID index
-    uchar program_id_index = (uchar) test_ctx->tx.message.instructions[i].program_id_index;
-    _add_to_data( &txn_raw_cur_ptr, &program_id_index, sizeof(uchar) );
-
-    // Compact array of account addresses
-    ushort acct_count = (ushort) test_ctx->tx.message.instructions[i].accounts_count;
-    _add_compact_u16( &txn_raw_cur_ptr, acct_count );
-    for( ushort j = 0; j < acct_count; ++j ) {
-      uchar account_index = (uchar) test_ctx->tx.message.instructions[i].accounts[j];
-      _add_to_data( &txn_raw_cur_ptr, &account_index, sizeof(uchar) );
-    }
-
-    // Compact array of 8-bit data
-    pb_bytes_array_t * data = test_ctx->tx.message.instructions[i].data;
-    if( data ) {
-      ushort data_len = (ushort) data->size;
-      _add_compact_u16( &txn_raw_cur_ptr, data_len );
-      _add_to_data( &txn_raw_cur_ptr, data->bytes, data_len );
-    } else {
-      _add_compact_u16( &txn_raw_cur_ptr, 0 );
-    }
-  }
-
-  /* Address table lookups (N/A for legacy transactions) */
-  ushort addr_table_cnt = 0;
-  if( !test_ctx->tx.message.is_legacy ) {
-    /* Compact array of address table lookups (https://solanacookbook.com/guides/versioned-transactions.html#compact-array-of-address-table-lookups) */
-    // NOTE: The diagram is slightly wrong - the account key is a 32 byte pubkey, not a u8
-    addr_table_cnt = (ushort) test_ctx->tx.message.address_table_lookups_count;
-    _add_compact_u16( &txn_raw_cur_ptr, addr_table_cnt );
-    for( ushort i = 0; i < addr_table_cnt; ++i ) {
-      // Account key
-      _add_to_data( &txn_raw_cur_ptr, test_ctx->tx.message.address_table_lookups[i].account_key, sizeof(fd_pubkey_t) );
-
-      // Compact array of writable indexes
-      ushort writable_count = (ushort) test_ctx->tx.message.address_table_lookups[i].writable_indexes_count;
-      _add_compact_u16( &txn_raw_cur_ptr, writable_count );
-      for( ushort j = 0; j < writable_count; ++j ) {
-        uchar writable_index = (uchar) test_ctx->tx.message.address_table_lookups[i].writable_indexes[j];
-        _add_to_data( &txn_raw_cur_ptr, &writable_index, sizeof(uchar) );
-      }
-
-      // Compact array of readonly indexes
-      ushort readonly_count = (ushort) test_ctx->tx.message.address_table_lookups[i].readonly_indexes_count;
-      _add_compact_u16( &txn_raw_cur_ptr, readonly_count );
-      for( ushort j = 0; j < readonly_count; ++j ) {
-        uchar readonly_index = (uchar) test_ctx->tx.message.address_table_lookups[i].readonly_indexes[j];
-        _add_to_data( &txn_raw_cur_ptr, &readonly_index, sizeof(uchar) );
-      }
-    }
+  uchar * txn_raw_begin = fd_scratch_alloc( alignof(uchar), 1232 );
+  ushort instr_count, addr_table_cnt;
+  ulong msg_sz = _serialize_txn( txn_raw_begin, &test_ctx->tx, &instr_count, &addr_table_cnt );
+  if( FD_UNLIKELY( msg_sz==ULONG_MAX ) ) {
+    return NULL;
   }
 
   /* Set up txn descriptor from raw data */
   fd_txn_t * txn_descriptor = (fd_txn_t *) fd_scratch_alloc( fd_txn_align(), fd_txn_footprint( instr_count, addr_table_cnt ) );
-  ushort txn_raw_sz = (ushort) (txn_raw_cur_ptr - txn_raw_begin);
-  if( !fd_txn_parse( txn_raw_begin, txn_raw_sz, txn_descriptor, NULL ) ) {
+  if( !fd_txn_parse( txn_raw_begin, msg_sz, txn_descriptor, NULL ) ) {
     FD_LOG_WARNING(("could not parse txn descriptor"));
     return NULL;
   }
@@ -936,8 +972,8 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   /* Run txn preparation phases and execution
      NOTE: This should be modified accordingly if transaction setup logic changes */
   fd_txn_p_t * txn = fd_scratch_alloc( alignof(fd_txn_p_t), sizeof(fd_txn_p_t) );
-  memcpy( txn->payload, txn_raw_begin, txn_raw_sz );
-  txn->payload_sz = (ulong) txn_raw_sz;
+  memcpy( txn->payload, txn_raw_begin, msg_sz );
+  txn->payload_sz = msg_sz;
   txn->flags = FD_TXN_P_FLAGS_SANITIZE_SUCCESS;
   memcpy( txn->_, txn_descriptor, fd_txn_footprint( instr_count, addr_table_cnt ) );
 
@@ -1028,12 +1064,33 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
 
   /* Load in accounts; accounts are loaded in the same way as the txn harness, where 0-lamport accounts are 0-set */
   for( ushort i=0; i<test_ctx->acct_states_count; i++ ) {
+    // Skip recent blockhashes sysvar account, if somehow present
+    if( FD_UNLIKELY( !memcmp( test_ctx->acct_states[i].address, fd_sysvar_recent_block_hashes_id.uc, sizeof(fd_pubkey_t) ) ) ) {
+      continue;
+    }
     FD_BORROWED_ACCOUNT_DECL(acc);
     _load_txn_account( acc, acc_mgr, funk_txn, &test_ctx->acct_states[i] );
   }
 
-  /* Initialize the recent blockhashes sysvar */
-  // TODO: implement
+  /* Initialize the blockhash queue and recent blockhashes sysvar from the input blockhash queue */
+  fd_block_block_hash_entry_t * recent_block_hashes = deq_fd_block_block_hash_entry_t_alloc( slot_ctx->valloc, FD_SYSVAR_RECENT_HASHES_CAP );
+  slot_bank->recent_block_hashes.hashes = recent_block_hashes;
+  slot_bank->block_hash_queue.max_age   = FD_BLOCKHASH_QUEUE_MAX_ENTRIES; // Max age is fixed at 300
+  slot_bank->block_hash_queue.ages_root = NULL;
+  slot_bank->block_hash_queue.ages_pool = fd_hash_hash_age_pair_t_map_alloc( slot_ctx->valloc, 400 );
+  slot_bank->block_hash_queue.last_hash = fd_valloc_malloc( slot_ctx->valloc, FD_HASH_ALIGN, FD_HASH_FOOTPRINT );
+
+  // Set genesis hash to {0}
+  fd_memset( &epoch_bank->genesis_hash, 0, sizeof(fd_hash_t) );
+  fd_memset( slot_bank->block_hash_queue.last_hash, 0, sizeof(fd_hash_t) );
+
+  // Populate blockhash queue and recent blockhashes sysvar
+  for( ushort i=0; i<test_ctx->blockhash_queue_count; ++i ) {
+    fd_block_block_hash_entry_t blockhash_entry;
+    memcpy( &blockhash_entry.blockhash, test_ctx->blockhash_queue[i]->bytes, sizeof(fd_hash_t) );
+    slot_ctx->slot_bank.poh = blockhash_entry.blockhash;
+    fd_sysvar_recent_hashes_update( slot_ctx );
+  }
 
   /* Restore sysvar cache */
   fd_runtime_sysvar_cache_load( slot_ctx );
@@ -1046,11 +1103,23 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   /* Calculate epoch account hash values. This sets epoch_bank.eah_{start_slot, stop_slot, interval} */
   fd_calculate_epoch_accounts_hash_values( slot_ctx );
 
-  /* Prepare. Execute. Finalize.
-  fd_runtime_block_sysvar_update_pre_execute
-  fd_runtime_execute_txns_in_waves_tpool
-  fd_runtime_block_execute_finalize_tpool
-  */
+  /* Prepare raw transaction pointers */
+  ulong txn_cnt = test_ctx->txns_count;
+  fd_txn_p_t * txn_ptrs = fd_scratch_alloc( alignof(fd_txn_p_t), txn_cnt * sizeof(fd_txn_p_t) );
+  for( ulong i=0; i<txn_cnt; i++ ) {
+    ushort instr_count, addr_table_cnt;
+    uchar * txn_raw_begin = fd_scratch_alloc( alignof(uchar), FD_TXN_MTU );
+    ulong msg_sz = _serialize_txn( txn_raw_begin, &test_ctx->txns[i], &instr_count, &addr_table_cnt );
+    (void)instr_count;
+    (void)addr_table_cnt;
+    (void)msg_sz;
+  }
+  (void)txn_ptrs;
+
+  /* Prepare. Execute. Finalize. */
+  fd_runtime_block_sysvar_update_pre_execute( slot_ctx );
+  // fd_runtime_execute_txns_in_waves_tpool
+  // fd_runtime_block_execute_finalize_tpool
 
  (void)epoch_bank;
   return 1;
@@ -1502,14 +1571,6 @@ fd_exec_instr_test_run( fd_exec_instr_test_runner_t * runner,
   return actual_end - (ulong)output_buf;
 }
 
-
-/* Executes several transactions within a single slot. A few things to know when using this harness...
-   - All sysvars are assumed to have been provided in the context
-   - This does not test sigverify
-   - Epoch boundaries are NOT tested
-   - Tested Firedancer code is `fd_runtime_execute_txns_in_waves_tpool` and `fd_runtime_block_execute_finalize_tpool`
-   - Associated entrypoint tested in Agave is `confirm_slot_entries` (except sigverify is removed and verify_ticks is included) 
-   - Recent blockhashes sysvar account must NOT be provided in the input account states. Instead, the sysvar is populated through the input blockhash queue. */
 ulong
 fd_exec_block_test_run( fd_exec_instr_test_runner_t * runner, // Runner only contains funk instance, so we can borrow instr test runner
                         void const *                  input_,
