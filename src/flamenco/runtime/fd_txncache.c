@@ -999,41 +999,38 @@ fd_txncache_is_rooted_slot( fd_txncache_t * tc,
 
 int
 fd_txncache_get_entries( fd_txncache_t * tc,
-                         fd_bank_slot_deltas_t * slot_deltas,
-                         fd_valloc_t valloc ) {
+                         fd_bank_slot_deltas_t * slot_deltas ) {
 
-  ulong num_entries = 0UL;
+
   fd_rwlock_read( tc->lock );
-
-  FD_TEST( tc->root_slots_cnt == 300UL );
   
   slot_deltas->slot_deltas_len = tc->root_slots_cnt;
-  slot_deltas->slot_deltas     = fd_valloc_malloc( valloc, 8UL, tc->root_slots_cnt * sizeof(fd_slot_delta_t) );
+  slot_deltas->slot_deltas     = fd_scratch_alloc( FD_SLOT_DELTA_ALIGN, tc->root_slots_cnt * sizeof(fd_slot_delta_t) );
 
-
-  fd_txncache_private_txnpage_t * txnpages = fd_txncache_get_txnpages( tc );
-  ulong * root_slots = fd_txncache_get_root_slots( tc );
+  fd_txncache_private_txnpage_t * txnpages   = fd_txncache_get_txnpages( tc );
+  ulong                         * root_slots = fd_txncache_get_root_slots( tc );
   for( ulong i=0UL; i<tc->root_slots_cnt; i++ ) {    
     ulong slot = root_slots[ i ];
 
     slot_deltas->slot_deltas[ i ].slot               = slot;
     slot_deltas->slot_deltas[ i ].is_root            = 1;
-    slot_deltas->slot_deltas[ i ].slot_delta_vec     = fd_valloc_malloc( valloc, 8UL, 300UL * sizeof(fd_status_pair_t) );
+    slot_deltas->slot_deltas[ i ].slot_delta_vec     = fd_scratch_alloc( FD_STATUS_PAIR_ALIGN, FD_TXNCACHE_DEFAULT_MAX_ROOTED_SLOTS * sizeof(fd_status_pair_t) );
     slot_deltas->slot_deltas[ i ].slot_delta_vec_len = 0UL;
     ulong slot_delta_vec_len = 0UL;
 
     fd_txncache_private_slotcache_t * slotcache;
-    if( FD_UNLIKELY( FD_TXNCACHE_FIND_FOUND!=fd_txncache_find_slot( tc, slot, 0, &slotcache ) ) ) continue;
+    if( FD_UNLIKELY( FD_TXNCACHE_FIND_FOUND!=fd_txncache_find_slot( tc, slot, 0, &slotcache ) ) ) {
+      continue;
+    }
 
-    for( ulong j=0UL; j<300UL; j++ ) {
+    for( ulong j=0UL; j<FD_TXNCACHE_DEFAULT_MAX_ROOTED_SLOTS; j++ ) {
       fd_txncache_private_slotblockcache_t * slotblockcache = &slotcache->blockcache[ j ];
       if( FD_UNLIKELY( slotblockcache->txnhash_offset>=ULONG_MAX-1UL ) ) {
         continue;
       }
       fd_status_pair_t * status_pair = &slot_deltas->slot_deltas[ i ].slot_delta_vec[ slot_delta_vec_len++ ];
       fd_memcpy( &status_pair->hash, slotblockcache->blockhash, sizeof(fd_hash_t) );
-      status_pair->value.txn_idx      = slotblockcache->txnhash_offset;
-
+      status_pair->value.txn_idx = slotblockcache->txnhash_offset;
 
       ulong num_statuses = 0UL;
       for( ulong k=0UL; k<FD_TXNCACHE_SLOTCACHE_MAP_CNT; k++ ) {
@@ -1042,18 +1039,10 @@ fd_txncache_get_entries( fd_txncache_t * tc,
           num_statuses++;
         }
       }
-      //ulong num_status_fp = num_statuses;
 
-      // status_pair->value.statuses_len = 0UL;
-      // status_pair->value.statuses     = NULL;
-      fd_txn_result_t txn_result_default = {0};
-      fd_cache_status_t status_pair_default = {0};
       status_pair->value.statuses_len = num_statuses;
-      status_pair->value.statuses     = fd_valloc_malloc( valloc, 8UL, num_statuses * sizeof(fd_cache_status_t) );
-      for( ulong i=0UL; i<status_pair->value.statuses_len; i++ ) {
-        status_pair->value.statuses[ i ] = status_pair_default;
-      }
-
+      status_pair->value.statuses     = fd_scratch_alloc( FD_CACHE_STATUS_ALIGN, num_statuses * sizeof(fd_cache_status_t) );
+      fd_memset( status_pair->value.statuses, 0, num_statuses * sizeof(fd_cache_status_t) );
 
       num_statuses = 0UL;
       for( ulong k=0UL; k<FD_TXNCACHE_SLOTCACHE_MAP_CNT; k++ ) {
@@ -1061,7 +1050,7 @@ fd_txncache_get_entries( fd_txncache_t * tc,
         for( ; head!=UINT_MAX; head=txnpages[ head/FD_TXNCACHE_TXNS_PER_PAGE ].txns[ head%FD_TXNCACHE_TXNS_PER_PAGE ]->slotblockcache_next ) {
           fd_txncache_private_txn_t * txn = txnpages[ head/FD_TXNCACHE_TXNS_PER_PAGE ].txns[ head%FD_TXNCACHE_TXNS_PER_PAGE ];
           fd_memcpy( status_pair->value.statuses[ num_statuses ].key_slice, txn->txnhash, 20 );
-          status_pair->value.statuses[ num_statuses++ ].result = txn_result_default;
+          status_pair->value.statuses[ num_statuses++ ].result.discriminant = txn->result;
         }
       }
     }
@@ -1069,7 +1058,7 @@ fd_txncache_get_entries( fd_txncache_t * tc,
   }
 
   fd_rwlock_unread( tc->lock );
-  FD_LOG_WARNING(("GET THIS MANY ENTRIES %lu", num_entries));
+
   return 0;
 
 }

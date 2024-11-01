@@ -230,7 +230,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
 
     if( ledger_args->slot_ctx->slot_bank.slot==ledger_args->snapshot_slot+1UL ) {
-      fd_snapshot_create_manifest( ledger_args->slot_ctx );
+      fd_snapshot_create_new_snapshot( ledger_args->slot_ctx, 0 );
     }
   
     ulong blk_txn_cnt = 0;
