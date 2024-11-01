@@ -945,7 +945,7 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   uchar * txn_raw_begin = fd_scratch_alloc( alignof(uchar), 1232 );
   ushort instr_count, addr_table_cnt;
   ulong msg_sz = _serialize_txn( txn_raw_begin, &test_ctx->tx, &instr_count, &addr_table_cnt );
-  if( FD_UNLIKELY( msg_sz==ULONG_MAX ) ) {
+  if( msg_sz==ULONG_MAX ) {
     return NULL;
   }
 
@@ -1090,25 +1090,53 @@ _block_context_create_and_exec( fd_exec_instr_test_runner_t *        runner,
   /* Calculate epoch account hash values. This sets epoch_bank.eah_{start_slot, stop_slot, interval} */
   fd_calculate_epoch_accounts_hash_values( slot_ctx );
 
-  /* Prepare raw transaction pointers */
+  /* Prepare raw transaction pointers and block info */
+  fd_block_info_t * block_info = fd_scratch_alloc( alignof(fd_block_info_t), sizeof(fd_block_info_t) );
+  fd_memset( block_info, 0, sizeof(fd_block_info_t) );
+
   ulong txn_cnt = test_ctx->txns_count;
   fd_txn_p_t * txn_ptrs = fd_scratch_alloc( alignof(fd_txn_p_t), txn_cnt * sizeof(fd_txn_p_t) );
   for( ulong i=0; i<txn_cnt; i++ ) {
     ushort instr_count, addr_table_cnt;
-    uchar * txn_raw_begin = fd_scratch_alloc( alignof(uchar), FD_TXN_MTU );
-    ulong msg_sz = _serialize_txn( txn_raw_begin, &test_ctx->txns[i], &instr_count, &addr_table_cnt );
-    (void)instr_count;
-    (void)addr_table_cnt;
-    (void)msg_sz;
+    ulong msg_sz = _serialize_txn( txn_ptrs[i].payload, &test_ctx->txns[i], &instr_count, &addr_table_cnt );
+
+    // Reject any transactions over 1232 bytes
+    if( msg_sz==ULONG_MAX ) {
+      return 0;
+    }
+    txn_ptrs[i].payload_sz = msg_sz;
+
+    // Reject any transactions that cannot be parsed
+    if( !fd_txn_parse( txn_ptrs[i].payload, msg_sz, TXN( &txn_ptrs[i] ), NULL ) ) {
+      return 0;
+    }
+
+    // TODO: Populate other fields that may need to be referenced in the block_info.
+    block_info->signature_cnt += TXN( &txn_ptrs[i] )->signature_cnt;
   }
   (void)txn_ptrs;
 
+  /* Initialize tpool and spad(s) 
+    TODO: We should decide how many workers to use for the execution tpool. We might have a bunch of
+    transactions within a single block, but increasing the worker cnt increases the memory requirements by
+    1.28 GB per additional worker (for spad memory allocation). We also fuzz block execution using 
+    multiple cores, so it may be possible to get away with only 1 worker. Additionally, Agave will more than
+    likely always be the execution speed bottleneck, so we can play around with numbers and see what yields
+    the best results. */
+  // ulong worker_max = fd_tile_cnt();
+  ulong worker_max = 1;
+  void * tpool_mem = fd_scratch_alloc( FD_TPOOL_ALIGN, FD_TPOOL_FOOTPRINT( worker_max ) );
+  fd_tpool_t * tpool = fd_tpool_init( tpool_mem, worker_max );
+
+  fd_spad_t * spad = runner->spad;
+
   /* Prepare. Execute. Finalize. */
   fd_runtime_block_sysvar_update_pre_execute( slot_ctx );
-  // fd_runtime_execute_txns_in_waves_tpool
-  // fd_runtime_block_execute_finalize_tpool
+  int res = fd_runtime_execute_txns_in_waves_tpool( slot_ctx, NULL, txn_ptrs, txn_cnt, tpool, &spad, worker_max );
+  if( res==0 ) {
+    fd_runtime_block_execute_finalize_tpool( slot_ctx, NULL, block_info, tpool );
+  }
 
- (void)epoch_bank;
   return 1;
 }
 
