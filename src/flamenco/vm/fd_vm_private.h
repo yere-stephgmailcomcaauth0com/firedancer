@@ -184,12 +184,12 @@ fd_vm_mem_cfg( fd_vm_t * vm ) {
   if( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, bpf_account_data_direct_mapping ) || !vm->input_mem_regions_cnt ) {
     /* When direct mapping is enabled, we don't use these fields because
        the load and stores are fragmented. */
-    vm->region_haddr[4] = 0UL; 
-    vm->region_ld_sz[4] = 0U; 
+    vm->region_haddr[4] = 0UL;
+    vm->region_ld_sz[4] = 0U;
     vm->region_st_sz[4] = 0U;
   } else {
-    vm->region_haddr[4] = vm->input_mem_regions[0].haddr;  
-    vm->region_ld_sz[4] = vm->input_mem_regions[0].region_sz;    
+    vm->region_haddr[4] = vm->input_mem_regions[0].haddr;
+    vm->region_ld_sz[4] = vm->input_mem_regions[0].region_sz;
     vm->region_st_sz[4] = vm->input_mem_regions[0].region_sz;
   }
   return vm;
@@ -223,7 +223,7 @@ fd_vm_mem_cfg( fd_vm_t * vm ) {
 
    fd_vm_mem_haddr_fast is when the vaddr is for use when it is already
    known that the vaddr region has a valid mapping.
-   
+
    These assumptions don't hold if direct mapping is enabled since input
    region lookups become O(log(n)). */
 
@@ -251,15 +251,15 @@ fd_vm_get_input_mem_region_idx( fd_vm_t const * vm, ulong offset ) {
 }
 
 /* fd_vm_find_input_mem_region returns the translated haddr for a given
-   offset into the input region.  If an offset/sz is invalid or if an 
+   offset into the input region.  If an offset/sz is invalid or if an
    illegal write is performed, the sentinel value is returned. If the offset
    provided is too large, it will choose the upper-most region as the
    region_idx. However, it will get caught for being too large of an access
    in the multi-region checks. */
 static inline ulong
-fd_vm_find_input_mem_region( fd_vm_t const * vm, 
+fd_vm_find_input_mem_region( fd_vm_t const * vm,
                              ulong           offset,
-                             ulong           sz, 
+                             ulong           sz,
                              uchar           write,
                              ulong           sentinel,
                              uchar *         is_multi_region ) {
@@ -296,7 +296,7 @@ fd_vm_find_input_mem_region( fd_vm_t const * vm,
   }
 
   ulong adjusted_haddr = vm->input_mem_regions[ start_region_idx ].haddr + offset - vm->input_mem_regions[ start_region_idx ].vaddr_offset;
-  return adjusted_haddr; 
+  return adjusted_haddr;
 }
 
 
@@ -322,13 +322,13 @@ fd_vm_mem_haddr( fd_vm_t const *    vm,
       return sentinel;
     }
 
-    /* To account for the fact that we have gaps in the virtual address space but not in the 
+    /* To account for the fact that we have gaps in the virtual address space but not in the
        physical address space, we need to subtract from the offset the size of all the virtual
        gap frames underneath it.
-       
+
        https://github.com/solana-labs/rbpf/blob/b503a1867a9cfa13f93b4d99679a17fe219831de/src/memory_region.rs#L147-L149 */
     ulong gap_mask = 0xFFFFFFFFFFFFF000;
-    offset = ( ( offset & gap_mask ) >> 1 ) | ( offset & ~gap_mask ); 
+    offset = ( ( offset & gap_mask ) >> 1 ) | ( offset & ~gap_mask );
   }
 
   ulong region_sz = (ulong)vm_region_sz[ region ];
@@ -337,7 +337,7 @@ fd_vm_mem_haddr( fd_vm_t const *    vm,
   if( region==4UL ) {
     return fd_vm_find_input_mem_region( vm, offset, sz, write, sentinel, is_multi_region );
   }
-  
+
 # ifdef FD_VM_INTERP_MEM_TRACING_ENABLED
   if ( FD_LIKELY( sz<=sz_max ) ) {
     fd_vm_trace_event_mem( vm->trace, write, vaddr, sz, vm_region_haddr[ region ] + offset );
@@ -347,7 +347,7 @@ fd_vm_mem_haddr( fd_vm_t const *    vm,
 }
 
 FD_FN_PURE static inline ulong
-fd_vm_mem_haddr_fast( fd_vm_t const * vm, 
+fd_vm_mem_haddr_fast( fd_vm_t const * vm,
                       ulong           vaddr,
                       ulong   const * vm_region_haddr ) { /* indexed [0,6) */
   uchar is_multi = 0;
@@ -361,7 +361,7 @@ fd_vm_mem_haddr_fast( fd_vm_t const * vm,
 
 /* fd_vm_mem_ld_N loads N bytes from the host address location haddr,
    zero extends it to a ulong and returns the ulong.  haddr need not be
-   aligned.  fd_vm_mem_ld_multi handles the case where the load spans 
+   aligned.  fd_vm_mem_ld_multi handles the case where the load spans
    multiple input memory regions. */
 
 static inline void fd_vm_mem_ld_multi( fd_vm_t const * vm, uint sz, ulong vaddr, ulong haddr, uchar * dst ) {
@@ -384,14 +384,14 @@ static inline void fd_vm_mem_ld_multi( fd_vm_t const * vm, uint sz, ulong vaddr,
   }
 }
 
-FD_FN_PURE static inline ulong fd_vm_mem_ld_1( ulong haddr ) { 
-  return (ulong)*(uchar const *)haddr; 
+FD_FN_PURE static inline ulong fd_vm_mem_ld_1( ulong haddr ) {
+  return (ulong)*(uchar const *)haddr;
 }
 
-FD_FN_PURE static inline ulong fd_vm_mem_ld_2( fd_vm_t const * vm, ulong vaddr, ulong haddr, uint is_multi_region ) { 
-  ushort t; 
+FD_FN_PURE static inline ulong fd_vm_mem_ld_2( fd_vm_t const * vm, ulong vaddr, ulong haddr, uint is_multi_region ) {
+  ushort t;
   if( FD_LIKELY( !is_multi_region ) ) {
-    memcpy( &t, (void const *)haddr, sizeof(ushort) ); 
+    memcpy( &t, (void const *)haddr, sizeof(ushort) );
   } else {
     fd_vm_mem_ld_multi( vm, 2U, vaddr, haddr, (uchar *)&t );
   }
@@ -399,9 +399,9 @@ FD_FN_PURE static inline ulong fd_vm_mem_ld_2( fd_vm_t const * vm, ulong vaddr, 
 }
 
 FD_FN_PURE static inline ulong fd_vm_mem_ld_4( fd_vm_t const * vm, ulong vaddr, ulong haddr, uint is_multi_region ) {
-  uint t; 
+  uint t;
   if( FD_LIKELY( !is_multi_region ) ) {
-    memcpy( &t, (void const *)haddr, sizeof(uint) ); 
+    memcpy( &t, (void const *)haddr, sizeof(uint) );
   } else {
     fd_vm_mem_ld_multi( vm, 4U, vaddr, haddr, (uchar *)&t );
   }
@@ -409,9 +409,9 @@ FD_FN_PURE static inline ulong fd_vm_mem_ld_4( fd_vm_t const * vm, ulong vaddr, 
 }
 
 FD_FN_PURE static inline ulong fd_vm_mem_ld_8( fd_vm_t const * vm, ulong vaddr, ulong haddr, uint is_multi_region ) {
-  ulong t; 
+  ulong t;
   if( FD_LIKELY( !is_multi_region ) ) {
-    memcpy( &t, (void const *)haddr, sizeof(ulong) ); 
+    memcpy( &t, (void const *)haddr, sizeof(ulong) );
   } else {
     fd_vm_mem_ld_multi( vm, 8U, vaddr, haddr, (uchar *)&t );
   }
@@ -442,17 +442,17 @@ static inline void fd_vm_mem_st_multi( fd_vm_t const * vm, uint sz, ulong vaddr,
   }
 }
 
-static inline void fd_vm_mem_st_1( ulong haddr, uchar val ) { 
+static inline void fd_vm_mem_st_1( ulong haddr, uchar val ) {
   *(uchar *)haddr = val;
 }
 
 static inline void fd_vm_mem_st_2( fd_vm_t const * vm,
                                    ulong           vaddr,
-                                   ulong           haddr, 
-                                   ushort          val, 
-                                   uint            is_multi_region ) { 
+                                   ulong           haddr,
+                                   ushort          val,
+                                   uint            is_multi_region ) {
   if( FD_LIKELY( !is_multi_region ) ) {
-    memcpy( (void *)haddr, &val, sizeof(ushort) ); 
+    memcpy( (void *)haddr, &val, sizeof(ushort) );
   } else {
     fd_vm_mem_st_multi( vm, 2U, vaddr, haddr, (uchar *)&val );
   }
@@ -460,11 +460,11 @@ static inline void fd_vm_mem_st_2( fd_vm_t const * vm,
 
 static inline void fd_vm_mem_st_4( fd_vm_t const * vm,
                                    ulong           vaddr,
-                                   ulong           haddr, 
-                                   uint            val, 
-                                   uint            is_multi_region ) { 
+                                   ulong           haddr,
+                                   uint            val,
+                                   uint            is_multi_region ) {
   if( FD_LIKELY( !is_multi_region ) ) {
-    memcpy( (void *)haddr, &val, sizeof(uint)   ); 
+    memcpy( (void *)haddr, &val, sizeof(uint)   );
   } else {
     fd_vm_mem_st_multi( vm, 4U, vaddr, haddr, (uchar *)&val );
   }
@@ -474,9 +474,9 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
                                    ulong           vaddr,
                                    ulong           haddr,
                                    ulong           val,
-                                   uint            is_multi_region ) { 
+                                   uint            is_multi_region ) {
   if( FD_LIKELY( !is_multi_region ) ) {
-    memcpy( (void *)haddr, &val, sizeof(ulong)  ); 
+    memcpy( (void *)haddr, &val, sizeof(ulong)  );
   } else {
     fd_vm_mem_st_multi( vm, 8U, vaddr, haddr, (uchar *)&val );
   }
@@ -506,33 +506,50 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
 
    These macros intentionally don't support multi region loads/stores.
    The load/store macros are used by vm syscalls and mirror the use
-   of translate_slice{_mut}. However, this check does not allow for 
+   of translate_slice{_mut}. However, this check does not allow for
    multi region accesses. So if there is an attempt at a multi region
-   translation, an error will be returned. 
-   
-   FD_VM_MEM_HADDR_ST_UNCHECKED has all of the checks of a load or a 
-   store, but intentionally omits the is_writable checks for the 
-   input region that are done during memory translation. */
+   translation, an error will be returned.
+
+   FD_VM_MEM_HADDR_ST_UNCHECKED has all of the checks of a load or a
+   store, but intentionally omits the is_writable checks for the
+   input region that are done during memory translation.
+
+   The static inline variant of this function allows for easier debugging
+   and more nuanced error handling then the macro version.  Generated code
+   with optimization turned on should be virtually the same to this function
+   as a pure macro.
+*/
+
+static inline
+void const * FD_VM_MEM_HADDR_LD_( fd_vm_t const * vm, ulong _vaddr, ulong align, ulong sz, int *err ) {
+  uchar           _is_multi = 0;
+  ulong           _haddr    = fd_vm_mem_haddr( vm, _vaddr, (sz), vm->region_haddr, vm->region_ld_sz, 0, 0UL, &_is_multi );
+  int             _sigbus   = fd_vm_is_check_align_enabled( vm ) & (!fd_ulong_is_aligned( _haddr, (align) ));
+
+  if( FD_UNLIKELY( sz > LONG_MAX ) ) {
+    FD_VM_ERR_FOR_LOG_SYSCALL( vm, FD_VM_ERR_SYSCALL_INVALID_LENGTH );
+    *err = FD_VM_ERR_SIGSEGV;
+    return NULL;
+  }
+  if( FD_UNLIKELY( (!_haddr) | _is_multi) ) {
+    FD_VM_ERR_FOR_LOG_EBPF( vm, FD_VM_ERR_EBPF_ACCESS_VIOLATION );
+    *err = FD_VM_ERR_SIGSEGV;
+    return NULL;
+  }
+  if( FD_UNLIKELY( _sigbus ) ) {
+    FD_VM_ERR_FOR_LOG_SYSCALL( vm, FD_VM_ERR_SYSCALL_UNALIGNED_POINTER );
+    *err = FD_VM_ERR_SIGSEGV;
+    return NULL;
+  }
+  return (void const *)_haddr;
+}
 
 #define FD_VM_MEM_HADDR_LD( vm, vaddr, align, sz ) (__extension__({                                         \
-    fd_vm_t const * _vm       = (vm);                                                                       \
-    uchar           _is_multi = 0;                                                                          \
-    ulong           _vaddr    = (vaddr);                                                                    \
-    ulong           _haddr    = fd_vm_mem_haddr( vm, _vaddr, (sz), _vm->region_haddr, _vm->region_ld_sz, 0, 0UL, &_is_multi ); \
-    int             _sigbus   = fd_vm_is_check_align_enabled( vm ) & (!fd_ulong_is_aligned( _haddr, (align) )); \
-    if ( FD_UNLIKELY( sz > LONG_MAX ) ) {                                                                   \
-      FD_VM_ERR_FOR_LOG_SYSCALL( _vm, FD_VM_ERR_SYSCALL_INVALID_LENGTH );                                   \
-      return FD_VM_ERR_SIGSEGV;                                                                             \
-    }                                                                                                       \
-    if( FD_UNLIKELY( (!_haddr) | _is_multi) ) {                                                             \
-      FD_VM_ERR_FOR_LOG_EBPF( _vm, FD_VM_ERR_EBPF_ACCESS_VIOLATION );                                       \
-      return FD_VM_ERR_SIGSEGV;                                                                             \
-    }                                                                                                       \
-    if ( FD_UNLIKELY( _sigbus ) ) {                                                                         \
-      FD_VM_ERR_FOR_LOG_SYSCALL( _vm, FD_VM_ERR_SYSCALL_UNALIGNED_POINTER );                                \
-      return FD_VM_ERR_SIGSEGV;                                                                             \
-    }                                                                                                       \
-    (void const *)_haddr;                                                                                   \
+    int _err = 0;                                                                                           \
+    const void *_ret = FD_VM_MEM_HADDR_LD_(vm, vaddr, align, sz, &_err);                                    \
+    if ( FD_UNLIKELY ( NULL == _ret ))                                                                      \
+       return _err;                                                                                         \
+    _ret;                                                                                                   \
   }))
 
 #define FD_VM_MEM_HADDR_LD_UNCHECKED( vm, vaddr, align, sz ) (__extension__({                               \
@@ -591,11 +608,11 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
 
 /* FD_VM_MEM_SLICE_HADDR_[LD, ST] macros return an arbitrary value if sz == 0. This is because
    Agave's translate_slice function returns an empty array if the sz == 0.
-   
+
    Users of this macro should be aware that they should never access the returned value if sz==0.
-   
-   https://github.com/solana-labs/solana/blob/767d24e5c10123c079e656cdcf9aeb8a5dae17db/programs/bpf_loader/src/syscalls/mod.rs#L560 
-   
+
+   https://github.com/solana-labs/solana/blob/767d24e5c10123c079e656cdcf9aeb8a5dae17db/programs/bpf_loader/src/syscalls/mod.rs#L560
+
    LONG_MAX check: https://github.com/anza-xyz/agave/blob/dc4b9dcbbf859ff48f40d00db824bde063fdafcc/programs/bpf_loader/src/syscalls/mod.rs#L580 */
 #define FD_VM_MEM_SLICE_HADDR_LD( vm, vaddr, align, sz ) (__extension__({                                       \
     if ( FD_UNLIKELY( sz > LONG_MAX ) ) {                                                                       \
