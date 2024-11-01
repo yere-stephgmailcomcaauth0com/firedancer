@@ -3,6 +3,7 @@ $(call add-hdrs,fd_quic_sandbox.h fd_quic_test_helpers.h)
 $(call add-objs,fd_quic_stream_spam fd_quic_sandbox fd_quic_test_helpers,fd_quic)
 
 # fd_quic unit tests
+$(call make-unit-test,test_quic_proto,      test_quic_proto,      fd_quic fd_util)
 $(call make-unit-test,test_quic_hs,         test_quic_hs,         fd_quic fd_tls fd_ballet fd_waltz fd_util)
 $(call make-unit-test,test_quic_streams,    test_quic_streams,    fd_quic fd_tls fd_ballet fd_waltz fd_util)
 $(call make-unit-test,test_quic_conn,       test_quic_conn,       fd_quic fd_tls fd_ballet fd_waltz fd_util)
@@ -12,6 +13,7 @@ $(call make-unit-test,test_quic_layout,     test_quic_layout,                   
 $(call make-unit-test,test_quic_conformance,test_quic_conformance,fd_quic fd_tls fd_tango fd_ballet fd_waltz fd_util)
 $(call make-unit-test,test_quic_ack_tx,     test_quic_ack_tx,     fd_quic fd_tls fd_ballet fd_waltz fd_util)
 $(call make-unit-test,test_quic_concurrency,test_quic_concurrency,fd_quic fd_tls fd_tango fd_ballet fd_waltz fd_util)
+$(call run-unit-test,test_quic_proto)
 $(call run-unit-test,test_quic_hs)
 $(call run-unit-test,test_quic_streams)
 $(call run-unit-test,test_quic_conn)
