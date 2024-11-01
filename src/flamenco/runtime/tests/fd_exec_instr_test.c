@@ -53,6 +53,24 @@ static FD_TL char _report_prefix[100] = {0};
 
 #define REPORT_ACCT( level, addr, fmt ) REPORT_ACCTV( level, addr, fmt, 0 )
 
+/* Macros to append data to construct a serialized transaction 
+   without exceeding bounds */
+#define FD_CHECKED_ADD_TO_TXN_DATA( _begin, _cur_data, _to_add, _sz ) __extension__({ \
+  if( FD_UNLIKELY( (*_cur_data)+_sz>_begin+FD_TXN_MTU ) ) return ULONG_MAX;           \
+  fd_memcpy( *_cur_data, _to_add, _sz );                                              \
+  *_cur_data += _sz;                                                                  \
+})
+
+#define FD_CHECKED_ADD_CU16_TO_TXN_DATA( _begin, _cur_data, _to_add ) __extension__({ \
+  do {                                                                                \
+    uchar _buf[3];                                                                    \
+    fd_bincode_encode_ctx_t _encode_ctx = { .data = _buf, .dataend = _buf+3 };        \
+    fd_bincode_compact_u16_encode( &_to_add, &_encode_ctx );                          \
+    ulong _sz = (ulong) ((uchar *)_encode_ctx.data - _buf );                          \
+    FD_CHECKED_ADD_TO_TXN_DATA( _begin, _cur_data, _buf, _sz );                       \
+  } while(0);                                                                         \
+})
+
 /* Define routine to sort accounts to support query-by-pubkey via
    binary search. */
 
@@ -208,38 +226,6 @@ _restore_feature_flags( fd_exec_epoch_ctx_t *              epoch_ctx,
   return 1;
 }
 
-static void
-_add_to_data(uchar ** data, void const * to_add, ulong size) {
-  while( size-- ) {
-    **data = *(uchar *)to_add;
-    (*data)++;
-    to_add = (uchar *)to_add + 1;
-  }
-}
-
-#define FD_CHECKED_ADD_TO_DATA( _begin, _cur_data, _to_add, _sz ) __extension__({  \
-  if( FD_UNLIKELY( (*_cur_data)+_sz>_begin+FD_TXN_MTU ) ) return ULONG_MAX;        \
-  _add_to_data( _cur_data, _to_add, _sz );                                         \
-})
-
-static void
-_add_compact_u16(uchar ** data, ushort to_add) {
-  fd_bincode_encode_ctx_t encode_ctx = { .data = *data, .dataend = *data + 3 };  // Up to 3 bytes
-  fd_bincode_compact_u16_encode( &to_add, &encode_ctx );
-  *data = (uchar *) encode_ctx.data;
-}
-
-#define FD_CHECKED_ADD_CU16_TO_DATA( _begin, _cur_data, _to_add ) __extension__({            \
-  do {                                                                                       \
-    uchar _buf[3];                                                                           \
-    fd_bincode_encode_ctx_t _encode_ctx = { .data = _buf, .dataend = _buf+3 };               \
-    fd_bincode_compact_u16_encode( &_to_add, &_encode_ctx );                                 \
-    ulong _sz = (ulong) ((uchar *)_encode_ctx.data - _buf );                                 \
-    if( FD_UNLIKELY( (*_cur_data)+_sz>_begin+FD_TXN_MTU ) ) return ULONG_MAX;                \
-    _add_compact_u16( _cur_data, _to_add );                                                  \
-  } while(0);                                                                                \
-})
-
 /* Serializes a Protobuf SanitizedTransaction and returns the number of bytes consumed.
    Returns ULONG_MAX if the number of bytes read exceeds 1232 (FD_TXN_MTU). 
    _txn_raw_begin is assumed to be a pre-allocated buffer of at least 1232 bytes. */
@@ -257,9 +243,9 @@ _serialize_txn( uchar * txn_raw_begin,
      is represented the same way anyways and can be parsed identically. */
   // Note: always create a valid txn with 1+ signatures, add an empty signature if none is provided
   uchar signature_cnt = fd_uchar_max( 1, (uchar) tx->signatures_count );
-  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &signature_cnt, sizeof(uchar) );
+  FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &signature_cnt, sizeof(uchar) );
   for( uchar i = 0; i < signature_cnt; ++i ) {
-    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->signatures && tx->signatures[i] ? tx->signatures[i]->bytes : empty_bytes, FD_TXN_SIGNATURE_SZ );
+    FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->signatures && tx->signatures[i] ? tx->signatures[i]->bytes : empty_bytes, FD_TXN_SIGNATURE_SZ );
   }
 
   /* Message */
@@ -271,41 +257,41 @@ _serialize_txn( uchar * txn_raw_begin,
   uchar num_required_signatures = fd_uchar_max( 1, fd_uchar_min( 127, (uchar) tx->message.header.num_required_signatures ) );
   if( !tx->message.is_legacy ) {
     uchar header_b0 = (uchar) 0x80UL;
-    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &header_b0, sizeof(uchar) );
+    FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &header_b0, sizeof(uchar) );
   }
 
   /* Header (3 bytes) (https://solana.com/docs/core/transactions#message-header) */
-  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &num_required_signatures, sizeof(uchar) );
-  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &tx->message.header.num_readonly_signed_accounts, sizeof(uchar) );
-  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &tx->message.header.num_readonly_unsigned_accounts, sizeof(uchar) );
+  FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &num_required_signatures, sizeof(uchar) );
+  FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &tx->message.header.num_readonly_signed_accounts, sizeof(uchar) );
+  FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &tx->message.header.num_readonly_unsigned_accounts, sizeof(uchar) );
 
   /* Compact array of account addresses (https://solana.com/docs/core/transactions#compact-array-format) */
   // Array length is a compact u16
   ushort num_acct_keys = (ushort) tx->message.account_keys_count;
-  FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, num_acct_keys );
+  FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, num_acct_keys );
   for( ushort i = 0; i < num_acct_keys; ++i ) {
-    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.account_keys[i]->bytes, sizeof(fd_pubkey_t) );
+    FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.account_keys[i]->bytes, sizeof(fd_pubkey_t) );
   }
 
   /* Recent blockhash (32 bytes) (https://solana.com/docs/core/transactions#recent-blockhash) */
   // Note: add an empty blockhash if none is provided
-  FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.recent_blockhash ? tx->message.recent_blockhash->bytes : empty_bytes, sizeof(fd_hash_t) );
+  FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.recent_blockhash ? tx->message.recent_blockhash->bytes : empty_bytes, sizeof(fd_hash_t) );
 
   /* Compact array of instructions (https://solana.com/docs/core/transactions#array-of-instructions) */
   // Instruction count is a compact u16
   ushort instr_count = (ushort) tx->message.instructions_count;
-  FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, instr_count );
+  FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, instr_count );
   for( ushort i = 0; i < instr_count; ++i ) {
     // Program ID index
     uchar program_id_index = (uchar) tx->message.instructions[i].program_id_index;
-    FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &program_id_index, sizeof(uchar) );
+    FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &program_id_index, sizeof(uchar) );
 
     // Compact array of account addresses
     ushort acct_count = (ushort) tx->message.instructions[i].accounts_count;
-    FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, acct_count );
+    FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, acct_count );
     for( ushort j = 0; j < acct_count; ++j ) {
       uchar account_index = (uchar) tx->message.instructions[i].accounts[j];
-      FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &account_index, sizeof(uchar) );
+      FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &account_index, sizeof(uchar) );
     }
 
     // Compact array of 8-bit data
@@ -313,11 +299,11 @@ _serialize_txn( uchar * txn_raw_begin,
     ushort data_len;
     if( data ) {
       data_len = (ushort) data->size;
-      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, data_len );
-      FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, data->bytes, data_len );
+      FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, data_len );
+      FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, data->bytes, data_len );
     } else {
       data_len = 0;
-      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, data_len );
+      FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, data_len );
     }
   }
 
@@ -327,25 +313,25 @@ _serialize_txn( uchar * txn_raw_begin,
     /* Compact array of address table lookups (https://solanacookbook.com/guides/versioned-transactions.html#compact-array-of-address-table-lookups) */
     // NOTE: The diagram is slightly wrong - the account key is a 32 byte pubkey, not a u8
     addr_table_cnt = (ushort) tx->message.address_table_lookups_count;
-    FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, addr_table_cnt );
+    FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, addr_table_cnt );
     for( ushort i = 0; i < addr_table_cnt; ++i ) {
       // Account key
-      FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.address_table_lookups[i].account_key, sizeof(fd_pubkey_t) );
+      FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, tx->message.address_table_lookups[i].account_key, sizeof(fd_pubkey_t) );
 
       // Compact array of writable indexes
       ushort writable_count = (ushort) tx->message.address_table_lookups[i].writable_indexes_count;
-      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, writable_count );
+      FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, writable_count );
       for( ushort j = 0; j < writable_count; ++j ) {
         uchar writable_index = (uchar) tx->message.address_table_lookups[i].writable_indexes[j];
-        FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &writable_index, sizeof(uchar) );
+        FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &writable_index, sizeof(uchar) );
       }
 
       // Compact array of readonly indexes
       ushort readonly_count = (ushort) tx->message.address_table_lookups[i].readonly_indexes_count;
-      FD_CHECKED_ADD_CU16_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, readonly_count );
+      FD_CHECKED_ADD_CU16_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, readonly_count );
       for( ushort j = 0; j < readonly_count; ++j ) {
         uchar readonly_index = (uchar) tx->message.address_table_lookups[i].readonly_indexes[j];
-        FD_CHECKED_ADD_TO_DATA( txn_raw_begin, &txn_raw_cur_ptr, &readonly_index, sizeof(uchar) );
+        FD_CHECKED_ADD_TO_TXN_DATA( txn_raw_begin, &txn_raw_cur_ptr, &readonly_index, sizeof(uchar) );
       }
     }
   }
