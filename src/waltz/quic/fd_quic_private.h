@@ -15,8 +15,7 @@
 #include "../../util/net/fd_udp.h"
 
 /* FD_QUIC_DISABLE_CRYPTO: set to 1 to disable packet protection and
-   encryption.  Only intended for testing.
-   FIXME not fully implemented (#256) */
+   encryption.  Only intended for testing. */
 #ifndef FD_QUIC_DISABLE_CRYPTO
 #define FD_QUIC_DISABLE_CRYPTO 0
 #endif
@@ -135,7 +134,6 @@ struct fd_quic_pkt {
   uint               enc_level;   /* encryption level */
   uint               datagram_sz; /* length of the original datagram */
   uint               ack_flag;    /* ORed together: 0-don't ack  1-ack  2-cancel ack */
-  uint ping;
 # define ACK_FLAG_RQD     1
 # define ACK_FLAG_CANCEL  2
 };
