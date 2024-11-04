@@ -593,6 +593,24 @@ fd_topo_initialize( config_t * config ) {
       strncpy( tile->sender.identity_key_path, config->consensus.identity_path, sizeof(tile->sender.identity_key_path) );
     } else if( FD_UNLIKELY( !strcmp( tile->name, "eqvoc" ) ) ) {
       strncpy( tile->eqvoc.identity_key_path, config->consensus.identity_path, sizeof(tile->eqvoc.identity_key_path) );
+    } else if( FD_UNLIKELY( !strcmp( tile->name, "fwd" ) ) ) {
+      strncpy( tile->fwd.interface,    config->development.fwd.interface, sizeof(tile->fwd.interface) );
+
+      if( FD_UNLIKELY( !fd_cstr_to_ip4_addr( config->development.fwd.dst_ip_addr, &tile->fwd.dst_ip_addr ) ) ) {
+        FD_LOG_ERR(( "bad config" ));
+      }
+
+      if( FD_UNLIKELY( !fd_cstr_to_ip4_addr( config->development.fwd.src_ip_addr, &tile->fwd.src_ip_addr ) ) ) {
+        FD_LOG_ERR(( "bad config" ));
+      }
+
+      if( FD_UNLIKELY( !fd_cstr_to_mac_addr( config->development.fwd.dst_mac_addr, tile->fwd.dst_mac_addr ) ) ) {
+        FD_LOG_ERR(( "bad config" ));
+      }
+
+      if( FD_UNLIKELY( !fd_cstr_to_mac_addr( config->development.fwd.src_mac_addr, tile->fwd.src_mac_addr ) ) ) {
+        FD_LOG_ERR(( "bad config" ));
+      }
     } else {
       FD_LOG_ERR(( "unknown tile name %lu `%s`", i, tile->name ));
     }
