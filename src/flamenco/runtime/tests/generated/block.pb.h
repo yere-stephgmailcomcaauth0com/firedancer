@@ -49,12 +49,12 @@ typedef struct fd_exec_test_block_effects {
 typedef struct fd_exec_test_block_fixture {
     bool has_metadata;
     fd_exec_test_fixture_metadata_t metadata;
-    /* The block context */
-    bool has_block_context;
-    fd_exec_test_block_context_t block_context;
-    /* The block effects */
-    bool has_block_effects;
-    fd_exec_test_block_effects_t block_effects;
+    /* The block input */
+    bool has_input;
+    fd_exec_test_block_context_t input;
+    /* The output */
+    bool has_output;
+    fd_exec_test_block_effects_t output;
 } fd_exec_test_block_fixture_t;
 
 
@@ -82,8 +82,8 @@ extern "C" {
 #define FD_EXEC_TEST_BLOCK_EFFECTS_LT_HASH_TAG   4
 #define FD_EXEC_TEST_BLOCK_EFFECTS_ACCOUNT_DELTA_HASH_TAG 5
 #define FD_EXEC_TEST_BLOCK_FIXTURE_METADATA_TAG  1
-#define FD_EXEC_TEST_BLOCK_FIXTURE_BLOCK_CONTEXT_TAG 2
-#define FD_EXEC_TEST_BLOCK_FIXTURE_BLOCK_EFFECTS_TAG 3
+#define FD_EXEC_TEST_BLOCK_FIXTURE_INPUT_TAG     2
+#define FD_EXEC_TEST_BLOCK_FIXTURE_OUTPUT_TAG    3
 
 /* Struct field encoding specification for nanopb */
 #define FD_EXEC_TEST_BLOCK_CONTEXT_FIELDLIST(X, a) \
@@ -111,13 +111,13 @@ X(a, CALLBACK, SINGULAR, BYTES,    account_delta_hash,   5)
 
 #define FD_EXEC_TEST_BLOCK_FIXTURE_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  metadata,          1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  block_context,     2) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  block_effects,     3)
+X(a, STATIC,   OPTIONAL, MESSAGE,  input,             2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  output,            3)
 #define FD_EXEC_TEST_BLOCK_FIXTURE_CALLBACK NULL
 #define FD_EXEC_TEST_BLOCK_FIXTURE_DEFAULT NULL
 #define fd_exec_test_block_fixture_t_metadata_MSGTYPE fd_exec_test_fixture_metadata_t
-#define fd_exec_test_block_fixture_t_block_context_MSGTYPE fd_exec_test_block_context_t
-#define fd_exec_test_block_fixture_t_block_effects_MSGTYPE fd_exec_test_block_effects_t
+#define fd_exec_test_block_fixture_t_input_MSGTYPE fd_exec_test_block_context_t
+#define fd_exec_test_block_fixture_t_output_MSGTYPE fd_exec_test_block_effects_t
 
 extern const pb_msgdesc_t fd_exec_test_block_context_t_msg;
 extern const pb_msgdesc_t fd_exec_test_block_effects_t_msg;
