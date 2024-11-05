@@ -238,6 +238,7 @@ fd_snapshot_accv_index( fd_snapshot_accv_map_t *               map,
 
       /* Remember size */
       rec->sz = accv->file_sz;
+      //FD_LOG_WARNING(("INSERTING NEW APPEND VEC FROM INDEX %lu", rec->sz));
     }
 
   }
@@ -253,7 +254,7 @@ static int
 fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
 
   /* Decode manifest placing dynamic data structures onto slot context
-     heap.  Once the epoch context heap is separated out, we need to
+     heap. Once the epoch context heap is separated out, we need to
      revisit this. */
 
   fd_solana_manifest_t manifest[1];
@@ -261,6 +262,7 @@ fd_snapshot_restore_manifest( fd_snapshot_restore_t * restore ) {
       { .data    = restore->buf,
         .dataend = restore->buf + restore->buf_sz,
         .valloc  = restore->valloc };
+  FD_LOG_WARNING(("DECODE %lu", restore->buf_sz));
   int decode_err = fd_solana_manifest_decode( manifest, &decode );
   if( FD_UNLIKELY( decode_err!=FD_BINCODE_SUCCESS ) ) {
     /* TODO: The types generator does not yet handle OOM correctly.
@@ -406,7 +408,7 @@ fd_snapshot_restore_accv_prepare( fd_snapshot_restore_t * const restore,
   restore->accv_id   = id;
 
   /* Prepare read of account header */
-  FD_LOG_DEBUG(( "Loading account vec %s", meta->name ));
+  //FD_LOG_WARNING(( "Loading account vec %s of sz %lu", meta->name, restore->accv_sz ));
   return fd_snapshot_expect_account_hdr( restore );
 }
 
@@ -469,6 +471,7 @@ int
 fd_snapshot_restore_file( void *                restore_,
                           fd_tar_meta_t const * meta,
                           ulong                 sz ) {
+  //FD_LOG_WARNING(("SNAPSHOT RESTORE FILE %s", meta->name));
 
   fd_snapshot_restore_t * restore = restore_;
   if( restore->failed ) return EINVAL;

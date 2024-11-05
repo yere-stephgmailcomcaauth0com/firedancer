@@ -1032,6 +1032,7 @@ fd_accounts_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
     fd_lthash_zero(&lthash_values[0]);
 
     fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx, 0, 1, &num_pairs, lthash_values, 0 );
+    FD_LOG_WARNING(("NUM PAIRS %lu", num_pairs));
     FD_TEST(NULL != pairs);
     fd_pubkey_hash_pair_list_t list1 = { .pairs = pairs, .pairs_len = num_pairs };
     fd_hash_account_deltas( &list1, 1, accounts_hash, slot_ctx );

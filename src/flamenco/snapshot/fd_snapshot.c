@@ -60,7 +60,7 @@ load_one_snapshot( fd_exec_slot_ctx_t * slot_ctx,
                    fd_snapshot_name_t * name_out ) {
 
   /* FIXME don't hardcode this param */
-  static ulong const zstd_window_sz = 33554432UL;
+  static ulong const zstd_window_sz = 3355443200UL;
 
   fd_snapshot_src_t src[1];
   if( FD_UNLIKELY( !fd_snapshot_src_parse( src, source_cstr ) ) ) {
@@ -206,6 +206,9 @@ fd_snapshot_load( const char *         snapshotfile,
     fd_funk_txn_publish( slot_ctx->acc_mgr->funk, child_txn, 0 );
     slot_ctx->funk_txn = par_txn;
   }
+
+  fd_funk_t * funk = slot_ctx->acc_mgr->funk;
+  FD_LOG_WARNING(("NUMBER OF RECORDS %lu", fd_funk_rec_cnt(fd_funk_rec_map( funk, fd_funk_wksp(funk)))));
 
   fd_hashes_load(slot_ctx);
 
