@@ -199,6 +199,10 @@ typedef struct {
       uint xdp_aio_depth;
 
       uint send_buffer_size;
+
+      ulong multihome_ip_addrs_cnt; /* number of home ip addresses */
+      char  multihome_ip_addrs[FD_NET_MAX_SRC_ADDR][32];
+      uint  multihome_ip4_addrs[FD_NET_MAX_SRC_ADDR];
     } net;
 
     struct {
@@ -211,6 +215,7 @@ typedef struct {
       uint max_concurrent_handshakes;
       uint max_inflight_quic_packets;
       uint idle_timeout_millis;
+      uint ack_delay_millis;
       int  retry;
 
     } quic;

@@ -361,6 +361,11 @@ fd_topo_initialize( config_t * config ) {
       tile->net.quic_transaction_listen_port   = config->tiles.quic.quic_transaction_listen_port;
       tile->net.legacy_transaction_listen_port = config->tiles.quic.regular_transaction_listen_port;
 
+      /* multihome support */
+      ulong multi_cnt = tile->net.multihome_ip_addrs_cnt = config->tiles.net.multihome_ip_addrs_cnt;
+      for( ulong j = 0; j < multi_cnt; ++j ) {
+        tile->net.multihome_ip_addrs[j] = config->tiles.net.multihome_ip4_addrs[j];
+      }
     } else if( FD_UNLIKELY( !strcmp( tile->name, "quic" ) ) ) {
       fd_memcpy( tile->quic.src_mac_addr, config->tiles.net.mac_addr, 6 );
       strncpy( tile->quic.identity_key_path, config->consensus.identity_path, sizeof(tile->quic.identity_key_path) );
@@ -373,6 +378,7 @@ fd_topo_initialize( config_t * config ) {
       tile->quic.ip_addr                        = config->tiles.net.ip_addr;
       tile->quic.quic_transaction_listen_port   = config->tiles.quic.quic_transaction_listen_port;
       tile->quic.idle_timeout_millis            = config->tiles.quic.idle_timeout_millis;
+      tile->quic.ack_delay_millis               = config->tiles.quic.ack_delay_millis;
       tile->quic.retry                          = config->tiles.quic.retry;
       tile->quic.max_concurrent_streams_per_connection = config->tiles.quic.max_concurrent_streams_per_connection;
 

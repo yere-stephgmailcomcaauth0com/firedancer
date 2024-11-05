@@ -368,8 +368,8 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
       uchar * data = fd_spad_alloc( txn_ctx->spad, FD_SPAD_ALIGN, FD_ACC_TOT_SZ_MAX );
       ulong   dlen = borrowed_accts[j].const_meta->dlen;
       fd_memcpy( data, borrowed_accts[j].const_meta, sizeof(fd_account_meta_t)+dlen );
-      borrowed_accts[j].const_meta = borrowed_accts[j].meta = (fd_account_meta_t*)data;
-      borrowed_accts[j].const_data = borrowed_accts[j].data = data + sizeof(fd_account_meta_t);
+      borrowed_accts[j].const_meta = (fd_account_meta_t*)data;
+      borrowed_accts[j].const_data = data + sizeof(fd_account_meta_t);
     }
   }
 
@@ -416,10 +416,9 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
     }
   }
 
-  /* Add accounts to bpf program cache. The program blacklist is intentionally
-     not being updated here because of the fact that  */
+  /* Add accounts to bpf program cache */
   fd_funk_start_write( acc_mgr->funk );
-  fd_bpf_scan_and_create_bpf_program_cache_entry( slot_ctx, funk_txn, 1 );
+  fd_bpf_scan_and_create_bpf_program_cache_entry( slot_ctx, funk_txn );
   fd_funk_end_write( acc_mgr->funk );
 
   /* Restore sysvar cache */
@@ -664,11 +663,9 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
   /* Restore sysvar cache */
   fd_sysvar_cache_restore( slot_ctx->sysvar_cache, acc_mgr, funk_txn );
 
-  /* Add accounts to bpf program cache. The program blacklist is intentionally
-     not being populated here because any inputs that would trigger the blacklist
-     are ignored in the fuzzers/harnesses. */
+  /* Add accounts to bpf program cache */
   fd_funk_start_write( runner->funk );
-  fd_bpf_scan_and_create_bpf_program_cache_entry( slot_ctx, funk_txn, 1 );
+  fd_bpf_scan_and_create_bpf_program_cache_entry( slot_ctx, funk_txn );
 
   /* Default slot */
   ulong slot = test_ctx->slot_ctx.slot ? test_ctx->slot_ctx.slot : 10; // Arbitrary default > 0
@@ -724,7 +721,10 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
 
   /* Provide default stake history if not provided */
   if( !slot_ctx->sysvar_cache->has_stake_history ) {
+    // Provide a 0-set default entry
+    fd_stake_history_entry_t entry = {0};
     fd_sysvar_stake_history_init( slot_ctx );
+    fd_sysvar_stake_history_update( slot_ctx, &entry );
   }
 
   /* Provide default last restart slot sysvar if not provided */
@@ -1376,7 +1376,7 @@ fd_exec_instr_test_run( fd_exec_instr_test_runner_t * runner,
     /* Copy over account content */
 
     memcpy( out_acct->address, acc->pubkey, sizeof(fd_pubkey_t) );
-    out_acct->lamports     = acc->meta->info.lamports;
+    out_acct->lamports     = acc->const_meta->info.lamports;
     out_acct->data =
       FD_SCRATCH_ALLOC_APPEND( l, alignof(pb_bytes_array_t),
                                   PB_BYTES_ARRAY_T_ALLOCSIZE( acc->const_meta->dlen ) );
@@ -1387,9 +1387,9 @@ fd_exec_instr_test_run( fd_exec_instr_test_runner_t * runner,
     out_acct->data->size = (pb_size_t)acc->const_meta->dlen;
     fd_memcpy( out_acct->data->bytes, acc->const_data, acc->const_meta->dlen );
 
-    out_acct->executable     = acc->meta->info.executable;
-    out_acct->rent_epoch     = acc->meta->info.rent_epoch;
-    memcpy( out_acct->owner, acc->meta->info.owner, sizeof(fd_pubkey_t) );
+    out_acct->executable     = acc->const_meta->info.executable;
+    out_acct->rent_epoch     = acc->const_meta->info.rent_epoch;
+    memcpy( out_acct->owner, acc->const_meta->info.owner, sizeof(fd_pubkey_t) );
 
     effects->modified_accounts_count++;
   }
@@ -1533,7 +1533,7 @@ fd_exec_txn_test_run( fd_exec_instr_test_runner_t * runner, // Runner only conta
     /* Capture borrowed accounts */
     for( ulong j=0UL; j < txn_ctx->accounts_cnt; j++ ) {
       fd_borrowed_account_t * acc = &txn_ctx->borrowed_accounts[j];
-      if( !acc->const_meta ) continue;
+      if( !acc->meta ) continue;
 
       ulong modified_idx = txn_result->resulting_state.acct_states_count;
       assert( modified_idx < modified_acct_cnt );
