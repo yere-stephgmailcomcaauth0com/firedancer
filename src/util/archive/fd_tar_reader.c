@@ -38,8 +38,6 @@ fd_tar_reader_delete( fd_tar_reader_t * reader ) {
 static int
 fd_tar_process_hdr( fd_tar_reader_t * reader ) {
 
-  FD_LOG_WARNING(("PROCESSING HEADER"));
-
   fd_tar_meta_t const * hdr = (fd_tar_meta_t const *)reader->buf;
 
   /* "ustar\x00" and "ustar  \x00" (overlaps with version) are both

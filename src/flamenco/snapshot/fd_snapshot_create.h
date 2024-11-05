@@ -22,26 +22,6 @@
 #define FD_BLOCKHASH_QUEUE_SIZE (300UL)
 #define FD_TICKS_PER_SLOT       (64UL)
 
-struct fd_acc_vecs {
-  ulong                 slot;
-  ulong                 count;
-  ulong                 next;
-  fd_snapshot_acc_vec_t acc_vec;
-  char                  filename[256];
-  //int                   fd;
-  /* These can be easily turned into snapshot_slot_acc_vecs */
-};
-typedef struct fd_acc_vecs fd_acc_vecs_t;
-
-  /* clang-format off */
-  #define MAP_NAME          fd_acc_vecs
-  #define MAP_T             fd_acc_vecs_t
-  #define MAP_KEY           slot
-  #define MAP_MEMOIZE       0
-  #define MAP_LG_SLOT_CNT   20
-  #include "../../util/tmpl/fd_map.c"
-  /* clang-format on */
-
 struct fd_snapshot_create_private;
 typedef struct fd_snapshot_create_private fd_snapshot_create_t;
 

@@ -12,6 +12,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <time.h>
 
 #define FD_SNAPSHOT_VERSION_FILE ("version")
 #define FD_SNAPSHOT_VERSION      ("1.2.0")
@@ -27,9 +28,18 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
      client to calculate and verify the bank hash for the given slot. */
   ulong snapshot_slot = slot_ctx->slot_bank.slot - 1UL;
 
+  /* Create an array that can just store pointers to pubkey pointers. This is
+     a reasonable upper bound for the number of accounts that can be modified
+     during a slot (excluding the epoch boundary) is roughly 160k. This is
+     because a write lock on an account consumes 300 compute units and there 
+     is a block-level limit of 48 million compute units. */
+
+  fd_pubkey_t * * snapshot_slot_keys    = fd_valloc_malloc( slot_ctx->valloc, 8UL, sizeof(fd_pubkey_t *) * 200000UL );
+  ulong           snapshot_slot_key_cnt = 0UL;
+
   fd_solana_accounts_db_fields_t * accounts_db = &manifest->accounts_db;
 
-  accounts_db->storages_len                   = 1UL;
+  accounts_db->storages_len                   = 2UL;
   accounts_db->storages                       = fd_scratch_alloc( FD_SNAPSHOT_SLOT_ACC_VECS_ALIGN, sizeof(fd_snapshot_slot_acc_vecs_t) * accounts_db->storages_len );
   accounts_db->version                        = 1UL;
   accounts_db->slot                           = snapshot_slot;
@@ -47,11 +57,11 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
   accounts_db->storages[0].account_vecs[0].id      = 10000UL;
   accounts_db->storages[0].slot                    = snapshot_slot - 1UL;
 
-  // accounts_db->storages[1].account_vecs_len        = 1UL;
-  // accounts_db->storages[1].account_vecs            = fd_scratch_alloc( FD_SNAPSHOT_ACC_VEC_ALIGN, sizeof(fd_snapshot_acc_vec_t) * accounts_db->storages[0].account_vecs_len );
-  // accounts_db->storages[1].account_vecs[0].file_sz = 0UL;
-  // accounts_db->storages[1].account_vecs[0].id      = 10000UL;
-  // accounts_db->storages[1].slot                    = snapshot_slot; /* All accounts not in the snapshot slot */
+  accounts_db->storages[1].account_vecs_len        = 1UL;
+  accounts_db->storages[1].account_vecs            = fd_scratch_alloc( FD_SNAPSHOT_ACC_VEC_ALIGN, sizeof(fd_snapshot_acc_vec_t) * accounts_db->storages[1].account_vecs_len );
+  accounts_db->storages[1].account_vecs[0].file_sz = 0UL;
+  accounts_db->storages[1].account_vecs[0].id      = 10001UL;
+  accounts_db->storages[1].slot                    = snapshot_slot; /* All accounts in the snapshot slot */
 
   fd_snapshot_hash( slot_ctx, NULL, &accounts_db->bank_hash_info.snapshot_hash, 0 );
   fd_memset( &accounts_db->bank_hash_info.stats, 0, sizeof(fd_bank_hash_stats_t) );
@@ -63,9 +73,6 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
   fd_tar_writer_new_file( writer, buffer );
   fd_tar_writer_make_space( writer, manifest_sz );
   fd_tar_writer_fini_file( writer );
-
-
-  /* TODO: TURN THIS INTO A FD TAR WRITE */
 
   fd_funk_t * funk = slot_ctx->acc_mgr->funk;
 
@@ -97,10 +104,13 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
 
     uchar const * acc_data = raw + metadata->hlen;
 
-    /* We only want to process slots that were */
-    // if( metadata->slot != snapshot_slot ) {
-      // continue;
-    // }
+    /* All accounts that were touched in the previous slot should be in 
+       a different append vec so that Agave can calculate the snapshot slot's
+       bank hash. */
+    if( metadata->slot == snapshot_slot ) {
+      snapshot_slot_keys[ snapshot_slot_key_cnt++ ] = (fd_pubkey_t *)pubkey;
+      continue;
+    }
 
     prev_accs->file_sz += sizeof(fd_solana_account_hdr_t) + fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN );
 
@@ -120,112 +130,52 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
     fd_memcpy( &header.hash, metadata->hash, sizeof(fd_hash_t) );
 
 
-    FD_TEST( !fd_tar_writer_stream_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) ) );
-    FD_TEST( !fd_tar_writer_stream_file_data( writer, acc_data, metadata->dlen ) );
-
+    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) ) ) ) {
+      FD_LOG_ERR(("Unable to stream out account header to tar archive"));
+    }
+    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, acc_data, metadata->dlen ) ) ) {
+      FD_LOG_ERR(("Unable to stream out account data to tar archive"));
+    }
     ulong align_sz = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
-    FD_TEST( !fd_tar_writer_stream_file_data( writer, padding, align_sz ) );
-
-
-
-    // ulong sz = 0UL;
-    // fd_io_write( fd, &header, sizeof(fd_solana_account_hdr_t), sizeof(fd_solana_account_hdr_t), &sz );
-    // if( FD_UNLIKELY( sz!=sizeof(fd_solana_account_hdr_t) ) ) {
-    //   FD_LOG_ERR(( "Failed to write out the header" ));
-    // }
-    // fd_io_write( fd, acc_data, metadata->dlen, metadata->dlen, &sz );
-    // if( FD_UNLIKELY( sz!=metadata->dlen ) ) {
-    //   FD_LOG_ERR(( "Failed to write out the account data" ));
-    // }
-    // ulong align_sz = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
-    // fd_io_write( fd, padding, align_sz, align_sz, &sz );
-    // if( FD_UNLIKELY( sz!=align_sz ) ) {
-    //   FD_LOG_ERR(( "Failed to write out the padding" ));
-    // }
+    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, padding, align_sz ) ) ) {
+      FD_LOG_ERR(("Unable to stream out account padding to tar archive"));
+    }
   }
 
   fd_tar_writer_fini_file( writer );
 
-  return 0;
-}
 
-int
-fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_FN_UNUSED slot_ctx,
-                                         fd_solana_manifest_serializable_t * FD_FN_UNUSED manifest ) {
+  /* Snapshot slot */
+  snprintf( buffer, 128, "accounts/%lu.%lu", snapshot_slot, 10001UL );
+  fd_tar_writer_new_file( writer, buffer );
+  
 
-  fd_funk_t * funk = slot_ctx->acc_mgr->funk;
-  FD_LOG_WARNING(("NUMBER OF RECORDS %lu", fd_funk_rec_cnt(fd_funk_rec_map( funk, fd_funk_wksp(funk)))));
+  fd_snapshot_acc_vec_t * curr_accs = &accounts_db->storages[1].account_vecs[0];
+  curr_accs->id = 10001UL;
 
-  void * mem                     = fd_valloc_malloc( slot_ctx->valloc, fd_acc_vecs_align(), fd_acc_vecs_footprint() );
-  fd_acc_vecs_t * acc_vecs       = fd_acc_vecs_join( fd_acc_vecs_new( mem ) );
-  fd_acc_vecs_t ** acc_vecs_iter = fd_scratch_alloc( 8UL, sizeof(fd_acc_vecs_t*) * 1<<20 );
+  for( ulong i=0UL; i<snapshot_slot_key_cnt; i++ ) {
+    
+    fd_pubkey_t const * pubkey = snapshot_slot_keys[i];
+    FD_LOG_WARNING(("pubkey %s", FD_BASE58_ENC_32_ALLOCA(pubkey)));
 
-
-  ulong id       = 10000000000UL;
-  ulong start_id = id;
-  ulong num_accs = 0;
-  for (fd_funk_rec_t const *rec = fd_funk_txn_first_rec( funk, NULL ); NULL != rec; rec = fd_funk_txn_next_rec( funk, rec )) {
-
-    if( !fd_funk_key_is_acc( rec->pair.key ) ) {
-      continue;
+    fd_funk_rec_t const * rec = fd_funk_rec_query( funk, NULL, (fd_funk_rec_key_t*)pubkey );
+    if( FD_UNLIKELY( !rec ) ) {
+      FD_LOG_ERR(( "Previously found record can no longer be found" ));
     }
-
-    fd_pubkey_t const * pubkey = fd_type_pun_const( rec->pair.key[0].uc );
-
     uchar             const * raw      = fd_funk_val( rec, fd_funk_wksp( funk ) );
     fd_account_meta_t const * metadata = fd_type_pun_const( raw );
 
-    if( !metadata ) {
-      continue;
+    if( FD_UNLIKELY( !metadata ) ) {
+      FD_LOG_ERR(("Record should have non-NULL metadata"));
     }
 
-    if( metadata->magic!=FD_ACCOUNT_META_MAGIC ) {
-      continue;
+    if( FD_UNLIKELY( metadata->magic!=FD_ACCOUNT_META_MAGIC ) ) {
+      FD_LOG_ERR(("Record should have valid magic"));
     }
 
     uchar const * acc_data = raw + metadata->hlen;
-    num_accs++;
 
-    /* If it is the first record from a slot, create an append vec file,
-       open a file descriptor */
-
-    ulong snapshot_slot = slot_ctx->slot_bank.slot - 1UL;
-    ulong record_slot = metadata->slot == snapshot_slot ? snapshot_slot : snapshot_slot - 1UL ;
-
-    fd_acc_vecs_t * acc_vec_key = fd_acc_vecs_query( acc_vecs, record_slot, NULL );
-    if( !acc_vec_key ) {
-      /* If entry for the slot does not exist, insert a key and assign it's id
-         and slot. Create a corresponding filename that can be used to manage
-         opening and closing the file descriptor. */
-      acc_vec_key = fd_acc_vecs_insert( acc_vecs, record_slot );
-      if( FD_UNLIKELY( !acc_vec_key ) ) {
-        FD_LOG_ERR(( "Can't insert new acc vec" ));
-      }
-      fd_memset( acc_vec_key, 0UL, sizeof(fd_acc_vecs_t) );
-      acc_vec_key->acc_vec.id = id;
-      acc_vec_key->slot       = record_slot;
-
-      /* Set the filename for the append vec. 
-         TODO: the accounts directory should be parameterized. */
-      char * filepath = acc_vec_key->filename;
-      fd_memset( filepath, '\0', 256UL );
-      fd_memcpy( filepath, "/data/ibhatt/dump/mainnet-254462437/own_snapshot/accounts/", 58UL );
-      sprintf( filepath+58UL, "%lu.%lu", record_slot, id );
-
-      /* Increment the id for the next append vec file */
-      acc_vecs_iter[ id-start_id ] = acc_vec_key;
-      id++;
-    }
-
-    /* The file size and number of keys should be updated.
-       TODO: You technically don't need the count here. */
-    acc_vec_key->count           += 1UL;
-    acc_vec_key->acc_vec.file_sz += sizeof(fd_solana_account_hdr_t) + fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN );
-
-    char * file_path = acc_vec_key->filename;
-
-    /* Open the file here. */
-    int fd = open( file_path, O_CREAT | O_WRONLY | O_APPEND, 0644 );
+    curr_accs->file_sz += sizeof(fd_solana_account_hdr_t) + fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN );
 
     /* Write out the header. */
     fd_solana_account_hdr_t header = {0};
@@ -235,64 +185,25 @@ fd_snapshot_create_populate_acc_vec_idx( fd_exec_slot_ctx_t *                FD_
     fd_memcpy( header.meta.pubkey, pubkey, sizeof(fd_pubkey_t) );
     /* Account Meta */
     header.info.lamports               = metadata->info.lamports;
-
     header.info.rent_epoch             = header.info.lamports ? metadata->info.rent_epoch : 0UL;
     fd_memcpy( header.info.owner, metadata->info.owner, sizeof(fd_pubkey_t) );
     header.info.executable             = metadata->info.executable;
     /* Hash */
     fd_memcpy( &header.hash, metadata->hash, sizeof(fd_hash_t) );
 
-    ulong sz = 0UL;
-    fd_io_write( fd, &header, sizeof(fd_solana_account_hdr_t), sizeof(fd_solana_account_hdr_t), &sz );
-    if( FD_UNLIKELY( sz!=sizeof(fd_solana_account_hdr_t) ) ) {
-      FD_LOG_ERR(( "Failed to write out the header" ));
+    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) ) ) ) {
+      FD_LOG_ERR(("Unable to stream out account header to tar archive"));
     }
-    fd_io_write( fd, acc_data, metadata->dlen, metadata->dlen, &sz );
-    if( FD_UNLIKELY( sz!=metadata->dlen ) ) {
-      FD_LOG_ERR(( "Failed to write out the account data" ));
+    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, acc_data, metadata->dlen ) ) ) {
+      FD_LOG_ERR(("Unable to stream out account data to tar archive"));
     }
-    ulong align_sz                       = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
-    uchar padding[FD_SNAPSHOT_ACC_ALIGN] = {0};
-    fd_io_write( fd, padding, align_sz, align_sz, &sz );
-    if( FD_UNLIKELY( sz!=align_sz ) ) {
-      FD_LOG_ERR(( "Failed to write out the padding" ));
+    ulong align_sz = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
+    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, padding, align_sz ) ) ) {
+      FD_LOG_ERR(("Unable to stream out account padding to tar archive"));
     }
-
-    close( fd );
-
   }
-  FD_LOG_WARNING(("NUM ACCS %lu", num_accs));
+  fd_tar_writer_fini_file( writer );
 
-  /* At this point all of the append vec files have been written out. 
-     We now need to populate the append vec index. */
-
-  fd_bank_hash_info_t info = {0};
-
-  manifest->accounts_db.storages_len                   = id-start_id;
-  manifest->accounts_db.storages                       = fd_scratch_alloc( 8UL, manifest->accounts_db.storages_len * sizeof(fd_snapshot_slot_acc_vecs_t) );
-  manifest->accounts_db.version                        = 1UL;
-  manifest->accounts_db.slot                           = slot_ctx->slot_bank.slot - 1UL;
-  manifest->accounts_db.bank_hash_info                 = info;
-  manifest->accounts_db.historical_roots_len           = 0UL;
-  manifest->accounts_db.historical_roots               = NULL;
-  manifest->accounts_db.historical_roots_with_hash_len = 0UL;
-  manifest->accounts_db.historical_roots_with_hash     = NULL;
-
-  /* Populate the storages */
-  for( ulong i=0UL; i<(id-start_id); i++ ) {
-    fd_acc_vecs_t               * acc_vec = acc_vecs_iter[i];
-    fd_snapshot_slot_acc_vecs_t * storage = &manifest->accounts_db.storages[i];
-    
-    storage->slot                    = acc_vec->slot;
-    storage->account_vecs_len        = 1UL;
-    storage->account_vecs            = fd_scratch_alloc( 8UL, sizeof(fd_snapshot_acc_vec_t) );
-    storage->account_vecs[0].id      = acc_vec->acc_vec.id;
-    storage->account_vecs[0].file_sz = acc_vec->acc_vec.file_sz;
-    struct stat st;
-    FD_TEST( 0 == stat(acc_vec->filename, &st) );
-    FD_TEST((ulong)st.st_size == acc_vec->acc_vec.file_sz);
-  }
-  
   return 0;
 }
 
