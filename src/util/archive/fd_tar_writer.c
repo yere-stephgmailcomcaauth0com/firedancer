@@ -27,7 +27,7 @@ fd_tar_writer_new( void *       mem,
 
   int fd = open( tarball_name, O_CREAT | O_RDWR, 0644 );
   if( FD_UNLIKELY( fd==-1 ) ) {
-    FD_LOG_WARNING(( "Failed to open and create tarball (%i-%s)", errno, fd_io_strerror( errno ) ));
+    FD_LOG_WARNING(( "Failed to open and create tarball for file=%s (%i-%s)", tarball_name, errno, fd_io_strerror( errno ) ));
   }
 
   /* If the file already exists, truncate it's length to zero */

@@ -94,7 +94,8 @@ struct fd_ledger_args {
   uint                  cluster_version[3];      /* What version of solana is the genesis block? */
   char const *          one_off_features[32];    /* List of one off feature pubkeys to enable for execution agnostic of cluster version */
   uint                  one_off_features_cnt;    /* Number of one off features */
-  ulong                 snapshot_slot;           /* Slot to create a snapshot at*/
+  ulong                 snapshot_slot;           /* Slot to create a snapshot at */
+  char const *          snapshot_dir;            /* Directory to create a snapshot in */
 
 
   /* These values are setup before replay */
@@ -230,7 +231,13 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
 
     if( ledger_args->slot_ctx->slot_bank.slot==ledger_args->snapshot_slot+1UL ) {
-      fd_snapshot_create_new_snapshot( ledger_args->slot_ctx, 0 );
+      fd_snapshot_ctx_t snapshot_ctx = {
+        .snapshot_slot  = ledger_args->snapshot_slot,
+        .snapshot_dir   = ledger_args->snapshot_dir,
+        .is_incremental = 0,
+        .valloc         = fd_scratch_virtual()
+      };
+      fd_snapshot_create_new_snapshot( &snapshot_ctx, ledger_args->slot_ctx );
     }
   
     ulong blk_txn_cnt = 0;
@@ -1369,6 +1376,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   char const * one_off_features        = fd_env_strip_cmdline_cstr ( &argc, &argv, "--one-off-features",        NULL, NULL      );
   char const * lthash                  = fd_env_strip_cmdline_cstr ( &argc, &argv, "--lthash",                  NULL, "false"   );
   ulong        snapshot_slot           = fd_env_strip_cmdline_ulong( &argc, &argv, "--snapshot-slot",           NULL, ULONG_MAX );
+  char const * snapshot_dir            = fd_env_strip_cmdline_cstr ( &argc, &argv, "--snapshot-dir",            NULL, NULL      );
 
   // TODO: Add argument validation. Make sure that we aren't including any arguments that aren't parsed for
 
@@ -1466,6 +1474,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   args->checkpt_status_cache    = checkpt_status_cache;
   args->one_off_features_cnt    = 0UL;
   args->snapshot_slot           = snapshot_slot;
+  args->snapshot_dir            = snapshot_dir;
   parse_one_off_features( args, one_off_features );
   parse_rocksdb_list( args, rocksdb_list, rocksdb_list_starts );
 

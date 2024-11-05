@@ -1,22 +1,12 @@
 #include "fd_snapshot_create.h"
-#include "fd_snapshot.h"
-#include "fd_snapshot_loader.h"
-#include "fd_snapshot_restore.h"
 #include "../runtime/fd_acc_mgr.h"
 #include "../runtime/fd_hashes.h"
-#include "../runtime/fd_runtime_init.h"
-#include "../runtime/fd_system_ids.h"
 #include "../runtime/context/fd_exec_epoch_ctx.h"
-#include "../runtime/context/fd_exec_slot_ctx.h"
-#include "../rewards/fd_rewards.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <time.h>
 
-#define FD_SNAPSHOT_VERSION_FILE ("version")
-#define FD_SNAPSHOT_VERSION      ("1.2.0")
-#define FD_SNAPSHOT_VERSION_LEN  (5UL)
+static char directory_buf[ FD_SNAPSHOT_DIR_MAX ];
 
 int
 fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_ctx,
@@ -144,11 +134,9 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
 
   fd_tar_writer_fini_file( writer );
 
-
   /* Snapshot slot */
   snprintf( buffer, 128, "accounts/%lu.%lu", snapshot_slot, 10001UL );
   fd_tar_writer_new_file( writer, buffer );
-  
 
   fd_snapshot_acc_vec_t * curr_accs = &accounts_db->storages[1].account_vecs[0];
   curr_accs->id = 10001UL;
@@ -206,7 +194,7 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
   return 0;
 }
 
-void
+int
 fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
                                        fd_stakes_t              * old_stakes,
                                        fd_stakes_serializable_t * new_stakes ) {
@@ -250,7 +238,8 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
     FD_BORROWED_ACCOUNT_DECL( vote_acc );
     int err = fd_acc_mgr_view( slot_ctx->acc_mgr, slot_ctx->funk_txn, &n->elem.key, vote_acc );
     if( FD_UNLIKELY( err ) ) {
-      FD_LOG_ERR(( "Failed to view vote account from stakes cache %s", FD_BASE58_ENC_32_ALLOCA(&n->elem.key) ));
+      FD_LOG_WARNING(( "Failed to view vote account from stakes cache %s", FD_BASE58_ENC_32_ALLOCA(&n->elem.key) ));
+      return -1;
     }
 
     new_node->elem.value.lamports   = vote_acc->const_meta->info.lamports;
@@ -291,26 +280,33 @@ fd_snapshot_create_serialiable_stakes( fd_exec_slot_ctx_t       * slot_ctx,
       fd_stake_state_v2_t stake_state = {0};
       err = fd_stake_state_v2_decode( &stake_state, &ctx );
       if( FD_UNLIKELY( err ) ) {
-        FD_LOG_ERR(( "Failed to decode stake state" ));
+        FD_LOG_WARNING(( "Failed to decode stake state" ));
+        return -1;
       }
       n->elem.delegation = stake_state.inner.stake.stake.delegation;
     }
   }
 
   /* Copy over the rest of the fields as they are the same. */
+
   new_stakes->stake_delegations_pool = old_stakes->stake_delegations_pool;
   new_stakes->stake_delegations_root = old_stakes->stake_delegations_root;
   new_stakes->unused                 = old_stakes->unused;
   new_stakes->epoch                  = old_stakes->epoch;
   new_stakes->stake_history          = old_stakes->stake_history;
+
+  return 0;
 }
 
 int
-fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable_versioned_bank_t * bank ) {
+fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ctx, 
+                                  fd_exec_slot_ctx_t *               slot_ctx,
+                                  fd_serializable_versioned_bank_t * bank ) {
 
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
 
   /* The blockhash queue has to be copied over along with all of its entries. */
+
   bank->blockhash_queue.last_hash_index = slot_ctx->slot_bank.block_hash_queue.last_hash_index;
   bank->blockhash_queue.last_hash       = fd_scratch_alloc( FD_HASH_ALIGN, FD_HASH_FOOTPRINT );
   fd_memcpy( bank->blockhash_queue.last_hash, slot_ctx->slot_bank.block_hash_queue.last_hash, sizeof(fd_hash_t) );
@@ -319,24 +315,27 @@ fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable
   bank->blockhash_queue.ages     = fd_scratch_alloc( FD_HASH_HASH_AGE_PAIR_ALIGN, bank->blockhash_queue.ages_len * sizeof(fd_hash_hash_age_pair_t) );
   bank->blockhash_queue.max_age  = FD_BLOCKHASH_QUEUE_SIZE;
 
-  fd_block_hash_queue_t * queue = &slot_ctx->slot_bank.block_hash_queue;
-  fd_hash_hash_age_pair_t_mapnode_t * nn;
-  ulong blockhash_queue_idx = 0UL;
+  fd_block_hash_queue_t             * queue               = &slot_ctx->slot_bank.block_hash_queue;
+  fd_hash_hash_age_pair_t_mapnode_t * nn                  = NULL;
+  ulong                               blockhash_queue_idx = 0UL;
   for( fd_hash_hash_age_pair_t_mapnode_t * n = fd_hash_hash_age_pair_t_map_minimum( queue->ages_pool, queue->ages_root ); n; n = nn ) {
     nn = fd_hash_hash_age_pair_t_map_successor( queue->ages_pool, n );
     fd_memcpy( &bank->blockhash_queue.ages[ blockhash_queue_idx++ ], &n->elem, sizeof(fd_hash_hash_age_pair_t) );
   }
 
   /* Ancestor can be omitted to boot off of for both clients */
+
   bank->ancestors_len                        = 0UL;
   bank->ancestors                            = NULL;
 
   bank->hash                                  = slot_ctx->slot_bank.banks_hash;
   bank->parent_hash                           = slot_ctx->prev_banks_hash;
+
   /* The slot needs to be decremented because the snapshot is created after
      a slot finishes executing and the slot value is incremented. 
-     TODO: this will likely be different for the live case. */
-  bank->parent_slot                           = slot_ctx->slot_bank.prev_slot - 1UL;
+     TODO: This will not always be correct and should be fixed. */
+
+  bank->parent_slot                           = snapshot_ctx->snapshot_slot - 1UL;
 
   /* Hard forks can be omitted as it is not needed to boot off of both clients */
   bank->hard_forks.hard_forks                 = NULL;
@@ -359,13 +358,11 @@ fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable
 
   bank->accounts_data_len                     = 0UL;
 
-  /* Need to subtract 1 for the same reason as the parent slot. */
-
-  bank->slot                                  = slot_ctx->slot_bank.slot - 1UL;
+  bank->slot                                  = snapshot_ctx->snapshot_slot;
   bank->epoch                                 = fd_slot_to_epoch( &epoch_bank->epoch_schedule, bank->slot, NULL );
   bank->block_height                          = slot_ctx->slot_bank.block_height;
 
-  /* Value can be left as null for both clients */
+  /* Collector id can be left as null for both clients */
 
   fd_memset( &bank->collector_id, 0, sizeof(fd_pubkey_t) );
 
@@ -374,7 +371,6 @@ fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable
   bank->fee_rate_governor                     = slot_ctx->slot_bank.fee_rate_governor;
   bank->collected_rent                        = slot_ctx->slot_bank.collected_rent;
 
-  /* TODO: This needs more thorough testing on testnet/devnet wrt rent collection */
   bank->rent_collector.epoch                  = bank->epoch;
   bank->rent_collector.epoch_schedule         = epoch_bank->rent_epoch_schedule;
   bank->rent_collector.slots_per_year         = epoch_bank->slots_per_year;
@@ -383,13 +379,15 @@ fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable
   bank->epoch_schedule                        = epoch_bank->epoch_schedule;
   bank->inflation                             = epoch_bank->inflation;
   
-  /* This can be left as null for both clients */
+  /* Unused accounts can be left as NULL for both clients */
+
   fd_memset( &bank->unused_accounts, 0, sizeof(fd_unused_accounts_t) );
 
   /* We need to copy over the stakes for two epochs despite the Agave client
      providing the stakes for 6 epochs. These stakes need to be copied over
      because of the fact that the leader schedule computation uses the two
      previous epoch stakes. */
+
   fd_epoch_epoch_stakes_pair_t * relevant_epoch_stakes = fd_scratch_alloc( FD_EPOCH_EPOCH_STAKES_PAIR_ALIGN, 2UL * sizeof(fd_epoch_epoch_stakes_pair_t) );
   fd_memset( &relevant_epoch_stakes[0], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
   fd_memset( &relevant_epoch_stakes[1], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
@@ -402,25 +400,71 @@ fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable
   bank->epoch_stakes                          = relevant_epoch_stakes;
   bank->is_delta                              = 0;
 
-  fd_snapshot_create_serialiable_stakes( slot_ctx, &epoch_bank->stakes, &bank->stakes );
+  /* The firedancer runtime currently maintains a version of the stakes which
+     can't be reserialized into a format that is compatible with the Solana
+     snapshot format. Therefore, we must recompute the data structure. */
+
+  int err = fd_snapshot_create_serialiable_stakes( slot_ctx, &epoch_bank->stakes, &bank->stakes );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Failed to serialize stakes" ));
+    return -1;
+  }
+
   return 0;
 }
 
+static inline int
+fd_snapshot_create_validate_ctx( fd_snapshot_ctx_t *  snapshot_ctx,
+                                 fd_exec_slot_ctx_t * slot_ctx ) {
+  
+    /* Validate that the snapshot context is setup correctly */
+  
+    if( FD_UNLIKELY( !snapshot_ctx->snapshot_dir ) ) {
+      FD_LOG_WARNING(( "Snapshot directory is not set" ));
+      return -1;
+    }
 
-int
-fd_snapshot_create_write_version( fd_tar_writer_t * writer ) {
+    if( FD_UNLIKELY( snapshot_ctx->snapshot_slot > slot_ctx->slot_bank.slot ) ) {
+      FD_LOG_WARNING(( "Snapshot slot is greater than the current slot" ));
+      return -1;
+    }
+
+    /* TODO: Fill out other things to validate here. */
+  
+    return 0;
+}
+
+static inline int
+fd_snapshot_create_setup_writer( fd_snapshot_ctx_t * snapshot_ctx ) {
+  
+  /* Write out the snapshot tar archive to a temporary location that will be 
+     written to when the snapshot account hash is recalculated. */
+
+  snprintf( directory_buf, FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir );
+
+  uchar * writer_mem   = fd_valloc_malloc( snapshot_ctx->valloc, fd_tar_writer_align(), fd_tar_writer_footprint() );
+  snapshot_ctx->writer = fd_tar_writer_new( writer_mem, directory_buf );
+  if( FD_UNLIKELY( !snapshot_ctx->writer ) ) {
+    return -1;
+  }
+  return 0;
+}
+
+static inline int
+fd_snapshot_create_write_version( fd_snapshot_ctx_t * snapshot_ctx ) {
 
   /* The first file in the tar archive should be the version. */
 
-  fd_tar_writer_new_file( writer, FD_SNAPSHOT_VERSION_FILE );
-  fd_tar_writer_stream_file_data( writer, FD_SNAPSHOT_VERSION, FD_SNAPSHOT_VERSION_LEN);
-  fd_tar_writer_fini_file( writer );
+  fd_tar_writer_new_file( snapshot_ctx->writer, FD_SNAPSHOT_VERSION_FILE );
+  fd_tar_writer_stream_file_data( snapshot_ctx->writer, FD_SNAPSHOT_VERSION, FD_SNAPSHOT_VERSION_LEN);
+  fd_tar_writer_fini_file( snapshot_ctx->writer );
 
   return 0; 
 }
 
-int
-fd_snapshot_create_write_status_cache( fd_exec_slot_ctx_t * slot_ctx, fd_tar_writer_t * writer ) {
+static inline int
+fd_snapshot_create_write_status_cache( fd_snapshot_ctx_t *  snapshot_ctx,
+                                       fd_exec_slot_ctx_t * slot_ctx ) {
 
   FD_SCRATCH_SCOPE_BEGIN {
 
@@ -428,22 +472,23 @@ fd_snapshot_create_write_status_cache( fd_exec_slot_ctx_t * slot_ctx, fd_tar_wri
 
   fd_bank_slot_deltas_t slot_deltas_new = {0};
   fd_txncache_get_entries( slot_ctx->status_cache,
-                            &slot_deltas_new );
-  ulong bank_slot_deltas_sz = fd_bank_slot_deltas_size( &slot_deltas_new );
-  uchar * out_status_cache = fd_scratch_alloc( FD_BANK_SLOT_DELTAS_ALIGN, bank_slot_deltas_sz );
+                           &slot_deltas_new );
+  ulong   bank_slot_deltas_sz = fd_bank_slot_deltas_size( &slot_deltas_new );
+  uchar * out_status_cache    = fd_valloc_malloc( snapshot_ctx->valloc, FD_BANK_SLOT_DELTAS_ALIGN, bank_slot_deltas_sz );
   fd_bincode_encode_ctx_t encode_status_cache = {
     .data    = out_status_cache,
     .dataend = out_status_cache + bank_slot_deltas_sz,
   };
   if( FD_UNLIKELY( fd_bank_slot_deltas_encode( &slot_deltas_new, &encode_status_cache ) ) ) {
-    FD_LOG_ERR(("Failed to encode the status cache"));
+    FD_LOG_WARNING(( "Failed to encode the status cache" ));
+    return -1;
   }
 
   /* Now write out the buffer to the tar archive */
 
-  fd_tar_writer_new_file( writer, "snapshots/status_cache" );
-  fd_tar_writer_stream_file_data( writer, out_status_cache, bank_slot_deltas_sz );
-  fd_tar_writer_fini_file( writer );
+  fd_tar_writer_new_file( snapshot_ctx->writer, FD_SNAPSHOT_STATUS_CACHE_FILE );
+  fd_tar_writer_stream_file_data( snapshot_ctx->writer, out_status_cache, bank_slot_deltas_sz );
+  fd_tar_writer_fini_file( snapshot_ctx->writer );
 
   return 0;
 
@@ -451,88 +496,110 @@ fd_snapshot_create_write_status_cache( fd_exec_slot_ctx_t * slot_ctx, fd_tar_wri
 
 }
 
-int
-fd_snapshot_create_new_snapshot( fd_exec_slot_ctx_t * slot_ctx, int FD_FN_UNUSED is_incremental ) {
+static inline int
+fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ctx,
+                                                fd_exec_slot_ctx_t * slot_ctx ) {
 
-  (void) is_incremental; /* TODO: this is unimplemented */
-
-  FD_SCRATCH_SCOPE_BEGIN {
-
-  /* START HACK Do a funk publish and whatnot */
-  fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
-  fd_funk_txn_t * txn  = slot_ctx->funk_txn;
-  fd_funk_start_write( funk );
-  ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
-  if( !publish_err ) {
-    FD_LOG_ERR(("publish err"));
-    return -1;
-  }
-  fd_funk_end_write( funk );
-  /* END HACK*/
-
-  /* Create the tar writer that will stream out the contents */
-  fd_tar_writer_t * writer = fd_tar_writer_new( fd_scratch_alloc( fd_tar_writer_align(), fd_tar_writer_footprint() ), 
-                                                "/data/ibhatt/dump/mainnet-254462437/new.tar" );
-  if( FD_UNLIKELY( !writer ) ) {
-    FD_LOG_ERR(( "Failed to create tar writer" ));
-  }
-
-  /* Write out the version file. */
-
-  fd_snapshot_create_write_version( writer );
-
-  /* Dump the status cache and append it to the tar archive. */
-
-  fd_snapshot_create_write_status_cache( slot_ctx, writer );
-
-  /* Populate the fields of the new manifest */
 
   fd_solana_manifest_serializable_t manifest = {0};
   
   /* Copy in all the fields of the bank */
 
-  fd_snapshot_create_populate_bank( slot_ctx, &manifest.bank );
+  int err = fd_snapshot_create_populate_bank( snapshot_ctx, slot_ctx, &manifest.bank );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Failed to populate the bank" ));
+    return -1;
+  }
 
-  /* Populate the rest of the manifest, except for the append vec index */
+  /* Populate the rest of the manifest, except for the append vec index. */
+
   manifest.lamports_per_signature                = slot_ctx->slot_bank.lamports_per_signature;
   manifest.bank_incremental_snapshot_persistence = NULL;
   manifest.epoch_account_hash                    = &slot_ctx->slot_bank.epoch_account_hash;
-
-  /* TODO: The versioned epoch stakes needs to be updated once these are being
-     used in Agave. */
+  /* TODO: The versioned epoch stakes needs to be implemented */
   manifest.versioned_epoch_stakes_len            = 0UL;
   manifest.versioned_epoch_stakes                = NULL;
 
   /* Create the append vecs and populate the index in the manifest. */
 
-  fd_snapshot_create_populate_acc_vecs( slot_ctx, &manifest, writer );
+  fd_snapshot_create_populate_acc_vecs( slot_ctx, &manifest, snapshot_ctx->writer );
 
   /* TODO: Need to write out the snapshot hash to the name of the file as well. */
 
-  FD_LOG_WARNING(("ACCOUNTS DB HEADER %lu %lu %lu", manifest.accounts_db.storages_len, manifest.accounts_db.version, manifest.accounts_db.slot));
-
   // /* Encode and output the manifest to a file */
-  ulong manifest_sz = fd_solana_manifest_serializable_size( &manifest ); 
-  FD_LOG_WARNING(("NEW MANIFEST SIZE %lu", manifest_sz));
-  uchar * out_manifest = fd_scratch_alloc( 8UL, manifest_sz );
-  fd_bincode_encode_ctx_t encode =
-    { .data    = out_manifest,
-      .dataend = out_manifest + manifest_sz };
-  FD_TEST( 0==fd_solana_manifest_serializable_encode( &manifest, &encode ) );
+  ulong   manifest_sz  = fd_solana_manifest_serializable_size( &manifest ); 
+  uchar * out_manifest = fd_valloc_malloc( snapshot_ctx->valloc, FD_SOLANA_MANIFEST_SERIALIZABLE_ALIGN, manifest_sz );
 
-  fd_bincode_decode_ctx_t decode = {
-    .data = out_manifest,
-    .dataend = out_manifest + manifest_sz,
-    .valloc = fd_scratch_virtual()
+  fd_bincode_encode_ctx_t encode = { 
+    .data    = out_manifest,
+    .dataend = out_manifest + manifest_sz
   };
 
+  err = fd_solana_manifest_serializable_encode( &manifest, &encode );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Failed to encode the manifest" ));
+    return -1;
+  }
 
-  fd_solana_manifest_t manifest_two = {0};
-  FD_TEST( 0==fd_solana_manifest_decode( &manifest_two, &decode ));
+  fd_tar_writer_fill_space( snapshot_ctx->writer, out_manifest, manifest_sz );
+  fd_tar_writer_delete( snapshot_ctx->writer );
+  return 0;
+}
 
-  fd_tar_writer_fill_space( writer, out_manifest, manifest_sz );
-  fd_tar_writer_delete( writer );
+int
+fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
+                                 fd_exec_slot_ctx_t * slot_ctx ) {
 
+  FD_SCRATCH_SCOPE_BEGIN {
+
+  /* TODO:FIXME: START HACK Do a funk publish and whatnot */
+  fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
+  fd_funk_txn_t * txn  = slot_ctx->funk_txn;
+  fd_funk_start_write( funk );
+  ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
+  if( !publish_err ) {
+    FD_LOG_ERR(( "publish err" ));
+    return -1;
+  }
+  fd_funk_end_write( funk );
+  /* TODO:FIXME: END HACK */
+
+  /* Validate that the snapshot_ctx is setup correctly */
+
+  int err = fd_snapshot_create_validate_ctx( snapshot_ctx, slot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+      return -1;
+  }
+
+  /* Setup the writer that is used. */
+
+  err = fd_snapshot_create_setup_writer( snapshot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+    return -1;
+  }
+
+  /* Write out the version file. */
+
+  err = fd_snapshot_create_write_version( snapshot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+    return 1; /* TODO: replace with a jump to cleanup */
+  }
+
+  /* Dump the status cache and append it to the tar archive. */
+
+  err = fd_snapshot_create_write_status_cache( snapshot_ctx, slot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+    return 1;
+  }
+
+  /* Populate and write out the manifest and append vecs. */
+
+  err = fd_snapshot_create_write_manifest_and_acc_vecs( snapshot_ctx, slot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+    return 1;
+  }
+
+  /* TODO:FIXME: Do the cleanup here */
 
   } FD_SCRATCH_SCOPE_END;
 

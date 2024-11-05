@@ -10,6 +10,8 @@
 #include "../runtime/context/fd_exec_epoch_ctx.h"
 #include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
 #include "../runtime/fd_hashes.h"
+#include "../../util/archive/fd_tar.h"
+
 #include <stdio.h>
 #include <dirent.h>
 #include <string.h>
@@ -19,35 +21,49 @@
 #include <errno.h>
 #include <fcntl.h>
 
-#define FD_BLOCKHASH_QUEUE_SIZE (300UL)
-#define FD_TICKS_PER_SLOT       (64UL)
+#define FD_BLOCKHASH_QUEUE_SIZE       (300UL)
+#define FD_TICKS_PER_SLOT             (64UL)
 
-struct fd_snapshot_create_private;
-typedef struct fd_snapshot_create_private fd_snapshot_create_t;
+#define FD_SNAPSHOT_DIR_MAX           (256UL)
+#define FD_SNAPSHOT_VERSION_FILE      ("version")
+#define FD_SNAPSHOT_VERSION           ("1.2.0")
+#define FD_SNAPSHOT_VERSION_LEN       (5UL)
+#define FD_SNAPSHOT_STATUS_CACHE_FILE ("snapshots/status_cache")
 
 FD_PROTOTYPES_BEGIN
 
-int
-fd_snapshot_create_populate_bank( fd_exec_slot_ctx_t * slot_ctx, fd_serializable_versioned_bank_t * bank );
+struct fd_snapshot_ctx {
+  ulong             snapshot_slot;
+  char const *      snapshot_dir;
+  int               is_incremental;
+  fd_tar_writer_t * writer;
+  fd_valloc_t       valloc;
+};
+typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
 
 /* fd_snapshot_create_new_snapshot is responsible for creating the different
    structures used for snapshot generation and outputting them to a servable,
    compressed tarball. The main components of a Solana snapshot are as follows:
-   1. The manifest - The manifest contains data about the state of the network
-      as well as the index of the append vecs. 
+
+   1. Version - This is a file that contains the version of the snapshot.
+   2. Manifest - The manifest contains data about the state of the network
+                 as well as the index of the append vecs. 
       a. The bank. This is the equivalent of the firedancer slot/epoch context.
          This contains almost all of the state of the network that is not
          encapsulated in the accounts.
       b. Append vec index. This is a list of all of the append vecs that are
          used to store the accounts. This is a slot indexed file.
-   2. Status cache - the status cache holds the transaction statuses for the 
+   3. Status cache - the status cache holds the transaction statuses for the 
       last 300 rooted slots. This is a nested data structure which is indexed
       by blockhash. See fd_txncache.h for more details on the status cache.
-   3. Accounts directory - the accounts directory contains the state of all
-      of the accounts and is a set of files described by <slot#.id#>. */
-/* TODO: Add all of the options here. Perhaps a fd_snapshot_create_ctx_t. */
+   4. Accounts directory - the accounts directory contains the state of all
+      of the accounts and is a set of files described by <slot#.id#>. 
+      
+  The files are written out into a tar archive which is then compressed with
+  zstd.  */
+
 int
-fd_snapshot_create_new_snapshot( fd_exec_slot_ctx_t * slot_ctx, int FD_FN_UNUSED is_incremental );
+fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t * snapshot_ctx, fd_exec_slot_ctx_t * slot_ctx );
 
 FD_PROTOTYPES_END
 
