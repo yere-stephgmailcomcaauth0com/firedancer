@@ -15,10 +15,12 @@ fd_tar_writer_new( void *       mem,
 
   if( FD_UNLIKELY( !mem ) ) {
     FD_LOG_WARNING(( "NULL mem" ));
+    return NULL;
   }
 
   if( FD_UNLIKELY( !fd_ulong_is_aligned( (ulong)mem, fd_tar_writer_align() ) ) ) {
     FD_LOG_WARNING(( "unaligned mem" ));
+    return NULL;
   }
 
   fd_tar_writer_t * writer = (fd_tar_writer_t *)mem;
@@ -28,6 +30,7 @@ fd_tar_writer_new( void *       mem,
   int fd = open( tarball_name, O_CREAT | O_RDWR, 0644 );
   if( FD_UNLIKELY( fd==-1 ) ) {
     FD_LOG_WARNING(( "Failed to open and create tarball for file=%s (%i-%s)", tarball_name, errno, fd_io_strerror( errno ) ));
+    return NULL;
   }
 
   /* If the file already exists, truncate it's length to zero */
@@ -35,6 +38,7 @@ fd_tar_writer_new( void *       mem,
   int err = ftruncate( fd, 0UL );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to truncate tarball (%i-%s)", errno, fd_io_strerror( errno ) ));
+    return NULL;
   }
 
   writer->fd         = fd;
