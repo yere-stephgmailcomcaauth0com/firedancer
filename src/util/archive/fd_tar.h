@@ -2,11 +2,12 @@
 #define HEADER_fd_src_archive_fd_tar_h
 
 /* fd_tar implements the ustar and old-GNU versions of the TAR file
-   format.  This is not a general-purpose TAR implementation.  It is
-   currently only intended for loading Solana snapshots. */
+   format. This is not a general-purpose TAR implementation.  It is
+   currently only intended for loading and writing Solana snapshots. */
 
 #include "../fd_util_base.h"
 #include "../io/fd_io.h"
+#include <stdio.h>
 
 /* File Format ********************************************************/
 

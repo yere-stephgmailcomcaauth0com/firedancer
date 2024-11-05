@@ -156,7 +156,6 @@ fd_snapshot_create_populate_acc_vecs( fd_exec_slot_ctx_t                * slot_c
   for( ulong i=0UL; i<snapshot_slot_key_cnt; i++ ) {
     
     fd_pubkey_t const * pubkey = snapshot_slot_keys[i];
-    FD_LOG_WARNING(("pubkey %s", FD_BASE58_ENC_32_ALLOCA(pubkey)));
 
     fd_funk_rec_t const * rec = fd_funk_rec_query( funk, NULL, (fd_funk_rec_key_t*)pubkey );
     if( FD_UNLIKELY( !rec ) ) {
