@@ -241,7 +241,7 @@ struct fd_tar_writer {
                                           call to fd_tar_writer_fill_space. */
   /* TODO: Right now, the stream to the tar writer just uses fd_io_write. 
      This can eventually be abstracted to use write callbacks that use
-     fd_io streaming under the hood. This adds some additionaly complexity 
+     fd_io streaming under the hood. This adds some additionalycomplexity 
      that's related to writing back into the header: if the header is still
      in the ostream buf, modify the buffer. Otherwise, read the header
      directly from the file. */
@@ -266,14 +266,14 @@ fd_tar_writer_footprint( void ) {
    to warning log. Reasons for failure include invalid memory region.
    The writer will enable the user to write/stream out files of variable
    size into a continual stream. The writer should persist for the span of
-   a single tarball. The writer will be responsible for creating and holding
-   the file descriptor for the tarball. */
+   a single tar archive. The writer will be responsible for creating and holding
+   the file descriptor for the tar archive. */
 
 fd_tar_writer_t *
 fd_tar_writer_new( void *       mem,
                    char const * tarball_name );
 
-/* fd_tar_writer_delete destroys a .tar writer and frees any allocated
+/* fd_tar_writer_delete destroys a tar writer and frees any allocated
    resources. Returns the underlying memory region back to the caller.
    This writer will also handle cleanup for the tar archive: it will write
    out the tar archive trailer and will close the underlying file descriptor. */
@@ -284,7 +284,7 @@ fd_tar_writer_delete( fd_tar_writer_t * writer );
 /* fd_tar_write_new_file writes out a file header, it will leave certain
    fields blank to allow for writing back of header metadata that is unknown
    until the file done streaming out. The user must enforce the invariant that
-   this can only be called after a fd_tar_fini_file() or a fd_tar_writer_new() */
+   this can only be called after fd_tar_fini_file() orfd_tar_writer_new() */
 
 int
 fd_tar_writer_new_file( fd_tar_writer_t * writer,
@@ -294,7 +294,7 @@ fd_tar_writer_new_file( fd_tar_writer_t * writer,
    writer's tarball. This can be called multiple times for a single file.
    The user must enforce the invariant that this function succeeded a call
    to fd_tar_new_file and should precede a call to fd_tar_fini_file. If this
-   invariant isn't enforced, then the .tar writer will silently produce an
+   invariant isn't enforced, then the tar writer will silently produce an
    invalid file. */
 
 int
@@ -321,7 +321,7 @@ fd_tar_writer_fini_file( fd_tar_writer_t * writer );
    which they made space. _make_space and _fill_space should be paired together.
    There can only be one oustanding call to make_space at a time.
    
-   TODO: This can be extended to support multiple write backs.  */
+   TODO: This can be extended to support multiple write backs. */
 
 int
 fd_tar_writer_make_space( fd_tar_writer_t * writer, ulong sz );
