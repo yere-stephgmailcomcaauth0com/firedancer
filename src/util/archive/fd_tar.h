@@ -85,13 +85,14 @@ fd_tar_set_octal( char  buf[ static 12 ],
                   ulong val );
 
 /* fd_tar_meta_set_size sets the size field.  Returns 1 on success, 0
-   if sz is too large to be represented in TAR header. */
+   if sz is too large to be represented in TAR header. Set size using the 
+   OLDGNU size extension to allow for unlimited file sizes. The first byte
+   must be 0x80 followed by 0s and then the size in binary. */
 
 static inline int
 fd_tar_meta_set_size( fd_tar_meta_t * meta,
                       ulong           sz ) {
-  meta->size[ 0  ] = 0x80; /* Set size using the OLDGNU size extension */
-  meta->size[ 11 ] = '\0';
+  meta->size[ 0 ] = 0x80;
   FD_STORE( ulong, meta->size + 4UL, fd_ulong_bswap( sz ) );
   return 1;
 }
