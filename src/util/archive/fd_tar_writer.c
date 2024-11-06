@@ -213,7 +213,7 @@ fd_tar_writer_fini_file( fd_tar_writer_t * writer ) {
     return -1;
   }
 
-  /* Now that the file is read in, update the size in the header. */
+  /* Now that the tar header is read in, update the size in the header. */
 
   err = fd_tar_meta_set_size( &meta, writer->data_sz );
   if( FD_UNLIKELY( !err ) ) {
@@ -250,8 +250,8 @@ fd_tar_writer_fini_file( fd_tar_writer_t * writer ) {
     return -1;
   }
 
-  /* Reset the data_sz and header pointers as there is no outstanding 
-     write. */
+  /* Reset the data_sz/header pointers as there is no outstanding write. */
+  
   writer->header_pos = ULONG_MAX;
   writer->data_sz    = ULONG_MAX;
  
