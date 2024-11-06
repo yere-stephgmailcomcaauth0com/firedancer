@@ -228,6 +228,25 @@ fd_tar_read( void *        reader,
 
 /* Streaming writer ***************************************************/
 
+/* TL;DR. I didn't read the code. How do I use this?
+
+   Init with fd_tar_writer_new( mem, tarball_name ).
+
+   For each file you want to add to the archive:
+    1. Write out tar header with fd_tar_writer_new_file( writer, file_name )
+    2. Write out file data with fd_tar_writer_write_file_data( writer, data, data_sz ).
+       This can be done as many times as you want.
+    3. Finish the current file with fd_tar_writer_fini_file( writer ).
+  
+   When you are done, call fd_tar_writer_delete( writer ) to write out the 
+   tar archive trailer and close otu the file descriptor.
+
+   If you want to reserve space for an existing file and write back to it 
+   at some point in the future see the below comments for
+   fd_tar_writer_{make,fill}_space().
+   
+   */
+
 struct fd_tar_writer {
   int                      fd;         /* The file descriptor for the tar archive. */
   ulong                    header_pos; /* The position in the file for the current files header.
@@ -241,7 +260,7 @@ struct fd_tar_writer {
                                           call to fd_tar_writer_fill_space. */
   /* TODO: Right now, the stream to the tar writer just uses fd_io_write. 
      This can eventually be abstracted to use write callbacks that use
-     fd_io streaming under the hood. This adds some additionalycomplexity 
+     fd_io streaming under the hood. This adds some additional complexity 
      that's related to writing back into the header: if the header is still
      in the ostream buf, modify the buffer. Otherwise, read the header
      directly from the file. */
@@ -290,7 +309,7 @@ int
 fd_tar_writer_new_file( fd_tar_writer_t * writer,
                         char const *      file_name );
 
-/* fd_tar_stream_file_data will write out a variable amount of bytes to the
+/* fd_tar_writer_write_file_data will write out a variable amount of bytes to the
    writer's tarball. This can be called multiple times for a single file.
    The user must enforce the invariant that this function succeeded a call
    to fd_tar_new_file and should precede a call to fd_tar_fini_file. If this
@@ -298,9 +317,9 @@ fd_tar_writer_new_file( fd_tar_writer_t * writer,
    invalid file. */
 
 int
-fd_tar_writer_stream_file_data( fd_tar_writer_t * writer,
-                                void const *      data,
-                                ulong             data_sz );
+fd_tar_writer_write_file_data( fd_tar_writer_t * writer,
+                               void const *      data,
+                               ulong             data_sz );
 
 /* fd_tar_fini_file will write out any alignment bytes to the current file's
    data. It will then write back to the file header with the file size and

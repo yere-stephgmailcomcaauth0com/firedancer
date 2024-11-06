@@ -1,28 +1,24 @@
 #ifndef HEADER_fd_src_flamenco_snapshot_fd_snapshot_create_h
 #define HEADER_fd_src_flamenco_snapshot_fd_snapshot_create_h
 
-/* fd_snapshot_create.h provides APIs for creating a Labs-compatible
+/* fd_snapshot_create.h provides APIs for creating a Agave-compatible
    snapshot from a slot execution context. */
 
-#include "../fd_flamenco_base.h"
 #include "fd_snapshot_base.h"
-#include "../runtime/context/fd_exec_slot_ctx.h"
-#include "../runtime/context/fd_exec_epoch_ctx.h"
-#include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
-#include "../runtime/fd_hashes.h"
 #include "../../util/archive/fd_tar.h"
 
 #include <stdio.h>
-#include <dirent.h>
-#include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 
 #define FD_BLOCKHASH_QUEUE_SIZE       (300UL)
 #define FD_TICKS_PER_SLOT             (64UL)
+/* This is the reasonably tight upper bound for the number of writable 
+   accounts in a slot. This is because a block has a limit of 48 million
+   compute units. Each writable account lock costs 300 CUs. That means there
+   can be up to 48M/300 writable accounts in a block. */
+#define FD_WRITABLE_ACCS_IN_SLOT      (160000UL)
 
 #define FD_SNAPSHOT_DIR_MAX           (256UL)
 #define FD_SNAPSHOT_VERSION_FILE      ("version")
@@ -32,10 +28,10 @@
 
 FD_PROTOTYPES_BEGIN
 
-/* fd_snapshot_ctx is a context that is used to create a snapshot. It contains
-   the slot that the snapshot is being created for, the directory that the
-   snapshot is being written to, and the writer that is being used to write
-   the snapshot. 
+/* fd_snapshot_ctx_t holds various data structures needed for snapshot
+   creation. It contains the snapshot slot, the snapshot directory,
+   whether the snapshot is incremental, the tarball writer, the allocator,
+   and holds the snapshot hash.
    
   NOTE: The snapshot service will currently not correctly free memory that is
         allocated unless a bump allocator like fd_scratch or fd_spad are used. */
@@ -65,10 +61,10 @@ typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
       last 300 rooted slots. This is a nested data structure which is indexed
       by blockhash. See fd_txncache.h for more details on the status cache.
    4. Accounts directory - the accounts directory contains the state of all
-      of the accounts and is a set of files described by <slot#.id#>. 
+      of the accounts and is a set of files described by <slot#.id#>. These
+      are described by the append vec index in the manifest.
       
-  The files are written out into a tar archive which is then compressed with
-  zstd. 
+  The files are written out into a tar archive which is then zstd compressed. 
   
   This can produce either a full snapshot or an incremental snapshot depending
   on the value of is_incremental. An incremental snapshot will contain all of 
@@ -79,7 +75,8 @@ typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
   TODO: Currently incremental snapshots are not supported. */
 
 int
-fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t * snapshot_ctx, fd_exec_slot_ctx_t * slot_ctx );
+fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t  * snapshot_ctx, 
+                                 fd_exec_slot_ctx_t * slot_ctx );
 
 FD_PROTOTYPES_END
 

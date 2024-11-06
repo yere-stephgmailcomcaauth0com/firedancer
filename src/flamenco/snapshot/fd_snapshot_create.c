@@ -1,11 +1,8 @@
 #include "fd_snapshot_create.h"
-#include "../runtime/fd_acc_mgr.h"
-#include "../runtime/fd_hashes.h"
 #include "../runtime/context/fd_exec_epoch_ctx.h"
+#include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
+#include "../runtime/fd_hashes.h"
 
-#include <asm-generic/errno.h>
-#include <assert.h>
-#include <fcntl.h>
 #include <zstd.h>
 
 static uchar padding [ FD_SNAPSHOT_ACC_ALIGN ] = {0};
@@ -29,13 +26,12 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
      To avoid iterating through the root twice to determine what accounts were
      touched in the snapshot slot and what accounts were touched in the
      other slots, we will create an array of pubkey pointers for all accounts
-     that were touched in the pubkey slot. We can safely size this buffer to 
-     have a reasonable upper bound for the number of accounts that can be 
-     modified during a slot (not including epoch boundaries). This number
-     is roughly ~160k because a write lock on an account consumes 300 compute 
-     units and there is a block-level limit of 48 million compute units. */
+     that were touched in the pubkey slot. This buffer can be safely sized to 
+     the maximum amount of writable accounts that are possible in a non-epoch
+     boundary slot. The rationale for this bound is explained in
+     fd_snapshot_create.h. */
 
-  fd_pubkey_t * * snapshot_slot_keys    = fd_valloc_malloc( slot_ctx->valloc, alignof(fd_pubkey_t*), sizeof(fd_pubkey_t*) * 160000UL );
+  fd_pubkey_t * * snapshot_slot_keys    = fd_valloc_malloc( slot_ctx->valloc, alignof(fd_pubkey_t*), sizeof(fd_pubkey_t*) * FD_WRITABLE_ACCS_IN_SLOT );
   ulong           snapshot_slot_key_cnt = 0UL;
 
   /* Setup the storages for the accounts db index. */
@@ -80,7 +76,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
   }
   fd_memset( &accounts_db->bank_hash_info.stats, 0, sizeof(fd_bank_hash_stats_t) );
 
-  /* Propogate snapshot hash to the snapshot_ctx */
+  /* Propogate snapshot hash to the snapshot_ctx. */
 
   snapshot_ctx->hash = accounts_db->bank_hash_info.snapshot_hash;
 
@@ -90,7 +86,11 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
   ulong manifest_sz = fd_solana_manifest_serializable_size( manifest ); 
 
   char buffer[ FD_SNAPSHOT_DIR_MAX ];
-  snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "snapshots/%lu/%lu", snapshot_ctx->snapshot_slot, snapshot_ctx->snapshot_slot );
+  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "snapshots/%lu/%lu", snapshot_ctx->snapshot_slot, snapshot_ctx->snapshot_slot );
+  if( FD_UNLIKELY( err<0 ) ) {
+    FD_LOG_WARNING(( "Unable to format manifest name string" ));
+    return -1;
+  }
   err = fd_tar_writer_new_file( writer, buffer );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Unable to create snapshot manifest file" ));
@@ -114,8 +114,16 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
   fd_funk_t *             funk      = slot_ctx->acc_mgr->funk;
   fd_snapshot_acc_vec_t * prev_accs = &accounts_db->storages[0].account_vecs[0];
 
-  snprintf( buffer, 128, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot - 1UL, prev_accs->id );
-  fd_tar_writer_new_file( writer, buffer );
+  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot - 1UL, prev_accs->id );
+  if( FD_UNLIKELY( err<0 ) ) {
+    FD_LOG_WARNING(( "Unable to format previous accounts name string" ));
+    return -1;
+  }
+  err = fd_tar_writer_new_file( writer, buffer );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Unable to create previous accounts file" ));
+    return -1;
+  }
 
   for( fd_funk_rec_t const * rec = fd_funk_txn_first_rec( funk, NULL ); NULL != rec; rec = fd_funk_txn_next_rec( funk, rec ) ) {
 
@@ -165,16 +173,21 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
     /* Hash */
     fd_memcpy( &header.hash, metadata->hash, sizeof(fd_hash_t) );
 
-
-    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) ) ) ) {
-      FD_LOG_ERR(("Unable to stream out account header to tar archive"));
+    err = fd_tar_writer_write_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) );
+    if( FD_UNLIKELY( err ) ) {
+      FD_LOG_WARNING(( "Unable to stream out account header to tar archive" ));
+      return -1;
     }
-    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, acc_data, metadata->dlen ) ) ) {
-      FD_LOG_ERR(("Unable to stream out account data to tar archive"));
+    err = fd_tar_writer_write_file_data( writer, acc_data, metadata->dlen );
+    if( FD_UNLIKELY( err ) ) {
+      FD_LOG_WARNING(( "Unable to stream out account data to tar archive" ));
+      return -1;
     }
     ulong align_sz = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
-    if( FD_UNLIKELY( fd_tar_writer_stream_file_data( writer, padding, align_sz ) ) ) {
-      FD_LOG_ERR(("Unable to stream out account padding to tar archive"));
+    err = fd_tar_writer_write_file_data( writer, padding, align_sz );
+    if( FD_UNLIKELY( err ) ) {
+      FD_LOG_WARNING( ("Unable to stream out account padding to tar archive" ));
+      return -1;
     }
   }
 
@@ -182,7 +195,11 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
 
   /* Snapshot slot */
   fd_snapshot_acc_vec_t * curr_accs = &accounts_db->storages[1].account_vecs[0];
-  snprintf( buffer, 128, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot, curr_accs->id );
+  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot, curr_accs->id );
+  if( FD_UNLIKELY( err<0 ) ) {
+    FD_LOG_WARNING(( "Unable to format current accounts name string" ));
+    return -1;
+  }
   fd_tar_writer_new_file( writer, buffer );
 
   for( ulong i=0UL; i<snapshot_slot_key_cnt; i++ ) {
@@ -197,11 +214,11 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
     fd_account_meta_t const * metadata = fd_type_pun_const( raw );
 
     if( FD_UNLIKELY( !metadata ) ) {
-      FD_LOG_ERR(("Record should have non-NULL metadata"));
+      FD_LOG_ERR(( "Record should have non-NULL metadata" ));
     }
 
     if( FD_UNLIKELY( metadata->magic!=FD_ACCOUNT_META_MAGIC ) ) {
-      FD_LOG_ERR(("Record should have valid magic"));
+      FD_LOG_ERR(( "Record should have valid magic" ));
     }
 
     uchar const * acc_data = raw + metadata->hlen;
@@ -223,18 +240,18 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
     fd_memcpy( &header.hash, metadata->hash, sizeof(fd_hash_t) );
 
 
-    err = fd_tar_writer_stream_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) );
+    err = fd_tar_writer_write_file_data( writer, &header, sizeof(fd_solana_account_hdr_t) );
     if( FD_UNLIKELY( err ) ) {
       FD_LOG_WARNING(( "Unable to stream out account header to tar archive" ));
       return -1;
     }
-    err = fd_tar_writer_stream_file_data( writer, acc_data, metadata->dlen );
+    err = fd_tar_writer_write_file_data( writer, acc_data, metadata->dlen );
     if( FD_UNLIKELY( err ) ) {
       FD_LOG_WARNING(( "Unable to stream out account data to tar archive" ));
       return -1;
     }
     ulong align_sz = fd_ulong_align_up( metadata->dlen, FD_SNAPSHOT_ACC_ALIGN ) - metadata->dlen;
-    err = fd_tar_writer_stream_file_data( writer, padding, align_sz );
+    err = fd_tar_writer_write_file_data( writer, padding, align_sz );
     if( FD_UNLIKELY( err ) ) {
       FD_LOG_WARNING(( "Unable to stream out account padding to tar archive" ));
       return -1;
@@ -471,7 +488,7 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
 }
 
 static inline int
-fd_snapshot_create_validate_ctx( fd_snapshot_ctx_t *  snapshot_ctx,
+fd_snapshot_create_validate_ctx( fd_snapshot_ctx_t  * snapshot_ctx,
                                  fd_exec_slot_ctx_t * slot_ctx ) {
   
     /* Validate that the snapshot context is setup correctly */
@@ -495,9 +512,14 @@ static inline int
 fd_snapshot_create_setup_writer( fd_snapshot_ctx_t * snapshot_ctx ) {
   
   /* Write out the snapshot tar archive to a temporary location that will be 
-     written to when the snapshot account hash is recalculated. */
+     written to when the snapshot account hash is recalculated.
+     TODO: This temporary file should be made harder to access by an operator. */
   char directory_buf[ FD_SNAPSHOT_DIR_MAX ];
-  snprintf( directory_buf, FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir );
+  int err = snprintf( directory_buf, FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir );
+  if( FD_UNLIKELY( err<0 ) ) {
+    FD_LOG_WARNING(( "Failed to format directory string" ));
+    return -1;
+  }
 
   uchar * writer_mem   = fd_valloc_malloc( snapshot_ctx->valloc, fd_tar_writer_align(), fd_tar_writer_footprint() );
   snapshot_ctx->writer = fd_tar_writer_new( writer_mem, directory_buf );
@@ -518,7 +540,7 @@ fd_snapshot_create_write_version( fd_snapshot_ctx_t * snapshot_ctx ) {
     return -1;
   }
 
-  err = fd_tar_writer_stream_file_data( snapshot_ctx->writer, FD_SNAPSHOT_VERSION, FD_SNAPSHOT_VERSION_LEN);
+  err = fd_tar_writer_write_file_data( snapshot_ctx->writer, FD_SNAPSHOT_VERSION, FD_SNAPSHOT_VERSION_LEN);
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to create the version file" ));
     return -1;
@@ -539,13 +561,19 @@ fd_snapshot_create_write_status_cache( fd_snapshot_ctx_t *  snapshot_ctx,
 
   FD_SCRATCH_SCOPE_BEGIN {
 
-  /* First convert the existing status cache into a snapshot-friendly format */
+  /* First convert the existing status cache into a snapshot-friendly format. */
 
   fd_bank_slot_deltas_t slot_deltas_new = {0};
-  fd_txncache_get_entries( slot_ctx->status_cache,
+  int err = fd_txncache_get_entries( slot_ctx->status_cache,
                            &slot_deltas_new );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Failed to get entries from the status cache" ));
+    return -1;
+  }
   ulong   bank_slot_deltas_sz = fd_bank_slot_deltas_size( &slot_deltas_new );
-  uchar * out_status_cache    = fd_valloc_malloc( snapshot_ctx->valloc, FD_BANK_SLOT_DELTAS_ALIGN, bank_slot_deltas_sz );
+  uchar * out_status_cache    = fd_valloc_malloc( snapshot_ctx->valloc,
+                                                  FD_BANK_SLOT_DELTAS_ALIGN,
+                                                  bank_slot_deltas_sz );
   fd_bincode_encode_ctx_t encode_status_cache = {
     .data    = out_status_cache,
     .dataend = out_status_cache + bank_slot_deltas_sz,
@@ -555,14 +583,14 @@ fd_snapshot_create_write_status_cache( fd_snapshot_ctx_t *  snapshot_ctx,
     return -1;
   }
 
-  /* Now write out the buffer to the tar archive */
+  /* Now write out the encoded buffer to the tar archive. */
 
-  int err = fd_tar_writer_new_file( snapshot_ctx->writer, FD_SNAPSHOT_STATUS_CACHE_FILE );
+  err = fd_tar_writer_new_file( snapshot_ctx->writer, FD_SNAPSHOT_STATUS_CACHE_FILE );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to create the status cache file" ));
     return -1;
   }
-  err = fd_tar_writer_stream_file_data( snapshot_ctx->writer, out_status_cache, bank_slot_deltas_sz );
+  err = fd_tar_writer_write_file_data( snapshot_ctx->writer, out_status_cache, bank_slot_deltas_sz );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to create the status cache file" ));
     return -1;
@@ -586,7 +614,7 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
 
   fd_solana_manifest_serializable_t manifest = {0};
   
-  /* Copy in all the fields of the bank */
+  /* Copy in all the fields of the bank. */
 
   int err = fd_snapshot_create_populate_bank( snapshot_ctx, slot_ctx, &manifest.bank );
   if( FD_UNLIKELY( err ) ) {
@@ -603,13 +631,19 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
   manifest.versioned_epoch_stakes_len            = 0UL;
   manifest.versioned_epoch_stakes                = NULL;
 
-  /* Create the append vecs and populate the index in the manifest. */
+  /* Populate the append vec index and write out the corresponding acc files. */
 
-  fd_snapshot_create_populate_acc_vecs( snapshot_ctx, slot_ctx, &manifest, snapshot_ctx->writer );
+  err = fd_snapshot_create_populate_acc_vecs( snapshot_ctx, slot_ctx, &manifest, snapshot_ctx->writer );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Failed to populate the account vectors" ));
+    return -1;
+  }
 
-  /* TODO: Need to write out the snapshot hash to the name of the file as well. */
+  /* At this point, all of the account files are written out and the append
+     vec index is populated in the manifest. We have already reserved space
+     in the archive for the manifest. All we need to do now is encode the 
+     manifest and write it in.  */
 
-  /* Encode and output the manifest to a file */
   ulong   manifest_sz  = fd_solana_manifest_serializable_size( &manifest ); 
   uchar * out_manifest = fd_valloc_malloc( snapshot_ctx->valloc, FD_SOLANA_MANIFEST_SERIALIZABLE_ALIGN, manifest_sz );
 
@@ -634,7 +668,6 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
   if( FD_UNLIKELY( !mem ) ) {
     return -1;
   }
-  fd_valloc_free( snapshot_ctx->valloc, mem );
 
   return 0;
 }
@@ -645,16 +678,25 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
 
   char directory_buf_og  [ FD_SNAPSHOT_DIR_MAX ];
   char directory_buf_zstd[ FD_SNAPSHOT_DIR_MAX ];
-  snprintf( directory_buf_og,  FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar",
-            snapshot_ctx->snapshot_dir);
-  snprintf( directory_buf_zstd, FD_SNAPSHOT_DIR_MAX, "%s/snapshot-%lu-%s.tar.zst", 
-            snapshot_ctx->snapshot_dir, snapshot_ctx->snapshot_slot, FD_BASE58_ENC_32_ALLOCA(&snapshot_ctx->hash) );
+  int err = snprintf( directory_buf_og,  FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir);
+  if( FD_UNLIKELY( err<0 ) ) {
+    FD_LOG_WARNING(( "Failed to format directory string" ));
+    return -1;
+  }
+
+  err = snprintf( directory_buf_zstd, FD_SNAPSHOT_DIR_MAX, "%s/snapshot-%lu-%s.tar.zst", 
+                  snapshot_ctx->snapshot_dir, snapshot_ctx->snapshot_slot, FD_BASE58_ENC_32_ALLOCA(&snapshot_ctx->hash) );
+  if( FD_UNLIKELY( err<0 ) ) {
+    FD_LOG_WARNING(( "Failed to format directory string" ));
+    return -1;
+  }
 
   /* Compress the file using zstd. First open the non-compressed file and
      create a file for the compressed file. */
 
-  ulong in_buf_sz  = ZSTD_CStreamInSize();
-  ulong out_buf_sz = ZSTD_CStreamOutSize();
+  ulong in_buf_sz   = ZSTD_CStreamInSize();
+  ulong zstd_buf_sz = ZSTD_CStreamOutSize();
+  ulong out_buf_sz  = ZSTD_CStreamOutSize();
 
   char * in_buf   = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, in_buf_sz );
   char * zstd_buf = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, out_buf_sz );
@@ -663,14 +705,14 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
   /* Reopen the tarball and open/overwrite the filename for the compressed,
      finalized full snapshot. Setup the zstd compression stream. */
 
-  int err = 0;
+  err = 0;
 
   ZSTD_CStream * cstream = ZSTD_createCStream();
   if( FD_UNLIKELY( !cstream ) ) {
     FD_LOG_WARNING(( "Failed to create the zstd compression stream" ));
     return -1;
   }
-  ZSTD_initCStream(cstream, ZSTD_CLEVEL_DEFAULT ); 
+  ZSTD_initCStream( cstream, ZSTD_CLEVEL_DEFAULT ); 
 
   int fd      = 0;
   int fd_zstd = 0;
@@ -701,13 +743,18 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
     goto cleanup;
   }
 
-  /* Read in bytes until we hit an eof */
+  /* At this point, the tar archive and the new zstd file is open. The zstd
+     streamer is still open. Now, we are ready to read in bytes and stream
+     compress them. We will keep going until we see an EOF in a tar archive. */
+
   ulong in_sz = in_buf_sz;
   while( in_sz==in_buf_sz ) {
 
     /* Read chunks from the file. There isn't really a need to use a streamed
        reader here because we will read in the max size buffer for every single
-       file read except for the very last one. */
+       file read except for the very last one.
+       
+       in_sz will only not equal in_buf_sz on the last read. */
 
     err = fd_io_read( fd, in_buf, 0UL, in_buf_sz, &in_sz );
     if( FD_UNLIKELY( err ) ) {
@@ -715,14 +762,14 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
       goto cleanup;
     }
 
-    /* Compress the in memory buffer and add it to the output stream */
+    /* Compress the in memory buffer and add it to the output stream. */
   
-    ZSTD_inBuffer input = { in_buf, in_sz, 0 };
-    while( input.pos < input.size ) {
-      ZSTD_outBuffer output = { zstd_buf, out_buf_sz, 0 };
-      ulong ret = ZSTD_compressStream(cstream, &output, &input );
-      if( ZSTD_isError( ret )) {
-        FD_LOG_WARNING(( "Compression error: %s\n", ZSTD_getErrorName(ret) ));
+    ZSTD_inBuffer input = { in_buf, in_sz, 0UL };
+    while( input.pos<input.size ) {
+      ZSTD_outBuffer output = { zstd_buf, zstd_buf_sz, 0UL };
+      ulong          ret    = ZSTD_compressStream( cstream, &output, &input );
+      if( FD_UNLIKELY( ZSTD_isError( ret ) ) ) {
+        FD_LOG_WARNING(( "Compression error: %s\n", ZSTD_getErrorName( ret ) ));
         err = -1;
         goto cleanup;
       }
@@ -734,14 +781,17 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
     }
   }
 
-  ZSTD_outBuffer output    = { zstd_buf, out_buf_sz, 0 };
-  ulong          remaining = ZSTD_endStream(cstream, &output);
+  /* Now flush any bytes left in the zstd buffer, cleanup open file 
+     descriptors, and deinit any data structures.  */
+
+  ZSTD_outBuffer output    = { zstd_buf, zstd_buf_sz, 0UL };
+  ulong          remaining = ZSTD_endStream(  cstream, &output );
   if( ZSTD_isError( remaining ) ) {
-    FD_LOG_WARNING(("ERROR WITH ENDING"));
+    FD_LOG_WARNING(( "Unable to end the zstd stream" ));
     err = -1;
     goto cleanup;
   }   
-  if( output.pos>0 ) {
+  if( output.pos>0UL ) {
     fd_io_buffered_ostream_write( ostream, zstd_buf, output.pos );
   }
 
@@ -769,7 +819,7 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
 }
 
 int
-fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
+fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t  * snapshot_ctx,
                                  fd_exec_slot_ctx_t * slot_ctx ) {
 
   FD_SCRATCH_SCOPE_BEGIN {
@@ -797,7 +847,7 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
     return err;
   }
 
-  /* Setup the writer that is used. */
+  /* Setup the tar archive writer. */
 
   err = fd_snapshot_create_setup_writer( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {

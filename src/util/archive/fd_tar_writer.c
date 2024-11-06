@@ -139,9 +139,9 @@ fd_tar_writer_new_file( fd_tar_writer_t * writer,
 }
 
 int
-fd_tar_writer_stream_file_data( fd_tar_writer_t * writer,
-                                void const *      data,
-                                ulong             data_sz ) {
+fd_tar_writer_write_file_data( fd_tar_writer_t * writer,
+                               void const *      data,
+                               ulong             data_sz ) {
   
   if( FD_UNLIKELY( writer->header_pos==ULONG_MAX ) ) {
     FD_LOG_WARNING(( "There is no corresponding tar header for the tar write" ));
