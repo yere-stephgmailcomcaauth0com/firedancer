@@ -77,6 +77,30 @@ fdctl_cfg_load_buf( config_t *   out,
   fd_pod_delete( fd_pod_leave( pod ) );
 }
 
+/* Loads */
+static void
+fdctl_cfg_load_bufs( config_t *           out,
+                     char const * const * bufs,
+                     ulong *              szs,
+                     char const *  path ) {
+
+  static uchar pod_mem[ 1UL<<30 ];
+  uchar * pod = fd_pod_join( fd_pod_new( pod_mem, sizeof(pod_mem) ) );
+
+  uchar scratch[ 4096 ];
+  long toml_err = fd_toml_parse( buf, sz, pod, scratch, sizeof(scratch) );
+  if( FD_UNLIKELY( toml_err!=FD_TOML_SUCCESS ) ) {
+    FD_LOG_ERR(( "Invalid config (%s)", path ));
+  }
+
+  if( FD_UNLIKELY( !fdctl_pod_to_cfg( out, pod ) ) ) {
+    FD_LOG_ERR(( "Invalid config (%s)", path ));
+  }
+
+  fd_pod_delete( fd_pod_leave( pod ) );
+}
+
+
 static void
 fdctl_cfg_load_file( config_t *   out,
                      char const * path ) {
