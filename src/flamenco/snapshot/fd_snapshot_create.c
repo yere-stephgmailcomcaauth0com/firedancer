@@ -4,9 +4,9 @@
 #include "../runtime/context/fd_exec_epoch_ctx.h"
 
 #include <assert.h>
-#include <time.h>
+#include <fcntl.h>
+#include <zstd.h>
 
-static char  directory_buf[ FD_SNAPSHOT_DIR_MAX ];
 static uchar padding      [ FD_SNAPSHOT_ACC_ALIGN ] = {0};
 
 int
@@ -78,6 +78,10 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
     return -1;
   }
   fd_memset( &accounts_db->bank_hash_info.stats, 0, sizeof(fd_bank_hash_stats_t) );
+
+  /* Propogate snapshot hash to the snapshot_ctx */
+
+  snapshot_ctx->hash = accounts_db->bank_hash_info.snapshot_hash;
 
   /* Because the files are serially written out for tar, we must reserve space
      in the archive for the solana manifest. */
@@ -390,6 +394,7 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
   bank->parent_slot                           = snapshot_ctx->snapshot_slot - 1UL;
 
   /* Hard forks can be omitted as it is not needed to boot off of both clients */
+
   bank->hard_forks.hard_forks                 = NULL;
   bank->hard_forks.hard_forks_len             = 0UL;
 
@@ -491,7 +496,7 @@ fd_snapshot_create_setup_writer( fd_snapshot_ctx_t * snapshot_ctx ) {
   
   /* Write out the snapshot tar archive to a temporary location that will be 
      written to when the snapshot account hash is recalculated. */
-
+  char directory_buf[ FD_SNAPSHOT_DIR_MAX ];
   snprintf( directory_buf, FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir );
 
   uchar * writer_mem   = fd_valloc_malloc( snapshot_ctx->valloc, fd_tar_writer_align(), fd_tar_writer_footprint() );
@@ -634,6 +639,116 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
   return 0;
 }
 
+static int
+fd_snapshot_create_cleanup( fd_snapshot_ctx_t * snapshot_ctx ) {
+
+
+  char directory_buf_og  [ FD_SNAPSHOT_DIR_MAX ];
+  char directory_buf_zstd[ FD_SNAPSHOT_DIR_MAX ];
+  snprintf( directory_buf_og,  FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar",
+            snapshot_ctx->snapshot_dir);
+  snprintf( directory_buf_zstd, FD_SNAPSHOT_DIR_MAX, "%s/snapshot-%lu-%s.tar.zst", 
+            snapshot_ctx->snapshot_dir, snapshot_ctx->snapshot_slot, FD_BASE58_ENC_32_ALLOCA(&snapshot_ctx->hash) );
+
+  /* Compress the file using zstd. First open the non-compressed file and
+     create a file for the compressed file. */
+
+  ulong in_buf_sz  = ZSTD_CStreamInSize();
+  ulong out_buf_sz = ZSTD_CStreamOutSize();
+
+  char * in_buf   = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, in_buf_sz );
+  char * zstd_buf = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, out_buf_sz );
+  char * out_buf  = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, out_buf_sz );
+
+  FD_LOG_WARNING(("COMPRESS SIZE %lu %lu", in_buf_sz, out_buf_sz ));
+
+  int fd = open( directory_buf_og, O_RDONLY );
+  if( FD_UNLIKELY( fd<=0 ) ) {
+    FD_LOG_WARNING(( "Failed to open the file" ));
+    return -1;
+  }
+
+  int fd_zstd = open( directory_buf_zstd, O_WRONLY | O_CREAT | O_TRUNC, 0644 );
+  if( FD_UNLIKELY( fd_zstd<=0 ) ) {
+    FD_LOG_WARNING(( "Failed to open the file" ));
+    return -1;
+  }
+  int res = ftruncate( fd_zstd, 0UL );
+  if( FD_UNLIKELY( res ) ) {
+    FD_LOG_WARNING(( "Failed to truncate the file" ));
+    return -1;
+  }
+
+  fd_io_buffered_ostream_t ostream[1];
+  if( FD_UNLIKELY( !fd_io_buffered_ostream_init( ostream, fd_zstd, out_buf, out_buf_sz ) ) ) {
+    FD_LOG_WARNING(( "Failed to initialize the ostream" ));
+    return -1;
+  }
+
+  ZSTD_CStream * cstream = ZSTD_createCStream();
+  ZSTD_initCStream(cstream, 3 );  // Use compression level 3
+
+
+  /* Read in bytes until we hit an eof */
+  ulong in_sz = in_buf_sz;
+  while( in_sz==in_buf_sz ) {
+
+    /* Read chunks from the file. There isn't really a need to use a streamed
+       reader here because we will read in the max size buffer for every single
+       file read except for the very last one. */
+
+    int err = fd_io_read( fd, in_buf, 0UL, in_buf_sz, &in_sz );
+    if( FD_UNLIKELY( err ) ) {
+      FD_LOG_WARNING(( "Failed to read in the file" ));
+      return -1;
+    }
+
+    /* Compress the in memory buffer and add it to the output stream */
+  
+    ZSTD_inBuffer input = { in_buf, in_sz, 0 };
+    while( input.pos < input.size ) {
+      ZSTD_outBuffer output = { zstd_buf, out_buf_sz, 0 };
+      ulong ret = ZSTD_compressStream(cstream, &output, &input );
+      if( ZSTD_isError( ret )) {
+        FD_LOG_WARNING(( "Compression error: %s\n", ZSTD_getErrorName(ret) ));
+        return -1;
+      }
+      // fwrite( out_buf, 1, output.pos, FILE );
+      err = fd_io_buffered_ostream_write( ostream, zstd_buf, output.pos );
+      if( FD_UNLIKELY( err ) ) {
+        FD_LOG_WARNING(( "Failed to write out the compressed file" ));
+        return -1;
+      }
+    }
+  }
+
+  ZSTD_outBuffer output = { zstd_buf, out_buf_sz, 0 };
+  ulong remaining = ZSTD_endStream(cstream, &output);
+  if( ZSTD_isError( remaining ) ) {
+    FD_LOG_WARNING(("ERROR WITH ENDING"));
+    return -1;
+  }   
+  if( output.pos>0 ) {
+    fd_io_buffered_ostream_write( ostream, zstd_buf, output.pos );
+  }
+
+  ZSTD_freeCStream( cstream );
+
+  fd_io_buffered_ostream_flush( ostream );
+  fd_io_buffered_ostream_fini( ostream );
+  close( fd );
+  close( fd_zstd );
+
+  remove( directory_buf_og );
+
+
+  /* Setup ostream for the new file that you will write to */
+  /* Loop ( doing a read, then compressing and adding to the ostream ) */
+  /* Close out the file descriptros*/
+
+  return 0;
+}
+
 int
 fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
                                  fd_exec_slot_ctx_t * slot_ctx ) {
@@ -683,6 +798,11 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
   /* Populate and write out the manifest and append vecs. */
 
   err = fd_snapshot_create_write_manifest_and_acc_vecs( snapshot_ctx, slot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+    return 1;
+  }
+
+  err = fd_snapshot_create_cleanup( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
     return 1;
   }

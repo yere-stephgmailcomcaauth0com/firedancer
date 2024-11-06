@@ -38,6 +38,7 @@ struct fd_snapshot_ctx {
   int               is_incremental;
   fd_tar_writer_t * writer;
   fd_valloc_t       valloc;
+  fd_hash_t         hash;
 };
 typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
 
