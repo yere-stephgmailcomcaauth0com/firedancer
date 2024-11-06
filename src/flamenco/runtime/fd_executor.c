@@ -1190,7 +1190,6 @@ fd_txn_reclaim_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
 
     acc_rec->meta->slot = txn_ctx->slot_ctx->slot_bank.slot;
 
-
     if( acc_rec->meta->info.lamports == 0 ) {
       acc_rec->meta->dlen = 0;
       memset( acc_rec->meta->info.owner, 0, sizeof(fd_pubkey_t) );

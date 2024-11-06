@@ -33,7 +33,7 @@ fd_tar_writer_new( void *       mem,
     return NULL;
   }
 
-  /* If the file already exists, truncate it's length to zero */
+  /* If the file already exists, truncate it's length to zero. */
 
   int err = ftruncate( fd, 0UL );
   if( FD_UNLIKELY( err ) ) {

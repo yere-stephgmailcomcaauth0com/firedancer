@@ -32,10 +32,17 @@
 
 FD_PROTOTYPES_BEGIN
 
+/* fd_snapshot_ctx is a context that is used to create a snapshot. It contains
+   the slot that the snapshot is being created for, the directory that the
+   snapshot is being written to, and the writer that is being used to write
+   the snapshot. 
+   
+  NOTE: The snapshot service will currently not correctly free memory that is
+        allocated unless a bump allocator like fd_scratch or fd_spad are used. */
 struct fd_snapshot_ctx {
   ulong             snapshot_slot;
   char const *      snapshot_dir;
-  int               is_incremental;
+  uchar             is_incremental;
   fd_tar_writer_t * writer;
   fd_valloc_t       valloc;
   fd_hash_t         hash;
@@ -61,7 +68,15 @@ typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
       of the accounts and is a set of files described by <slot#.id#>. 
       
   The files are written out into a tar archive which is then compressed with
-  zstd.  */
+  zstd. 
+  
+  This can produce either a full snapshot or an incremental snapshot depending
+  on the value of is_incremental. An incremental snapshot will contain all of 
+  the information described above, except it will only contain accounts that
+  have been modified or deleted since the creation of the last incremental
+  snapshot.
+
+  TODO: Currently incremental snapshots are not supported. */
 
 int
 fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t * snapshot_ctx, fd_exec_slot_ctx_t * slot_ctx );
