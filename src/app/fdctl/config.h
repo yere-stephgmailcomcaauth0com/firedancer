@@ -14,6 +14,14 @@
 /* Maximum size of the string describing the CPU affinity of Firedancer */
 #define AFFINITY_SZ 256
 
+typedef struct {
+  char const * buf;
+  ulong        sz;
+  char const * path;
+} config_buffer_t;
+
+extern config_buffer_t const * DEFAULT_CONFIGS[];
+
 /* config_t represents all available configuration options that could be
    set in a user defined configuration toml file. For information about
    the options, see the `default.toml` file provided. */

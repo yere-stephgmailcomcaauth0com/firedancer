@@ -80,24 +80,12 @@ fdctl_cfg_load_buf( config_t *   out,
 /* Loads */
 static void
 fdctl_cfg_load_bufs( config_t *           out,
-                     char const * const * bufs,
-                     ulong *              szs,
-                     char const *  path ) {
-
-  static uchar pod_mem[ 1UL<<30 ];
-  uchar * pod = fd_pod_join( fd_pod_new( pod_mem, sizeof(pod_mem) ) );
-
-  uchar scratch[ 4096 ];
-  long toml_err = fd_toml_parse( buf, sz, pod, scratch, sizeof(scratch) );
-  if( FD_UNLIKELY( toml_err!=FD_TOML_SUCCESS ) ) {
-    FD_LOG_ERR(( "Invalid config (%s)", path ));
+                     config_buffer_t const **   config_bufs ) {
+  while( *config_bufs ) {
+    config_buffer_t const * config_buf = *config_bufs;
+    fdctl_cfg_load_buf( out, config_buf->buf, config_buf->sz, config_buf->path );
+    config_bufs++;
   }
-
-  if( FD_UNLIKELY( !fdctl_pod_to_cfg( out, pod ) ) ) {
-    FD_LOG_ERR(( "Invalid config (%s)", path ));
-  }
-
-  fd_pod_delete( fd_pod_leave( pod ) );
 }
 
 
@@ -482,6 +470,8 @@ fdctl_cfg_from_env( int *      pargc,
                     config_t * config ) {
 
   memset( config, 0, sizeof(config_t) );
+
+  fdctl_cfg_load_bufs( config, DEFAULT_CONFIGS );
 #if FD_HAS_NO_AGAVE
   static uchar pod_mem1[ 1UL<<20 ];
   static uchar pod_mem2[ 1UL<<20 ];
