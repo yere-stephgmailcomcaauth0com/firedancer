@@ -3,6 +3,7 @@
 #include "../runtime/fd_hashes.h"
 #include "../runtime/context/fd_exec_epoch_ctx.h"
 
+#include <asm-generic/errno.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <zstd.h>
@@ -640,7 +641,7 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
 }
 
 static int
-fd_snapshot_create_cleanup( fd_snapshot_ctx_t * snapshot_ctx ) {
+fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
 
 
   char directory_buf_og  [ FD_SNAPSHOT_DIR_MAX ];
@@ -660,34 +661,46 @@ fd_snapshot_create_cleanup( fd_snapshot_ctx_t * snapshot_ctx ) {
   char * zstd_buf = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, out_buf_sz );
   char * out_buf  = fd_valloc_malloc( snapshot_ctx->valloc, 64UL, out_buf_sz );
 
-  FD_LOG_WARNING(("COMPRESS SIZE %lu %lu", in_buf_sz, out_buf_sz ));
+  /* Reopen the tarball and open/overwrite the filename for the compressed,
+     finalized full snapshot. Setup the zstd compression stream. */
 
-  int fd = open( directory_buf_og, O_RDONLY );
-  if( FD_UNLIKELY( fd<=0 ) ) {
-    FD_LOG_WARNING(( "Failed to open the file" ));
-    return -1;
-  }
-
-  int fd_zstd = open( directory_buf_zstd, O_WRONLY | O_CREAT | O_TRUNC, 0644 );
-  if( FD_UNLIKELY( fd_zstd<=0 ) ) {
-    FD_LOG_WARNING(( "Failed to open the file" ));
-    return -1;
-  }
-  int res = ftruncate( fd_zstd, 0UL );
-  if( FD_UNLIKELY( res ) ) {
-    FD_LOG_WARNING(( "Failed to truncate the file" ));
-    return -1;
-  }
-
-  fd_io_buffered_ostream_t ostream[1];
-  if( FD_UNLIKELY( !fd_io_buffered_ostream_init( ostream, fd_zstd, out_buf, out_buf_sz ) ) ) {
-    FD_LOG_WARNING(( "Failed to initialize the ostream" ));
-    return -1;
-  }
+  int err = 0;
 
   ZSTD_CStream * cstream = ZSTD_createCStream();
-  ZSTD_initCStream(cstream, 3 );  // Use compression level 3
+  if( FD_UNLIKELY( !cstream ) ) {
+    FD_LOG_WARNING(( "Failed to create the zstd compression stream" ));
+    return -1;
+  }
+  ZSTD_initCStream(cstream, ZSTD_CLEVEL_DEFAULT ); 
 
+  int fd      = 0;
+  int fd_zstd = 0;
+  fd_io_buffered_ostream_t ostream[1];
+
+  fd = open( directory_buf_og, O_RDONLY );
+  if( FD_UNLIKELY( fd==-1 ) ) {
+    FD_LOG_WARNING(( "Failed to open the tar archive (%i-%s)", errno, fd_io_strerror( errno ) ));
+    err = -1;
+    goto cleanup;
+  }
+
+  fd_zstd = open( directory_buf_zstd, O_WRONLY | O_CREAT | O_TRUNC, 0644 );
+  if( FD_UNLIKELY( fd_zstd==-1 ) ) {
+    FD_LOG_WARNING(( "Failed to open the snapshot file (%i-%s)", errno, fd_io_strerror( errno ) ));
+    err = -1;
+    goto cleanup;
+  }
+  err = ftruncate( fd_zstd, 0UL );
+  if( FD_UNLIKELY( err=-1 && errno!=0 ) ) {
+    FD_LOG_WARNING(( "Failed to truncate the snapshot file (%i-%s)", errno, fd_io_strerror( errno ) ));
+     goto cleanup;
+  }
+
+  if( FD_UNLIKELY( !fd_io_buffered_ostream_init( ostream, fd_zstd, out_buf, out_buf_sz ) ) ) {
+    FD_LOG_WARNING(( "Failed to initialize the ostream" ));
+    err = -1;
+    goto cleanup;
+  }
 
   /* Read in bytes until we hit an eof */
   ulong in_sz = in_buf_sz;
@@ -697,10 +710,10 @@ fd_snapshot_create_cleanup( fd_snapshot_ctx_t * snapshot_ctx ) {
        reader here because we will read in the max size buffer for every single
        file read except for the very last one. */
 
-    int err = fd_io_read( fd, in_buf, 0UL, in_buf_sz, &in_sz );
+    err = fd_io_read( fd, in_buf, 0UL, in_buf_sz, &in_sz );
     if( FD_UNLIKELY( err ) ) {
       FD_LOG_WARNING(( "Failed to read in the file" ));
-      return -1;
+      goto cleanup;
     }
 
     /* Compress the in memory buffer and add it to the output stream */
@@ -711,42 +724,49 @@ fd_snapshot_create_cleanup( fd_snapshot_ctx_t * snapshot_ctx ) {
       ulong ret = ZSTD_compressStream(cstream, &output, &input );
       if( ZSTD_isError( ret )) {
         FD_LOG_WARNING(( "Compression error: %s\n", ZSTD_getErrorName(ret) ));
-        return -1;
+        err = -1;
+        goto cleanup;
       }
-      // fwrite( out_buf, 1, output.pos, FILE );
       err = fd_io_buffered_ostream_write( ostream, zstd_buf, output.pos );
       if( FD_UNLIKELY( err ) ) {
         FD_LOG_WARNING(( "Failed to write out the compressed file" ));
-        return -1;
+        goto cleanup;
       }
     }
   }
 
-  ZSTD_outBuffer output = { zstd_buf, out_buf_sz, 0 };
-  ulong remaining = ZSTD_endStream(cstream, &output);
+  ZSTD_outBuffer output    = { zstd_buf, out_buf_sz, 0 };
+  ulong          remaining = ZSTD_endStream(cstream, &output);
   if( ZSTD_isError( remaining ) ) {
     FD_LOG_WARNING(("ERROR WITH ENDING"));
-    return -1;
+    err = -1;
+    goto cleanup;
   }   
   if( output.pos>0 ) {
     fd_io_buffered_ostream_write( ostream, zstd_buf, output.pos );
   }
 
-  ZSTD_freeCStream( cstream );
+  cleanup:
 
-  fd_io_buffered_ostream_flush( ostream );
-  fd_io_buffered_ostream_fini( ostream );
-  close( fd );
-  close( fd_zstd );
+  ZSTD_freeCStream( cstream ); /* Works even if cstream is null */
+  err = fd_io_buffered_ostream_flush( ostream );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_WARNING(( "Failed to flush the ostream" ));
+  }
+  err = close( fd );
+  if( FD_UNLIKELY( err==-1 ) ) {
+    FD_LOG_WARNING(( "Failed to close the tar archive (%i-%s)", errno, fd_io_strerror( errno ) ));
+  }
+  err = close( fd_zstd );
+  if( FD_UNLIKELY( err==-1 ) ) {
+    FD_LOG_WARNING(( "Failed to close the snapshot file (%i-%s)", errno, fd_io_strerror( errno ) ));
+  }
+  err = remove( directory_buf_og );
+  if( FD_UNLIKELY( err==-1 ) ) {
+    FD_LOG_WARNING(( "Failed to remove the tar archive (%i-%s)", errno, fd_io_strerror( errno ) ));
+  }
 
-  remove( directory_buf_og );
-
-
-  /* Setup ostream for the new file that you will write to */
-  /* Loop ( doing a read, then compressing and adding to the ostream ) */
-  /* Close out the file descriptros*/
-
-  return 0;
+  return err;
 }
 
 int
@@ -754,6 +774,8 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
                                  fd_exec_slot_ctx_t * slot_ctx ) {
 
   FD_SCRATCH_SCOPE_BEGIN {
+
+  FD_LOG_NOTICE(( "Starting to produce a snapshot for slot=%lu in directory=%s", snapshot_ctx->snapshot_slot, snapshot_ctx->snapshot_dir ));
 
   /* TODO:FIXME: START HACK Do a funk publish and whatnot */
   fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
@@ -785,26 +807,28 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t *  snapshot_ctx,
 
   err = fd_snapshot_create_write_version( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
-    return 1; /* TODO: replace with a jump to cleanup */
+    return -1; /* TODO: replace with a jump to cleanup */
   }
 
   /* Dump the status cache and append it to the tar archive. */
 
   err = fd_snapshot_create_write_status_cache( snapshot_ctx, slot_ctx );
   if( FD_UNLIKELY( err ) ) {
-    return 1;
+    return -1;
   }
 
   /* Populate and write out the manifest and append vecs. */
 
   err = fd_snapshot_create_write_manifest_and_acc_vecs( snapshot_ctx, slot_ctx );
   if( FD_UNLIKELY( err ) ) {
-    return 1;
+    return -1;
   }
 
-  err = fd_snapshot_create_cleanup( snapshot_ctx );
+  /* Compress the tar file and write it out to the specified directory. */
+
+  err = fd_snapshot_create_compress( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
-    return 1;
+    return -1;
   }
 
   /* TODO:FIXME: Do the cleanup here */

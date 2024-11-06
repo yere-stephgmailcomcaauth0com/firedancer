@@ -237,7 +237,12 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
         .is_incremental = 0,
         .valloc         = fd_scratch_virtual()
       };
-      fd_snapshot_create_new_snapshot( &snapshot_ctx, ledger_args->slot_ctx );
+      int err = fd_snapshot_create_new_snapshot( &snapshot_ctx, ledger_args->slot_ctx );
+      if( FD_UNLIKELY( err ) ) {
+        FD_LOG_ERR(( "failed to create snapshot" ));
+      }
+      FD_LOG_NOTICE(("Successfully produced a snapshot at directory=%s", ledger_args->snapshot_dir ));
+      return 0;
     }
   
     ulong blk_txn_cnt = 0;
