@@ -2667,6 +2667,9 @@ struct __attribute__((aligned(128UL))) fd_slot_bank {
   ulong transaction_count;
   fd_slot_lthash_t lthash;
   fd_block_hash_queue_t block_hash_queue;
+  fd_hash_t prev_banks_hash;
+  ulong parent_signature_cnt;
+  ulong tick_height;
   ulong use_preceeding_epoch_stakes;
   uchar has_use_preceeding_epoch_stakes;
 };
@@ -2697,6 +2700,9 @@ struct __attribute__((aligned(128UL))) fd_slot_bank_off {
   uint transaction_count_off;
   uint lthash_off;
   uint block_hash_queue_off;
+  uint prev_banks_hash_off;
+  uint parent_signature_cnt_off;
+  uint tick_height_off;
   uint use_preceeding_epoch_stakes_off;
 };
 typedef struct fd_slot_bank_off fd_slot_bank_off_t;

@@ -246,15 +246,15 @@ fd_exec_slot_ctx_recover_( fd_exec_slot_ctx_t *   slot_ctx,
 
   /* Copy over fields */
 
-  slot_ctx->parent_signature_cnt = oldbank->signature_count;
-  slot_ctx->tick_height          = oldbank->tick_height;
+  slot_ctx->slot_bank.parent_signature_cnt = oldbank->signature_count;
+  slot_ctx->slot_bank.tick_height          = oldbank->tick_height;
 
   if( oldbank->blockhash_queue.last_hash )
     slot_bank->poh = *oldbank->blockhash_queue.last_hash;
   slot_bank->slot = oldbank->slot;
   slot_bank->prev_slot = oldbank->parent_slot;
   fd_memcpy(&slot_bank->banks_hash, &oldbank->hash, sizeof(oldbank->hash));
-  fd_memcpy(&slot_ctx->prev_banks_hash, &oldbank->parent_hash, sizeof(oldbank->parent_hash));
+  fd_memcpy(&slot_ctx->slot_bank.prev_banks_hash, &oldbank->parent_hash, sizeof(oldbank->parent_hash));
   fd_memcpy(&slot_bank->fee_rate_governor, &oldbank->fee_rate_governor, sizeof(oldbank->fee_rate_governor));
   slot_bank->lamports_per_signature = oldbank->fee_calculator.lamports_per_signature;
   slot_ctx->prev_lamports_per_signature = oldbank->fee_calculator.lamports_per_signature;

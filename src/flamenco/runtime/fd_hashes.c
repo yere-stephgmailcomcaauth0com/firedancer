@@ -225,8 +225,8 @@ fd_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
               fd_hash_t * hash,
               fd_pubkey_hash_pair_t * dirty_keys,
               ulong dirty_key_cnt ) {
-  slot_ctx->prev_banks_hash = slot_ctx->slot_bank.banks_hash;
-  slot_ctx->parent_signature_cnt = slot_ctx->signature_cnt;
+  slot_ctx->slot_bank.prev_banks_hash = slot_ctx->slot_bank.banks_hash;
+  slot_ctx->slot_bank.parent_signature_cnt = slot_ctx->signature_cnt;
   slot_ctx->prev_lamports_per_signature = slot_ctx->slot_bank.lamports_per_signature;
   slot_ctx->parent_transaction_count = slot_ctx->slot_bank.transaction_count;
 
@@ -256,7 +256,7 @@ fd_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
     fd_solcap_write_bank_preimage(
         capture_ctx->capture,
         hash->hash,
-        slot_ctx->prev_banks_hash.hash,
+        slot_ctx->slot_bank.prev_banks_hash.hash,
         slot_ctx->account_delta_hash.hash,
         &slot_ctx->slot_bank.poh.hash,
         slot_ctx->signature_cnt );
@@ -272,7 +272,7 @@ fd_hash_bank( fd_exec_slot_ctx_t * slot_ctx,
                   "last_blockhash:   %s\n",
                   slot_ctx->slot_bank.slot,
                   FD_BASE58_ENC_32_ALLOCA( hash->hash ),
-                  FD_BASE58_ENC_32_ALLOCA( slot_ctx->prev_banks_hash.hash ),
+                  FD_BASE58_ENC_32_ALLOCA( slot_ctx->slot_bank.prev_banks_hash.hash ),
                   FD_BASE58_ENC_32_ALLOCA( slot_ctx->account_delta_hash.hash ),
                   FD_LTHASH_ENC_32_ALLOCA( (fd_lthash_value_t *) slot_ctx->slot_bank.lthash.lthash ),
                   slot_ctx->signature_cnt,
@@ -528,9 +528,11 @@ fd_update_hash_bank_tpool( fd_exec_slot_ctx_t * slot_ctx,
       continue;
     }
 
-    if( slot_ctx->slot_bank.slot < 254462500 ) {
-      fd_funk_rec_remove(funk, fd_funk_rec_modify(funk, task_info->rec), 1);
+    //if( slot_ctx->slot_bank.slot < 254462500 ) {
+    if( false ) {
+    fd_funk_rec_remove(funk, fd_funk_rec_modify(funk, task_info->rec), 1);
     }
+
   }
 
   // Sanity-check LT Hash
@@ -921,15 +923,20 @@ typedef struct accounts_hash accounts_hash_t;
 #include "../../util/tmpl/fd_map_dynamic.c"
 
 static fd_pubkey_hash_pair_t *
-fd_accounts_sorted_subrange( fd_exec_slot_ctx_t * slot_ctx, uint range_idx, uint range_cnt, ulong * num_pairs_out, fd_lthash_value_t *lthash_values, ulong n0
+fd_accounts_sorted_subrange( fd_funk_t         * funk, 
+                             uint                range_idx,
+                             uint                range_cnt, 
+                             ulong             * num_pairs_out, 
+                             fd_lthash_value_t * lthash_values, 
+                             ulong               n0,
+                             fd_valloc_t         valloc
  ) {
-  fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
   fd_wksp_t *     wksp = fd_funk_wksp( funk );
   fd_funk_rec_t * rec_map  = fd_funk_rec_map( funk, wksp );
   ulong           num_iter_accounts = fd_funk_rec_map_key_max( rec_map );
   ulong           max_pairs = ( range_cnt == 1U ? num_iter_accounts : 2UL*num_iter_accounts/range_cnt ); /* Initial estimate */
   ulong           num_pairs = 0;
-  fd_pubkey_hash_pair_t * pairs = fd_valloc_malloc( slot_ctx->valloc, FD_PUBKEY_HASH_PAIR_ALIGN, max_pairs * sizeof(fd_pubkey_hash_pair_t) );
+  fd_pubkey_hash_pair_t * pairs = fd_valloc_malloc( valloc, FD_PUBKEY_HASH_PAIR_ALIGN, max_pairs * sizeof(fd_pubkey_hash_pair_t) );
   FD_TEST(NULL != pairs);
   ulong           range_len = ULONG_MAX/range_cnt;
   ulong           range_min = range_len*range_idx;
@@ -977,9 +984,9 @@ fd_accounts_sorted_subrange( fd_exec_slot_ctx_t * slot_ctx, uint range_idx, uint
 
     if( num_pairs == max_pairs ) {
       /* Try again with a larger array */
-      fd_valloc_free( slot_ctx->valloc, pairs );
+      fd_valloc_free( valloc, pairs );
       max_pairs *= 2;
-      pairs = fd_valloc_malloc( slot_ctx->valloc, FD_PUBKEY_HASH_PAIR_ALIGN, max_pairs * sizeof(fd_pubkey_hash_pair_t) );
+      pairs = fd_valloc_malloc( valloc, FD_PUBKEY_HASH_PAIR_ALIGN, max_pairs * sizeof(fd_pubkey_hash_pair_t) );
       FD_TEST(NULL != pairs);
       num_pairs = 0;
       fd_lthash_zero(&accum);
@@ -1019,7 +1026,7 @@ fd_accounts_sorted_subrange_task( void *tpool,
                                   ulong n0, ulong n1 FD_PARAM_UNUSED) {
   fd_subrange_task_info_t * task_info = (fd_subrange_task_info_t *)tpool;
   fd_pubkey_hash_pair_list_t * list = task_info->lists + m0;
-  list->pairs = fd_accounts_sorted_subrange( task_info->slot_ctx, (uint)m0, (uint)task_info->num_lists, &list->pairs_len, task_info->lthash_values, n0 );
+  list->pairs = fd_accounts_sorted_subrange( task_info->slot_ctx->acc_mgr->funk, (uint)m0, (uint)task_info->num_lists, &list->pairs_len, task_info->lthash_values, n0, task_info->slot_ctx->valloc );
 }
 
 int
@@ -1031,7 +1038,7 @@ fd_accounts_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
     fd_lthash_value_t *lthash_values = fd_valloc_malloc( slot_ctx->valloc, FD_LTHASH_VALUE_ALIGN, FD_LTHASH_VALUE_FOOTPRINT );
     fd_lthash_zero(&lthash_values[0]);
 
-    fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx, 0, 1, &num_pairs, lthash_values, 0 );
+    fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx->acc_mgr->funk, 0, 1, &num_pairs, lthash_values, 0, slot_ctx->valloc );
     FD_TEST(NULL != pairs);
     fd_pubkey_hash_pair_list_t list1 = { .pairs = pairs, .pairs_len = num_pairs };
     fd_hash_account_deltas( &list1, 1, accounts_hash, slot_ctx );
@@ -1171,6 +1178,27 @@ fd_snapshot_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
     }
   }
   return fd_accounts_hash( slot_ctx, tpool, accounts_hash );
+}
+
+int
+fd_snapshot_service_hash( fd_hash_t      *  accounts_hash, 
+                          fd_slot_bank_t *  slot_bank,
+                          fd_epoch_bank_t * epoch_bank ) {
+
+  (void)accounts_hash;
+  (void)slot_bank;
+  (void)epoch_bank;
+
+  int should_include_eah = 1;   // We need to find the correct logic
+  if( FD_UNLIKELY( epoch_bank->eah_start_slot!=ULONG_MAX ||
+                   epoch_bank->eah_stop_slot ==ULONG_MAX ) ) {
+    should_include_eah = 0;
+  }
+
+  (void)should_include_eah;
+  return 0;
+  
+
 }
 
 /* Re-computes the lthash from the current slot */

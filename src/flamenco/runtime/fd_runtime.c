@@ -2201,7 +2201,7 @@ fd_runtime_block_sysvar_update_pre_execute( fd_exec_slot_ctx_t * slot_ctx ) {
   //     FeeRateGovernor::new_derived(&parent.fee_rate_governor, parent.signature_count())
   // );
   /* https://github.com/firedancer-io/solana/blob/dab3da8e7b667d7527565bddbdbecf7ec1fb868e/runtime/src/bank.rs#L1312-L1314 */
-  fd_sysvar_fees_new_derived(slot_ctx, slot_ctx->slot_bank.fee_rate_governor, slot_ctx->parent_signature_cnt);
+  fd_sysvar_fees_new_derived(slot_ctx, slot_ctx->slot_bank.fee_rate_governor, slot_ctx->slot_bank.parent_signature_cnt);
 
   // TODO: move all these out to a fd_sysvar_update() call...
   long clock_update_time = -fd_log_wallclock();
@@ -2415,7 +2415,7 @@ fd_runtime_block_execute_tpool_v2( fd_exec_slot_ctx_t * slot_ctx,
     /* TODO: Currently the tick height is manually updated for each executed 
        slot as a hack to support snapshot loading. This code should be removed 
        once correct tick calculation is implemented. */
-    slot_ctx->tick_height               += 64UL;
+    slot_ctx->slot_bank.tick_height     += 64UL;
     slot_ctx->slot_bank.max_tick_height += 64UL;
 
     res = fd_runtime_execute_txns_in_waves_tpool( slot_ctx, capture_ctx, txn_ptrs, txn_cnt, tpool, spads, spad_cnt );

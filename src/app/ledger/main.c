@@ -218,7 +218,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
       /* TODO: This is currently a hack because ticks are not correctly
          computed or handled in the runtime. It is neceesary to update ticks
          for skipped slots for snapshot creation. */
-      ledger_args->slot_ctx->tick_height               += 64UL;
+      ledger_args->slot_ctx->slot_bank.tick_height     += 64UL;
       ledger_args->slot_ctx->slot_bank.max_tick_height += 64UL;
 
       fd_blockstore_end_read( blockstore );

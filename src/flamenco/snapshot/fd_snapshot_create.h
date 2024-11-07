@@ -5,7 +5,9 @@
    snapshot from a slot execution context. */
 
 #include "fd_snapshot_base.h"
+#include "../runtime/fd_runtime_init.h"
 #include "../../util/archive/fd_tar.h"
+#include "../types/fd_types.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -42,6 +44,9 @@ struct fd_snapshot_ctx {
   fd_tar_writer_t * writer;
   fd_valloc_t       valloc;
   fd_hash_t         hash;
+  fd_slot_bank_t    slot_bank;
+  fd_epoch_bank_t   epoch_bank;
+  fd_acc_mgr_t *    acc_mgr;
 };
 typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
 

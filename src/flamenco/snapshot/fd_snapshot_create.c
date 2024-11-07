@@ -1,5 +1,4 @@
 #include "fd_snapshot_create.h"
-#include "../runtime/context/fd_exec_epoch_ctx.h"
 #include "../runtime/sysvar/fd_sysvar_epoch_schedule.h"
 #include "../runtime/fd_hashes.h"
 
@@ -31,7 +30,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
      boundary slot. The rationale for this bound is explained in
      fd_snapshot_create.h. */
 
-  fd_pubkey_t * * snapshot_slot_keys    = fd_valloc_malloc( slot_ctx->valloc, alignof(fd_pubkey_t*), sizeof(fd_pubkey_t*) * FD_WRITABLE_ACCS_IN_SLOT );
+  fd_pubkey_t * * snapshot_slot_keys    = fd_valloc_malloc( snapshot_ctx->valloc, alignof(fd_pubkey_t*), sizeof(fd_pubkey_t*) * FD_WRITABLE_ACCS_IN_SLOT );
   ulong           snapshot_slot_key_cnt = 0UL;
 
   /* Setup the storages for the accounts db index. */
@@ -111,7 +110,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
      append vec for previous slots. Just record the pubkeys for the latest
      slot to populate the append vec after. */
 
-  fd_funk_t *             funk      = slot_ctx->acc_mgr->funk;
+  fd_funk_t *             funk      = snapshot_ctx->acc_mgr->funk;
   fd_snapshot_acc_vec_t * prev_accs = &accounts_db->storages[0].account_vecs[0];
 
   err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot - 1UL, prev_accs->id );
@@ -268,7 +267,6 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
 
 int
 fd_snapshot_create_serialiable_stakes( fd_snapshot_ctx_t        * snapshot_ctx,
-                                       fd_exec_slot_ctx_t       * slot_ctx,
                                        fd_stakes_t              * old_stakes,
                                        fd_stakes_serializable_t * new_stakes ) {
 
@@ -309,7 +307,7 @@ fd_snapshot_create_serialiable_stakes( fd_snapshot_ctx_t        * snapshot_ctx,
     new_node->elem.stake = n->elem.stake;
     /* Now to populate the value, lookup the account using the acc mgr */
     FD_BORROWED_ACCOUNT_DECL( vote_acc );
-    int err = fd_acc_mgr_view( slot_ctx->acc_mgr, slot_ctx->funk_txn, &n->elem.key, vote_acc );
+    int err = fd_acc_mgr_view( snapshot_ctx->acc_mgr, NULL, &n->elem.key, vote_acc );
     if( FD_UNLIKELY( err ) ) {
       FD_LOG_WARNING(( "Failed to view vote account from stakes cache %s", FD_BASE58_ENC_32_ALLOCA(&n->elem.key) ));
       return -1;
@@ -337,7 +335,7 @@ fd_snapshot_create_serialiable_stakes( fd_snapshot_ctx_t        * snapshot_ctx,
 
     nn = fd_delegation_pair_t_map_successor( old_stakes->stake_delegations_pool, n );
     
-    int err = fd_acc_mgr_view( slot_ctx->acc_mgr, slot_ctx->funk_txn, &n->elem.account, stake_acc );
+    int err = fd_acc_mgr_view( snapshot_ctx->acc_mgr, NULL, &n->elem.account, stake_acc );
     if( FD_UNLIKELY( err ) ) {
       /* If the stake account doesn't exist, the cache is stale and the entry
          just needs to be evicted. */
@@ -371,24 +369,24 @@ fd_snapshot_create_serialiable_stakes( fd_snapshot_ctx_t        * snapshot_ctx,
   return 0;
 }
 
-int
-fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ctx, 
-                                  fd_exec_slot_ctx_t *               slot_ctx,
+static inline int
+fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ctx,
                                   fd_serializable_versioned_bank_t * bank ) {
 
-  fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+  fd_slot_bank_t  * slot_bank  = &snapshot_ctx->slot_bank;
+  fd_epoch_bank_t * epoch_bank = &snapshot_ctx->epoch_bank;
 
   /* The blockhash queue has to be copied over along with all of its entries. */
 
-  bank->blockhash_queue.last_hash_index = slot_ctx->slot_bank.block_hash_queue.last_hash_index;
+  bank->blockhash_queue.last_hash_index = slot_bank->block_hash_queue.last_hash_index;
   bank->blockhash_queue.last_hash       = fd_valloc_malloc( snapshot_ctx->valloc, FD_HASH_ALIGN, FD_HASH_FOOTPRINT );
-  fd_memcpy( bank->blockhash_queue.last_hash, slot_ctx->slot_bank.block_hash_queue.last_hash, sizeof(fd_hash_t) );
+  fd_memcpy( bank->blockhash_queue.last_hash, slot_bank->block_hash_queue.last_hash, sizeof(fd_hash_t) );
 
-  bank->blockhash_queue.ages_len = fd_hash_hash_age_pair_t_map_size( slot_ctx->slot_bank.block_hash_queue.ages_pool, slot_ctx->slot_bank.block_hash_queue.ages_root);
+  bank->blockhash_queue.ages_len = fd_hash_hash_age_pair_t_map_size( slot_bank->block_hash_queue.ages_pool, slot_bank->block_hash_queue.ages_root);
   bank->blockhash_queue.ages     = fd_valloc_malloc( snapshot_ctx->valloc, FD_HASH_HASH_AGE_PAIR_ALIGN, bank->blockhash_queue.ages_len * sizeof(fd_hash_hash_age_pair_t) );
   bank->blockhash_queue.max_age  = FD_BLOCKHASH_QUEUE_SIZE;
 
-  fd_block_hash_queue_t             * queue               = &slot_ctx->slot_bank.block_hash_queue;
+  fd_block_hash_queue_t             * queue               = &slot_bank->block_hash_queue;
   fd_hash_hash_age_pair_t_mapnode_t * nn                  = NULL;
   ulong                               blockhash_queue_idx = 0UL;
   for( fd_hash_hash_age_pair_t_mapnode_t * n = fd_hash_hash_age_pair_t_map_minimum( queue->ages_pool, queue->ages_root ); n; n = nn ) {
@@ -401,8 +399,8 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
   bank->ancestors_len                        = 0UL;
   bank->ancestors                            = NULL;
 
-  bank->hash                                  = slot_ctx->slot_bank.banks_hash;
-  bank->parent_hash                           = slot_ctx->prev_banks_hash;
+  bank->hash                                  = slot_bank->banks_hash;
+  bank->parent_hash                           = slot_bank->prev_banks_hash;
 
   /* The slot needs to be decremented because the snapshot is created after
      a slot finishes executing and the slot value is incremented. 
@@ -415,12 +413,11 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
   bank->hard_forks.hard_forks                 = NULL;
   bank->hard_forks.hard_forks_len             = 0UL;
 
-  bank->transaction_count                     = slot_ctx->slot_bank.transaction_count;
-  bank->tick_height                           = slot_ctx->tick_height;
-  bank->signature_count                       = slot_ctx->parent_signature_cnt;
-  bank->capitalization                        = slot_ctx->slot_bank.capitalization;
-  bank->tick_height                           = slot_ctx->tick_height;
-  bank->max_tick_height                       = slot_ctx->tick_height;
+  bank->transaction_count                     = slot_bank->transaction_count;
+  bank->signature_count                       = slot_bank->parent_signature_cnt;
+  bank->capitalization                        = slot_bank->capitalization;
+  bank->tick_height                           = slot_bank->tick_height;
+  bank->max_tick_height                       = slot_bank->max_tick_height;
   bank->hashes_per_tick                       = &epoch_bank->hashes_per_tick;
   bank->ticks_per_slot                        = FD_TICKS_PER_SLOT;
   bank->ns_per_slot                           = epoch_bank->ns_per_slot;
@@ -434,16 +431,16 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
 
   bank->slot                                  = snapshot_ctx->snapshot_slot;
   bank->epoch                                 = fd_slot_to_epoch( &epoch_bank->epoch_schedule, bank->slot, NULL );
-  bank->block_height                          = slot_ctx->slot_bank.block_height;
+  bank->block_height                          = slot_bank->block_height;
 
   /* Collector id can be left as null for both clients */
 
   fd_memset( &bank->collector_id, 0, sizeof(fd_pubkey_t) );
 
-  bank->collector_fees                        = slot_ctx->slot_bank.collected_execution_fees + slot_ctx->slot_bank.collected_priority_fees;
-  bank->fee_calculator.lamports_per_signature = slot_ctx->slot_bank.lamports_per_signature;
-  bank->fee_rate_governor                     = slot_ctx->slot_bank.fee_rate_governor;
-  bank->collected_rent                        = slot_ctx->slot_bank.collected_rent;
+  bank->collector_fees                        = slot_bank->collected_execution_fees + slot_bank->collected_priority_fees;
+  bank->fee_calculator.lamports_per_signature = slot_bank->lamports_per_signature;
+  bank->fee_rate_governor                     = slot_bank->fee_rate_governor;
+  bank->collected_rent                        = slot_bank->collected_rent;
 
   bank->rent_collector.epoch                  = bank->epoch;
   bank->rent_collector.epoch_schedule         = epoch_bank->rent_epoch_schedule;
@@ -462,11 +459,11 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
      because of the fact that the leader schedule computation uses the two
      previous epoch stakes. */
 
-  fd_epoch_epoch_stakes_pair_t * relevant_epoch_stakes = fd_valloc_malloc( slot_ctx->valloc, FD_EPOCH_EPOCH_STAKES_PAIR_ALIGN, 2UL * sizeof(fd_epoch_epoch_stakes_pair_t) );
+  fd_epoch_epoch_stakes_pair_t * relevant_epoch_stakes = fd_valloc_malloc( snapshot_ctx->valloc, FD_EPOCH_EPOCH_STAKES_PAIR_ALIGN, 2UL * sizeof(fd_epoch_epoch_stakes_pair_t) );
   fd_memset( &relevant_epoch_stakes[0], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
   fd_memset( &relevant_epoch_stakes[1], 0UL, sizeof(fd_epoch_epoch_stakes_pair_t) );
   relevant_epoch_stakes[0].key                        = bank->epoch;
-  relevant_epoch_stakes[0].value.stakes.vote_accounts = slot_ctx->slot_bank.epoch_stakes;
+  relevant_epoch_stakes[0].value.stakes.vote_accounts = slot_bank->epoch_stakes;
   relevant_epoch_stakes[1].key                        = bank->epoch+1UL;
   relevant_epoch_stakes[1].value.stakes.vote_accounts = epoch_bank->next_epoch_stakes;
 
@@ -478,7 +475,7 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
      can't be reserialized into a format that is compatible with the Solana
      snapshot format. Therefore, we must recompute the data structure. */
 
-  int err = fd_snapshot_create_serialiable_stakes( snapshot_ctx, slot_ctx, &epoch_bank->stakes, &bank->stakes );
+  int err = fd_snapshot_create_serialiable_stakes( snapshot_ctx, &epoch_bank->stakes, &bank->stakes );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to serialize stakes" ));
     return -1;
@@ -488,8 +485,89 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
 }
 
 static inline int
-fd_snapshot_create_validate_ctx( fd_snapshot_ctx_t  * snapshot_ctx,
-                                 fd_exec_slot_ctx_t * slot_ctx ) {
+fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t  * snapshot_ctx,
+                                           fd_exec_slot_ctx_t * slot_ctx ) {
+
+  /* Query, decode, and store the epoch bank and slot bank from funk. */
+
+  fd_funk_t * funk = slot_ctx->acc_mgr->funk;
+
+  /* Setup the acc mgr using the funk. */
+
+  uchar * mem = fd_valloc_malloc( snapshot_ctx->valloc, FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT );
+  snapshot_ctx->acc_mgr = fd_acc_mgr_new( mem, funk );
+  if( FD_UNLIKELY( !snapshot_ctx->acc_mgr ) ) {
+    FD_LOG_WARNING(( "Failed to create acc mgr" ));
+    return -1;
+  }
+
+  /* First the epoch bank. */
+
+  fd_funk_rec_key_t     epoch_id  = fd_runtime_epoch_bank_key();
+  fd_funk_rec_t const * epoch_rec = fd_funk_rec_query_global( funk, NULL, &epoch_id, NULL );
+  if( FD_UNLIKELY( !epoch_rec ) ) {
+    FD_LOG_WARNING(( "Failed to read epoch bank record: missing record" ));
+    return -1;
+  }
+  void * epoch_val = fd_funk_val( epoch_rec, fd_funk_wksp( funk ) );
+
+  if( FD_UNLIKELY( fd_funk_val_sz( epoch_rec )<sizeof(uint) ) ) {
+    FD_LOG_WARNING(( "Failed to read epoch bank record: empty record" ));
+    return -1;
+  }
+
+  uint epoch_magic = *(uint*)epoch_val;
+
+  fd_bincode_decode_ctx_t epoch_decode_ctx = {
+    .data    = (uchar*)epoch_val + sizeof(uint),
+    .dataend = (uchar*)epoch_val + fd_funk_val_sz( epoch_rec ),
+    .valloc  = snapshot_ctx->valloc
+  };
+
+  if( FD_UNLIKELY( epoch_magic!=FD_RUNTIME_ENC_BINCODE ) ) {
+    FD_LOG_WARNING(( "Epoch bank record has wrong magic" ));
+    return -1;
+  }
+
+  int err = fd_epoch_bank_decode( &snapshot_ctx->epoch_bank, &epoch_decode_ctx );
+  if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) {
+    FD_LOG_WARNING(( "Failed to decode epoch bank" ));
+    return -1;
+  }
+
+  /* Now the slot bank/ */
+
+  fd_funk_rec_key_t     slot_id  = fd_runtime_slot_bank_key();
+  fd_funk_rec_t const * slot_rec = fd_funk_rec_query_global( funk, NULL, &slot_id, NULL );
+  if( FD_UNLIKELY( !slot_rec ) ) {
+    FD_LOG_WARNING(( "Failed to read slot bank record: missing record" ));
+    return -1;
+  }
+  void * slot_val = fd_funk_val( slot_rec, fd_funk_wksp( funk ) );
+
+  if( FD_UNLIKELY( fd_funk_val_sz( slot_rec )<sizeof(uint) ) ) {
+    FD_LOG_WARNING(( "Failed to read slot bank record: empty record" ));
+    return -1;
+  }
+
+  uint slot_magic = *(uint*)slot_val;
+
+  fd_bincode_decode_ctx_t slot_decode_ctx = {
+    .data    = (uchar*)slot_val + sizeof(uint),
+    .dataend = (uchar*)slot_val + fd_funk_val_sz( slot_rec ),
+    .valloc  = snapshot_ctx->valloc
+  };
+
+  if( FD_UNLIKELY( slot_magic!=FD_RUNTIME_ENC_BINCODE ) ) {
+    FD_LOG_WARNING(( "Slot bank record has wrong magic" ));
+    return -1;
+  }
+
+  err = fd_slot_bank_decode( &snapshot_ctx->slot_bank, &slot_decode_ctx );
+  if( FD_UNLIKELY( err!=FD_BINCODE_SUCCESS ) ) {
+    FD_LOG_WARNING(( "Failed to decode slot bank" ));
+    return -1;
+  }
   
     /* Validate that the snapshot context is setup correctly */
   
@@ -498,7 +576,7 @@ fd_snapshot_create_validate_ctx( fd_snapshot_ctx_t  * snapshot_ctx,
       return -1;
     }
 
-    if( FD_UNLIKELY( snapshot_ctx->snapshot_slot>slot_ctx->slot_bank.slot ) ) {
+    if( FD_UNLIKELY( snapshot_ctx->snapshot_slot>snapshot_ctx->slot_bank.slot ) ) {
       FD_LOG_WARNING(( "Snapshot slot is greater than the current slot" ));
       return -1;
     }
@@ -616,7 +694,7 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
   
   /* Copy in all the fields of the bank. */
 
-  int err = fd_snapshot_create_populate_bank( snapshot_ctx, slot_ctx, &manifest.bank );
+  int err = fd_snapshot_create_populate_bank( snapshot_ctx, &manifest.bank );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to populate the bank" ));
     return -1;
@@ -624,9 +702,9 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
 
   /* Populate the rest of the manifest, except for the append vec index. */
 
-  manifest.lamports_per_signature                = slot_ctx->slot_bank.lamports_per_signature;
+  manifest.lamports_per_signature                = snapshot_ctx->slot_bank.lamports_per_signature;
   manifest.bank_incremental_snapshot_persistence = NULL;
-  manifest.epoch_account_hash                    = &slot_ctx->slot_bank.epoch_account_hash;
+  manifest.epoch_account_hash                    = &snapshot_ctx->slot_bank.epoch_account_hash;
   /* TODO: The versioned epoch stakes needs to be implemented */
   manifest.versioned_epoch_stakes_len            = 0UL;
   manifest.versioned_epoch_stakes                = NULL;
@@ -840,9 +918,13 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t  * snapshot_ctx,
 
   int err = 0;
 
+  /* Query for the slot and epoch banks */
+
+
+
   /* Validate that the snapshot_ctx is setup correctly */
 
-  err = fd_snapshot_create_validate_ctx( snapshot_ctx, slot_ctx );
+  err = fd_snapshot_create_setup_and_validate_ctx( snapshot_ctx, slot_ctx );
   if( FD_UNLIKELY( err ) ) {
     return err;
   }
