@@ -60,9 +60,11 @@ fd_hash_account_current( uchar                      hash  [ static 32 ],
 
 /* Generate a complete accounts_hash of the entire account database. */
 int
-fd_accounts_hash( fd_exec_slot_ctx_t * slot_ctx,
-                  fd_tpool_t * tpool,
-                  fd_hash_t * accounts_hash );
+fd_accounts_hash( fd_funk_t          * funk,
+                  fd_slot_bank_t     * slot_bank,
+                  fd_valloc_t          valloc,
+                  fd_tpool_t         * tpool,
+                  fd_hash_t          * accounts_hash );
 
 /* Special version for verifying incremental snapshot */
 int
@@ -83,12 +85,16 @@ fd_snapshot_hash( fd_exec_slot_ctx_t * slot_ctx,
    is used by the snapshot service which doesn't have access to a slot_ctx 
    handle. However, it retains a copy of funk, slot_bank, and epoch_bank. */
 int
-fd_snapshot_service_hash( fd_hash_t       * accounts_hash, 
+fd_snapshot_service_hash( fd_hash_t       * accounts_hash,
                           fd_slot_bank_t  * slot_bank,
-                          fd_epoch_bank_t * epoch_bank );
-
+                          fd_epoch_bank_t * epoch_bank,
+                          fd_funk_t       * funk,
+                          fd_valloc_t       valloc );
 void
-fd_accounts_check_lthash( fd_exec_slot_ctx_t * slot_ctx );
+fd_accounts_check_lthash( fd_funk_t     *  funk,
+                          fd_funk_txn_t *  funk_txn,
+                          fd_slot_bank_t * slot_bank,
+                          fd_valloc_t      valloc );
 
 void
 fd_calculate_epoch_accounts_hash_values(fd_exec_slot_ctx_t * slot_ctx);

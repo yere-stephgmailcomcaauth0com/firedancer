@@ -6,9 +6,8 @@
 
 static uchar padding [ FD_SNAPSHOT_ACC_ALIGN ] = {0};
 
-int
+static inline int
 fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapshot_ctx,
-                                      fd_exec_slot_ctx_t                * slot_ctx,
                                       fd_solana_manifest_serializable_t * manifest,
                                       fd_tar_writer_t                   * writer ) {
 
@@ -68,7 +67,11 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
 
   /* Populate the snapshot hash into the accounts db. */
 
-  int err = fd_snapshot_hash( slot_ctx, NULL, &accounts_db->bank_hash_info.snapshot_hash, 0 );
+  int err = fd_snapshot_service_hash( &accounts_db->bank_hash_info.snapshot_hash, 
+                                      &snapshot_ctx->slot_bank,
+                                      &snapshot_ctx->epoch_bank, 
+                                      snapshot_ctx->acc_mgr->funk,
+                                      snapshot_ctx->valloc );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Unable to calculate snapshot hash" ));
     return -1;
@@ -485,21 +488,9 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
 }
 
 static inline int
-fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t  * snapshot_ctx,
-                                           fd_exec_slot_ctx_t * slot_ctx ) {
+fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
 
-  /* Query, decode, and store the epoch bank and slot bank from funk. */
-
-  fd_funk_t * funk = slot_ctx->acc_mgr->funk;
-
-  /* Setup the acc mgr using the funk. */
-
-  uchar * mem = fd_valloc_malloc( snapshot_ctx->valloc, FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT );
-  snapshot_ctx->acc_mgr = fd_acc_mgr_new( mem, funk );
-  if( FD_UNLIKELY( !snapshot_ctx->acc_mgr ) ) {
-    FD_LOG_WARNING(( "Failed to create acc mgr" ));
-    return -1;
-  }
+  fd_funk_t * funk = snapshot_ctx->acc_mgr->funk;
 
   /* First the epoch bank. */
 
@@ -634,15 +625,14 @@ fd_snapshot_create_write_version( fd_snapshot_ctx_t * snapshot_ctx ) {
 }
 
 static inline int
-fd_snapshot_create_write_status_cache( fd_snapshot_ctx_t *  snapshot_ctx,
-                                       fd_exec_slot_ctx_t * slot_ctx ) {
+fd_snapshot_create_write_status_cache( fd_snapshot_ctx_t *  snapshot_ctx ) {
 
   FD_SCRATCH_SCOPE_BEGIN {
 
   /* First convert the existing status cache into a snapshot-friendly format. */
 
   fd_bank_slot_deltas_t slot_deltas_new = {0};
-  int err = fd_txncache_get_entries( slot_ctx->status_cache,
+  int err = fd_txncache_get_entries( snapshot_ctx->status_cache,
                            &slot_deltas_new );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to get entries from the status cache" ));
@@ -686,8 +676,7 @@ fd_snapshot_create_write_status_cache( fd_snapshot_ctx_t *  snapshot_ctx,
 }
 
 static inline int
-fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ctx,
-                                                fd_exec_slot_ctx_t * slot_ctx ) {
+fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ctx ) {
 
 
   fd_solana_manifest_serializable_t manifest = {0};
@@ -711,7 +700,7 @@ fd_snapshot_create_write_manifest_and_acc_vecs( fd_snapshot_ctx_t  * snapshot_ct
 
   /* Populate the append vec index and write out the corresponding acc files. */
 
-  err = fd_snapshot_create_populate_acc_vecs( snapshot_ctx, slot_ctx, &manifest, snapshot_ctx->writer );
+  err = fd_snapshot_create_populate_acc_vecs( snapshot_ctx, &manifest, snapshot_ctx->writer );
   if( FD_UNLIKELY( err ) ) {
     FD_LOG_WARNING(( "Failed to populate the account vectors" ));
     return -1;
@@ -897,34 +886,17 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
 }
 
 int
-fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t  * snapshot_ctx,
-                                 fd_exec_slot_ctx_t * slot_ctx ) {
+fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t * snapshot_ctx ) {
 
   FD_SCRATCH_SCOPE_BEGIN {
 
   FD_LOG_NOTICE(( "Starting to produce a snapshot for slot=%lu in directory=%s", snapshot_ctx->snapshot_slot, snapshot_ctx->snapshot_dir ));
 
-  /* TODO:FIXME: START HACK Do a funk publish and whatnot */
-  fd_funk_t *     funk = slot_ctx->acc_mgr->funk;
-  fd_funk_txn_t * txn  = slot_ctx->funk_txn;
-  fd_funk_start_write( funk );
-  ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
-  if( !publish_err ) {
-    FD_LOG_ERR(( "publish err" ));
-    return -1;
-  }
-  fd_funk_end_write( funk );
-  /* TODO:FIXME: END HACK */
-
   int err = 0;
-
-  /* Query for the slot and epoch banks */
-
-
 
   /* Validate that the snapshot_ctx is setup correctly */
 
-  err = fd_snapshot_create_setup_and_validate_ctx( snapshot_ctx, slot_ctx );
+  err = fd_snapshot_create_setup_and_validate_ctx( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
     return err;
   }
@@ -945,14 +917,14 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t  * snapshot_ctx,
 
   /* Dump the status cache and append it to the tar archive. */
 
-  err = fd_snapshot_create_write_status_cache( snapshot_ctx, slot_ctx );
+  err = fd_snapshot_create_write_status_cache( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
     return err;
   }
 
   /* Populate and write out the manifest and append vecs. */
 
-  err = fd_snapshot_create_write_manifest_and_acc_vecs( snapshot_ctx, slot_ctx );
+  err = fd_snapshot_create_write_manifest_and_acc_vecs( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
     return err;
   }

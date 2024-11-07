@@ -231,13 +231,32 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
 
     if( ledger_args->slot_ctx->slot_bank.slot==ledger_args->snapshot_slot+1UL ) {
+
+      uchar * mem = fd_valloc_malloc( fd_scratch_virtual(), FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT );
+
       fd_snapshot_ctx_t snapshot_ctx = {
         .snapshot_slot  = ledger_args->snapshot_slot,
         .snapshot_dir   = ledger_args->snapshot_dir,
         .is_incremental = 0,
-        .valloc         = fd_scratch_virtual()
+        .valloc         = fd_scratch_virtual(),
+        .acc_mgr        = fd_acc_mgr_new( mem, ledger_args->slot_ctx->acc_mgr->funk ),
+        .status_cache   = ledger_args->slot_ctx->status_cache,
+
       };
-      int err = fd_snapshot_create_new_snapshot( &snapshot_ctx, ledger_args->slot_ctx );
+
+      /* TODO:FIXME: START HACK Do a funk publish and whatnot */
+      fd_funk_t *     funk = ledger_args->slot_ctx->acc_mgr->funk;
+      fd_funk_txn_t * txn  = ledger_args->slot_ctx->funk_txn;
+      fd_funk_start_write( funk );
+      ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
+      if( !publish_err ) {
+        FD_LOG_ERR(( "publish err" ));
+        return -1;
+      }
+      fd_funk_end_write( funk );
+      /* TODO:FIXME: END HACK */
+
+      int err = fd_snapshot_create_new_snapshot( &snapshot_ctx );
       if( FD_UNLIKELY( err ) ) {
         FD_LOG_ERR(( "failed to create snapshot" ));
       }

@@ -6,6 +6,7 @@
 
 #include "fd_snapshot_base.h"
 #include "../runtime/fd_runtime_init.h"
+#include "../runtime/fd_txncache.h"
 #include "../../util/archive/fd_tar.h"
 #include "../types/fd_types.h"
 
@@ -47,6 +48,7 @@ struct fd_snapshot_ctx {
   fd_slot_bank_t    slot_bank;
   fd_epoch_bank_t   epoch_bank;
   fd_acc_mgr_t *    acc_mgr;
+  fd_txncache_t *   status_cache;
 };
 typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
 
@@ -80,8 +82,7 @@ typedef struct fd_snapshot_ctx fd_snapshot_ctx_t;
   TODO: Currently incremental snapshots are not supported. */
 
 int
-fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t  * snapshot_ctx, 
-                                 fd_exec_slot_ctx_t * slot_ctx );
+fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t * snapshot_ctx );
 
 FD_PROTOTYPES_END
 
