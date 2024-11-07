@@ -34,10 +34,8 @@ default_enable_features( fd_features_t * features ) {
   features->update_hashes_per_tick = 0UL;
   features->enable_partitioned_epoch_reward = 0UL;
   features->pico_inflation = 0UL;
-  features->libsecp256k1_fail_on_bad_count2 = 0UL;
   features->remaining_compute_units_syscall_enabled = 0UL;
   features->simplify_writable_program_account_check = 0UL;
-  features->set_exempt_rent_epoch_max = 0UL;
   features->enable_bpf_loader_set_authority_checked_ix = 0UL;
   features->consume_blockstore_duplicate_proofs = 0UL;
   features->disable_deploy_of_alloc_free_syscall = 0UL;
@@ -49,7 +47,6 @@ default_enable_features( fd_features_t * features ) {
   features->update_hashes_per_tick3 = 0UL;
   features->update_hashes_per_tick4 = 0UL;
   features->enable_bpf_loader_extend_program_ix = 0UL;
-  features->libsecp256k1_fail_on_bad_count = 0UL;
   features->enable_program_runtime_v2_and_loader_v4 = 0UL;
   features->increase_tx_account_lock_limit = 0UL;
   features->stake_raise_minimum_delegation_to_1_sol = 0UL;

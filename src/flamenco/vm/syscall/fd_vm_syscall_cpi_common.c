@@ -187,23 +187,11 @@ VM_SYCALL_CPI_UPDATE_CALLEE_ACC_FUNC( fd_vm_t *                         vm,
       return err;
     }
 
-    int is_disable_cpi_setting_executable_and_rent_epoch_active = FD_FEATURE_ACTIVE(vm->instr_ctx->slot_ctx, disable_cpi_setting_executable_and_rent_epoch);
-    if( !is_disable_cpi_setting_executable_and_rent_epoch_active &&
-        fd_account_is_executable( callee_acc->meta )!=account_info->executable ) {
-      fd_pubkey_t const * program_acc = &vm->instr_ctx->instr->acct_pubkeys[vm->instr_ctx->instr->program_id];
-      fd_account_set_executable2( vm->instr_ctx, program_acc, callee_acc->meta, (char)account_info->executable);
-    }
-
     uchar const * caller_acc_owner = FD_VM_MEM_HADDR_ST( vm, account_info->owner_addr, alignof(uchar), sizeof(fd_pubkey_t) );
     if( memcmp( callee_acc->meta->info.owner, caller_acc_owner, sizeof(fd_pubkey_t) ) ) {
       fd_memcpy( callee_acc->meta->info.owner, caller_acc_owner, sizeof(fd_pubkey_t) );
     }
 
-    if( !is_disable_cpi_setting_executable_and_rent_epoch_active &&
-        callee_acc->meta->info.rent_epoch!=account_info->rent_epoch ) {
-      if( FD_UNLIKELY( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, enable_early_verification_of_account_modifications ) ) ) return 1;
-      else callee_acc->meta->info.rent_epoch = account_info->rent_epoch;
-    }
   } else { /* Direct mapping enabled */
     ulong region_idx  = vm->acc_region_metas[ instr_acc_idx ].region_idx;
     uint original_len = vm->acc_region_metas[ instr_acc_idx ].has_data_region ? 
@@ -594,19 +582,22 @@ VM_SYSCALL_CPI_ENTRYPOINT( void *  _vm,
 
   FD_VM_CU_UPDATE( vm, FD_VM_INVOKE_UNITS );
 
+  /* Translate instruction ********************************************/
+  /* translate_instruction is the first thing that agave does
+     https://github.com/firedancer-io/agave/blob/838c1952595809a31520ff1603a13f2c9123aa51/programs/bpf_loader/src/syscalls/cpi.rs#L1089 */
+  VM_SYSCALL_CPI_INSTR_T const * cpi_instruction =
+    FD_VM_MEM_HADDR_LD( vm, instruction_va, VM_SYSCALL_CPI_INSTR_ALIGN, VM_SYSCALL_CPI_INSTR_SIZE );
+  /* Agave consumes CU in translate_instruction
+     https://github.com/firedancer-io/agave/blob/838c1952595809a31520ff1603a13f2c9123aa51/programs/bpf_loader/src/syscalls/cpi.rs#L445 */
+  if( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, loosen_cpi_size_restriction ) ) {
+    FD_VM_CU_UPDATE( vm, VM_SYSCALL_CPI_INSTR_DATA_LEN( cpi_instruction ) / FD_VM_CPI_BYTES_PER_UNIT );
+  }
+
   /* Pre-flight checks ************************************************/
   int err = fd_vm_syscall_cpi_preflight_check( signers_seeds_cnt, acct_info_cnt, vm->instr_ctx->slot_ctx );
   if( FD_UNLIKELY( err ) ) {
     FD_VM_ERR_FOR_LOG_SYSCALL( vm, err );
     return err;
-  }
-  
-  /* Translate instruction ********************************************/
-  VM_SYSCALL_CPI_INSTR_T const * cpi_instruction =
-    FD_VM_MEM_HADDR_LD( vm, instruction_va, VM_SYSCALL_CPI_INSTR_ALIGN, VM_SYSCALL_CPI_INSTR_SIZE );
-
-  if( FD_FEATURE_ACTIVE( vm->instr_ctx->slot_ctx, loosen_cpi_size_restriction ) ) {
-    FD_VM_CU_UPDATE( vm, VM_SYSCALL_CPI_INSTR_DATA_LEN( cpi_instruction ) / FD_VM_CPI_BYTES_PER_UNIT );
   }
 
   /* Derive PDA signers ************************************************/

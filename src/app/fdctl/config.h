@@ -134,6 +134,7 @@ typedef struct {
 
     uint net_tile_count;
     uint quic_tile_count;
+    uint resolv_tile_count;
     uint verify_tile_count;
     uint bank_tile_count;
     uint shred_tile_count;
@@ -240,11 +241,13 @@ typedef struct {
     } shred;
 
     struct {
+      char   prometheus_listen_address[ 16 ];
       ushort prometheus_listen_port;
     } metric;
 
     struct {
       int    enabled;
+      char   gui_listen_address[ 16 ];
       ushort gui_listen_port;
     } gui;
 

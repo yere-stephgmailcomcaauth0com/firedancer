@@ -11,6 +11,7 @@ fd_topo_initialize( config_t * config ) {
   ulong net_tile_cnt    = config->layout.net_tile_count;
   ulong quic_tile_cnt   = config->layout.quic_tile_count;
   ulong verify_tile_cnt = config->layout.verify_tile_count;
+  ulong resolv_tile_cnt = config->layout.resolv_tile_count;
   ulong bank_tile_cnt   = config->layout.bank_tile_count;
   ulong shred_tile_cnt  = config->layout.shred_tile_count;
 
@@ -21,7 +22,8 @@ fd_topo_initialize( config_t * config ) {
   fd_topob_wksp( topo, "net_shred"    );
   fd_topob_wksp( topo, "quic_verify"  );
   fd_topob_wksp( topo, "verify_dedup" );
-  fd_topob_wksp( topo, "dedup_pack"   );
+  fd_topob_wksp( topo, "dedup_resolv" );
+  fd_topob_wksp( topo, "resolv_pack"  );
   fd_topob_wksp( topo, "pack_bank"    );
   fd_topob_wksp( topo, "bank_poh"     );
   fd_topob_wksp( topo, "bank_busy"    );
@@ -40,6 +42,7 @@ fd_topo_initialize( config_t * config ) {
   fd_topob_wksp( topo, "quic"         );
   fd_topob_wksp( topo, "verify"       );
   fd_topob_wksp( topo, "dedup"        );
+  fd_topob_wksp( topo, "resolv"       );
   fd_topob_wksp( topo, "pack"         );
   fd_topob_wksp( topo, "bank"         );
   fd_topob_wksp( topo, "poh"          );
@@ -62,7 +65,8 @@ fd_topo_initialize( config_t * config ) {
   /**/                 fd_topob_link( topo, "gossip_dedup", "gossip_dedup", 0,        2048UL,                                   FD_TPU_DCACHE_MTU,      1UL );
   /* dedup_pack is large currently because pack can encounter stalls when running at very high throughput rates that would
      otherwise cause drops. */
-  /**/                 fd_topob_link( topo, "dedup_pack",   "dedup_pack",   0,        65536UL,                                  FD_TPU_DCACHE_MTU,      1UL );
+  /**/                 fd_topob_link( topo, "dedup_resolv", "dedup_resolv", 0,        65536UL,                                  FD_TPU_DCACHE_MTU,      1UL );
+  FOR(resolv_tile_cnt) fd_topob_link( topo, "resolv_pack",  "resolv_pack",  0,        65536UL,                                  FD_TPU_RESOLVED_DCACHE_MTU, 1UL );
   /**/                 fd_topob_link( topo, "stake_out",    "stake_out",    0,        128UL,                                    40UL + 40200UL * 40UL,  1UL );
   /* pack_bank is shared across all banks, so if one bank stalls due to complex transactions, the buffer neeeds to be large so that
      other banks can keep proceeding. */
@@ -71,6 +75,7 @@ fd_topo_initialize( config_t * config ) {
   /**/                 fd_topob_link( topo, "poh_pack",     "bank_poh",     0,        128UL,                                    sizeof(fd_became_leader_t), 1UL );
   /**/                 fd_topob_link( topo, "poh_shred",    "poh_shred",    0,        16384UL,                                  USHORT_MAX,             1UL );
   /**/                 fd_topob_link( topo, "crds_shred",   "poh_shred",    0,        128UL,                                    8UL  + 40200UL * 38UL,  1UL );
+  /**/                 fd_topob_link( topo, "replay_resol", "bank_poh",     0,        128UL,                                    sizeof(fd_rooted_bank_t), 1UL );
   /* See long comment in fd_shred.c for an explanation about the size of this dcache. */
   FOR(shred_tile_cnt)  fd_topob_link( topo, "shred_store",  "shred_store",  0,        16384UL,                                  4UL*FD_SHRED_STORE_MTU, 4UL+config->tiles.shred.max_pending_shred_sets );
 
@@ -110,6 +115,7 @@ fd_topo_initialize( config_t * config ) {
   FOR(quic_tile_cnt)   fd_topob_tile( topo, "quic",    "quic",    "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
   FOR(verify_tile_cnt) fd_topob_tile( topo, "verify",  "verify",  "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
   /**/                 fd_topob_tile( topo, "dedup",   "dedup",   "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
+  FOR(resolv_tile_cnt) fd_topob_tile( topo, "resolv",  "resolv",  "metric_in",  tile_to_cpu[ topo->tile_cnt ], 1 );
   /**/                 fd_topob_tile( topo, "pack",    "pack",    "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
   FOR(bank_tile_cnt)   fd_topob_tile( topo, "bank",    "bank",    "metric_in",  tile_to_cpu[ topo->tile_cnt ], 1 );
   /**/                 fd_topob_tile( topo, "poh",     "poh",     "metric_in",  tile_to_cpu[ topo->tile_cnt ], 1 );
@@ -176,8 +182,11 @@ fd_topo_initialize( config_t * config ) {
   /* Declare the single gossip link before the variable length verify-dedup links so we could have a compile-time index to the gossip link. */
   /**/                 fd_topob_tile_in(  topo, "dedup",   0UL,          "metric_in", "gossip_dedup", 0UL,          FD_TOPOB_RELIABLE,   FD_TOPOB_POLLED );
   FOR(verify_tile_cnt) fd_topob_tile_in(  topo, "dedup",   0UL,          "metric_in", "verify_dedup", i,            FD_TOPOB_RELIABLE,   FD_TOPOB_POLLED );
-  /**/                 fd_topob_tile_out( topo, "dedup",   0UL,                       "dedup_pack",   0UL                                                );
-  /**/                 fd_topob_tile_in(  topo, "pack",    0UL,          "metric_in", "dedup_pack",   0UL,          FD_TOPOB_RELIABLE,   FD_TOPOB_POLLED );
+  /**/                 fd_topob_tile_out( topo, "dedup",   0UL,                       "dedup_resolv", 0UL                                                );
+  FOR(resolv_tile_cnt) fd_topob_tile_in(  topo, "resolv",  i,            "metric_in", "dedup_resolv", 0UL,          FD_TOPOB_RELIABLE,   FD_TOPOB_POLLED );
+  FOR(resolv_tile_cnt) fd_topob_tile_in(  topo, "resolv",  i,            "metric_in", "replay_resol", 0UL,          FD_TOPOB_RELIABLE,   FD_TOPOB_POLLED );
+  FOR(resolv_tile_cnt) fd_topob_tile_out( topo, "resolv",  i,                         "resolv_pack",  i                                                  );
+  /**/                 fd_topob_tile_in(  topo, "pack",    0UL,          "metric_in", "resolv_pack",  0UL,          FD_TOPOB_RELIABLE,   FD_TOPOB_POLLED );
   /* The PoH to pack link is reliable, and must be.  The fragments going
      across here are "you became leader" which pack must respond to
      by publishing microblocks, otherwise the leader TPU will hang
@@ -232,6 +241,7 @@ fd_topo_initialize( config_t * config ) {
   /**/                 fd_topob_tile_out( topo, "poh",    0UL,                        "gossip_dedup", 0UL                                                  );
   /**/                 fd_topob_tile_out( topo, "poh",    0UL,                        "stake_out",    0UL                                                  );
   /**/                 fd_topob_tile_out( topo, "poh",    0UL,                        "crds_shred",   0UL                                                  );
+  /**/                 fd_topob_tile_out( topo, "poh",    0UL,                        "replay_resol", 0UL                                                );
 
   /* For now the only plugin consumer is the GUI */
   int plugins_enabled = config->tiles.gui.enabled;
@@ -334,14 +344,6 @@ fd_topo_initialize( config_t * config ) {
   }
   FD_TEST( fd_pod_insertf_ulong( topo->props, poh_shred_obj->id, "poh_shred" ) );
 
-  /* Hacky: Reserve a ulong to allow net0 to pass its PID to its neighbors */
-  fd_topo_obj_t * net0_pid_obj = fd_topob_obj( topo, "fseq", "net" );
-  for( ulong i=0UL; i<net_tile_cnt; i++ ) {
-    fd_topo_tile_t * net_tile = &topo->tiles[ fd_topo_find_tile( topo, "net", i ) ];
-    fd_topob_tile_uses( topo, net_tile, net0_pid_obj, !i?FD_SHMEM_JOIN_MODE_READ_WRITE:FD_SHMEM_JOIN_MODE_READ_ONLY );
-  }
-  FD_TEST( fd_pod_insertf_ulong( topo->props, net0_pid_obj->id, "net0_pid" ) );
-
   for( ulong i=0UL; i<topo->tile_cnt; i++ ) {
     fd_topo_tile_t * tile = &topo->tiles[ i ];
 
@@ -387,6 +389,8 @@ fd_topo_initialize( config_t * config ) {
     } else if( FD_UNLIKELY( !strcmp( tile->name, "dedup" ) ) ) {
       tile->dedup.tcache_depth = config->tiles.dedup.signature_cache_size;
 
+    } else if( FD_UNLIKELY( !strcmp( tile->name, "resolv" ) ) ) {
+
     } else if( FD_UNLIKELY( !strcmp( tile->name, "pack" ) ) ) {
       strncpy( tile->pack.identity_key_path, config->consensus.identity_path, sizeof(tile->pack.identity_key_path) );
 
@@ -422,11 +426,15 @@ fd_topo_initialize( config_t * config ) {
       strncpy( tile->sign.identity_key_path, config->consensus.identity_path, sizeof(tile->sign.identity_key_path) );
 
     } else if( FD_UNLIKELY( !strcmp( tile->name, "metric" ) ) ) {
+      if( FD_UNLIKELY( !fd_cstr_to_ip4_addr( config->tiles.metric.prometheus_listen_address, &tile->metric.prometheus_listen_addr ) ) )
+        FD_LOG_ERR(( "failed to parse prometheus listen address `%s`", config->tiles.metric.prometheus_listen_address ));
       tile->metric.prometheus_listen_port = config->tiles.metric.prometheus_listen_port;
 
     } else if( FD_UNLIKELY( !strcmp( tile->name, "cswtch" ) ) ) {
 
     } else if( FD_UNLIKELY( !strcmp( tile->name, "gui" ) ) ) {
+      if( FD_UNLIKELY( !fd_cstr_to_ip4_addr( config->tiles.gui.gui_listen_address, &tile->gui.listen_addr ) ) )
+        FD_LOG_ERR(( "failed to parse gui listen address `%s`", config->tiles.gui.gui_listen_address ));
       tile->gui.listen_port = config->tiles.gui.gui_listen_port;
       tile->gui.is_voting = strcmp( config->consensus.vote_account_path, "" );
       strncpy( tile->gui.cluster, config->cluster, sizeof(tile->gui.cluster) );

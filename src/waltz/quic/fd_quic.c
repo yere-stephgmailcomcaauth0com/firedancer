@@ -457,16 +457,12 @@ fd_quic_init( fd_quic_t * quic ) {
     .cert_public_key       = quic->config.identity_public_key,
   };
 
-  /* fetch ahead */
-  fd_quic_metrics_t * metrics = &quic->metrics;
-
   ulong tls_laddr = (ulong)quic + layout.tls_off;
   state->tls = fd_quic_tls_new( (void *)tls_laddr, &tls_cfg );
   if( FD_UNLIKELY( !state->tls ) ) {
     FD_DEBUG( FD_LOG_WARNING( ( "fd_quic_tls_new failed" ) ) );
     return NULL;
   }
-  metrics->hs_created_cnt++;
 
   ulong stream_pool_cnt = limits->stream_pool_cnt;
   ulong tx_buf_sz       = limits->tx_buf_sz;
@@ -1511,6 +1507,7 @@ fd_quic_handle_v1_initial( fd_quic_t *               quic,
         return FD_QUIC_PARSE_FAIL;
       }
       conn->tls_hs = tls_hs;
+      quic->metrics.hs_created_cnt++;
 
       fd_quic_gen_initial_secret_and_keys( conn, conn_id );
     } else {
@@ -1559,7 +1556,7 @@ fd_quic_handle_v1_initial( fd_quic_t *               quic,
        since the packet integrity is checked in fd_quic_crypto_decrypt? */
 
     /* number of bytes in the packet header */
-    pkt_number_sz = ( (uint)cur_ptr[0] & 0x03u ) + 1u;
+    pkt_number_sz = fd_quic_h0_pkt_num_len( cur_ptr[0] ) + 1u;
     tot_sz        = pn_offset + body_sz; /* total including header and payload */
 
     /* now we have decrypted packet number */
@@ -1720,7 +1717,7 @@ fd_quic_handle_v1_handshake(
 # endif /* !FD_QUIC_DISABLE_CRYPTO */
 
   /* number of bytes in the packet header */
-  pkt_number_sz = ( (uint)cur_ptr[0] & 0x03u ) + 1u;
+  pkt_number_sz = fd_quic_h0_pkt_num_len( cur_ptr[0] ) + 1u;
   tot_sz        = pn_offset + body_sz; /* total including header and payload */
 
   /* now we have decrypted packet number */
@@ -1967,7 +1964,7 @@ fd_quic_handle_v1_one_rtt( fd_quic_t *           quic,
     uint first = (uint)cur_ptr[0];
 
     /* number of bytes in the packet header */
-    pkt_number_sz = ( first & 0x03u ) + 1u;
+    pkt_number_sz = fd_quic_h0_pkt_num_len( cur_ptr[0] ) + 1u;
 
     /* now we have decrypted packet number */
     pkt_number = fd_quic_pktnum_decode( cur_ptr+pn_offset, pkt_number_sz );
@@ -2035,7 +2032,9 @@ fd_quic_handle_v1_one_rtt( fd_quic_t *           quic,
   /* handle frames */
   ulong         payload_off = pn_offset + pkt_number_sz;
   uchar const * frame_ptr   = cur_ptr + payload_off;
-  ulong         frame_sz    = tot_sz - pn_offset - pkt_number_sz - FD_QUIC_CRYPTO_TAG_SZ; /* total size of all frames in packet */
+  ulong         payload_sz  = tot_sz - pn_offset - pkt_number_sz; /* includes auth tag */
+  if( FD_UNLIKELY( payload_sz<FD_QUIC_CRYPTO_TAG_SZ ) ) return FD_QUIC_PARSE_FAIL;
+  ulong         frame_sz    = payload_sz - FD_QUIC_CRYPTO_TAG_SZ; /* total size of all frames in packet */
   while( frame_sz != 0UL ) {
     rc = fd_quic_handle_v1_frame( quic,
                                   conn,
@@ -2097,7 +2096,7 @@ fd_quic_process_quic_packet_v1( fd_quic_t *     quic,
      Decrementing cur_sz is done in the long header branch, the short header
      branch parses the first byte again using the parser generator.
    */
-  uchar hdr_form = fd_quic_extract_hdr_form( *cur_ptr );
+  uchar hdr_form = fd_quic_h0_hdr_form( *cur_ptr );
   ulong rc;
 
   /* hdr_form is 1 bit */
@@ -2116,7 +2115,7 @@ fd_quic_process_quic_packet_v1( fd_quic_t *     quic,
       conn  = entry ? entry->conn : NULL;
     }
 
-    uchar long_packet_type = fd_quic_extract_long_packet_type( *cur_ptr );
+    uchar long_packet_type = fd_quic_h0_long_packet_type( *cur_ptr );
 
     /* encryption level matches that of TLS */
     pkt->enc_level = long_packet_type; /* V2 uses an indirect mapping */
@@ -2431,7 +2430,7 @@ fd_quic_aio_cb_receive( void *                    context,
     t1 = fd_quic_now( quic );
     ulong delta = t1 - t0;
     if( delta > (ulong)500e3 ) {
-      FD_LOG_WARNING(( "CALLBACK - took %ld  t0: %lu  t1: %lu  batch_cnt: %lu", delta, t0, t1, (ulong)batch_cnt ));
+      FD_LOG_WARNING(( "CALLBACK - took %lu  t0: %lu  t1: %lu  batch_cnt: %lu", delta, t0, t1, (ulong)batch_cnt ));
     }
   )
 
@@ -2657,6 +2656,8 @@ fd_quic_frame_handle_crypto_frame( void *                   vp_context,
   ulong           rcv_offset = crypto->offset;
   ulong           rcv_sz     = crypto->length;
 
+  if( FD_UNLIKELY( rcv_sz > p_sz ) ) return FD_QUIC_PARSE_FAIL;
+
   if( !conn->tls_hs ) {
     /* Handshake already completed. Ignore frame */
     /* TODO consider aborting conn if too many unsoliticted crypto frames arrive */
@@ -2672,7 +2673,7 @@ fd_quic_frame_handle_crypto_frame( void *                   vp_context,
     if( rcv_offset < exp_offset ) skip = exp_offset - rcv_offset;
 
     rcv_sz -= skip;
-    uchar const * crypto_data = crypto->crypto_data + skip;
+    uchar const * crypto_data = p + skip;
 
     int provide_rc = fd_quic_tls_provide_data( conn->tls_hs,
                                                context.pkt->enc_level,
@@ -2715,7 +2716,7 @@ fd_quic_frame_handle_crypto_frame( void *                   vp_context,
   (void)context; (void)p; (void)p_sz;
 
   /* no "additional" bytes - all already accounted for */
-  return FD_QUIC_SUCCESS;
+  return rcv_sz;
 }
 
 static int
@@ -2746,7 +2747,7 @@ fd_quic_svc_poll( fd_quic_t *      quic,
             (void *)conn, conn->conn_idx, (double)conn->idle_timeout / 1e6 )); )
 
         conn->state = FD_QUIC_CONN_STATE_DEAD;
-        quic->metrics.conn_aborted_cnt++;
+        quic->metrics.conn_timeout_cnt++;
       }
     } else if( FD_QUIC_PING_ENABLE ) {
       /* send PING */
@@ -3012,152 +3013,6 @@ struct fd_quic_pkt_hdr {
 };
 typedef struct fd_quic_pkt_hdr fd_quic_pkt_hdr_t;
 
-/* populate the fd_quic_pkt_hdr_t */
-void
-fd_quic_pkt_hdr_populate( fd_quic_pkt_hdr_t * pkt_hdr,
-                          uint                enc_level,
-                          ulong               pkt_number,
-                          fd_quic_conn_t *    conn,
-                          uchar               key_phase,
-                          uint                initial ) {
-  pkt_hdr->enc_level = enc_level;
-
-  /* current peer endpoint */
-  fd_quic_conn_id_t const * peer_conn_id = &conn->peer_cids[0];
-
-  /* our current conn_id */
-  ulong conn_id = conn->our_conn_id;
-
-  switch( enc_level ) {
-    case fd_quic_enc_level_initial_id:
-      pkt_hdr->quic_pkt.initial.hdr_form         = 1;
-      pkt_hdr->quic_pkt.initial.fixed_bit        = 1;
-      pkt_hdr->quic_pkt.initial.long_packet_type = 0;      /* TODO should be set by encoder */
-      pkt_hdr->quic_pkt.initial.reserved_bits    = 0;      /* must be set to zero by rfc9000 17.2 */
-      pkt_hdr->quic_pkt.initial.pkt_number_len   = 3;      /* indicates 4-byte packet number */
-      pkt_hdr->quic_pkt.initial.pkt_num_bits     = 4 * 8;  /* actual number of bits to encode */
-      pkt_hdr->quic_pkt.initial.version          = 1;
-      pkt_hdr->quic_pkt.initial.dst_conn_id_len  = peer_conn_id->sz;
-      // .dst_conn_id
-      pkt_hdr->quic_pkt.initial.src_conn_id_len  = FD_QUIC_CONN_ID_SZ;
-      // .src_conn_id
-      // .token - below
-      pkt_hdr->quic_pkt.initial.len              = 0;  /* length of payload initially 0 */
-      pkt_hdr->quic_pkt.initial.pkt_num          = pkt_number;
-
-      fd_memcpy( pkt_hdr->quic_pkt.initial.dst_conn_id,
-              peer_conn_id->conn_id,
-              peer_conn_id->sz );
-      memcpy( pkt_hdr->quic_pkt.initial.src_conn_id,
-              &conn_id,
-              FD_QUIC_CONN_ID_SZ );
-
-      /* Initial packets sent by the server MUST set the Token Length field to 0. */
-      if ( conn->quic->config.role == FD_QUIC_ROLE_CLIENT && conn->token_len ) {
-        pkt_hdr->quic_pkt.initial.token_len       = conn->token_len;
-        fd_memcpy( &pkt_hdr->quic_pkt.initial.token, &conn->token, conn->token_len );
-      } else {
-        pkt_hdr->quic_pkt.initial.token_len       = 0;
-      }
-
-      return;
-
-    case fd_quic_enc_level_handshake_id:
-      pkt_hdr->quic_pkt.handshake.hdr_form         = 1;
-      pkt_hdr->quic_pkt.handshake.fixed_bit        = 1;
-      pkt_hdr->quic_pkt.handshake.long_packet_type = 2;
-      pkt_hdr->quic_pkt.handshake.reserved_bits    = 0;      /* must be set to zero by rfc9000 17.2 */
-      pkt_hdr->quic_pkt.handshake.pkt_number_len   = 3;      /* indicates 4-byte packet number */
-      pkt_hdr->quic_pkt.handshake.pkt_num_bits     = 4 * 8;  /* actual number of bits to encode */
-      pkt_hdr->quic_pkt.handshake.version          = 1;
-
-      /* destination */
-      if( initial ) {
-        fd_memcpy( pkt_hdr->quic_pkt.initial.dst_conn_id,
-                conn->orig_dst_conn_id.conn_id,
-                conn->orig_dst_conn_id.sz );
-        pkt_hdr->quic_pkt.initial.dst_conn_id_len = conn->orig_dst_conn_id.sz;
-      } else {
-        fd_memcpy( pkt_hdr->quic_pkt.initial.dst_conn_id,
-                peer_conn_id->conn_id,
-                peer_conn_id->sz );
-        pkt_hdr->quic_pkt.initial.dst_conn_id_len = peer_conn_id->sz;
-      }
-
-      /* source */
-      FD_STORE( ulong, pkt_hdr->quic_pkt.handshake.src_conn_id, conn_id );
-      pkt_hdr->quic_pkt.handshake.src_conn_id_len = sizeof(ulong);
-
-      pkt_hdr->quic_pkt.handshake.len             = 0; /* length of payload initially 0 */
-      pkt_hdr->quic_pkt.handshake.pkt_num         = pkt_number;
-      break;
-
-    case fd_quic_enc_level_appdata_id:
-    {
-      /* use 1 bit of rand for spin bit */
-      uchar sb = conn->spin_bit;
-
-      /* one_rtt has a short header */
-      pkt_hdr->quic_pkt.one_rtt.hdr_form         = 0;
-      pkt_hdr->quic_pkt.one_rtt.fixed_bit        = 1;
-      pkt_hdr->quic_pkt.one_rtt.spin_bit         = sb;         /* should either match or flip for client/server */
-                                                               /* randomized for disabled spin bit */
-      pkt_hdr->quic_pkt.one_rtt.reserved0        = 0;          /* must be set to zero by rfc9000 17.2 */
-      pkt_hdr->quic_pkt.one_rtt.key_phase        = key_phase;  /* flipped on key change */
-      pkt_hdr->quic_pkt.one_rtt.pkt_number_len   = 3;          /* indicates 4-byte packet number */
-      pkt_hdr->quic_pkt.one_rtt.pkt_num_bits     = 4 * 8;      /* actual number of bits to encode */
-
-      /* destination */
-      fd_memcpy( pkt_hdr->quic_pkt.one_rtt.dst_conn_id,
-              peer_conn_id->conn_id,
-              peer_conn_id->sz );
-      pkt_hdr->quic_pkt.one_rtt.dst_conn_id_len  = peer_conn_id->sz;
-
-      pkt_hdr->quic_pkt.one_rtt.pkt_num          = pkt_number;
-      return;
-    }
-
-    default:
-      FD_LOG_ERR(( "%s - logic error: unexpected enc_level", __func__ ));
-  }
-}
-
-/* set the payload size within the packet header */
-void
-fd_quic_pkt_hdr_set_payload_sz( fd_quic_pkt_hdr_t * pkt_hdr, uint enc_level, uint payload_sz ) {
-  switch( enc_level ) {
-    case fd_quic_enc_level_initial_id:
-      pkt_hdr->quic_pkt.initial.len = payload_sz;
-      break;
-
-    case fd_quic_enc_level_handshake_id:
-      pkt_hdr->quic_pkt.handshake.len = payload_sz;
-      break;
-
-    case fd_quic_enc_level_appdata_id:
-      /* does not have length - so nothing to do */
-      break;
-
-    default:
-      FD_LOG_ERR(( "%s - logic error: unexpected enc_level", __func__ ));
-  }
-}
-
-/* calculate the footprint of the current header */
-ulong
-fd_quic_pkt_hdr_footprint( fd_quic_pkt_hdr_t * pkt_hdr, uint enc_level ) {
-  switch( enc_level ) {
-    case fd_quic_enc_level_initial_id:
-      return fd_quic_encode_footprint_initial( &pkt_hdr->quic_pkt.initial );
-    case fd_quic_enc_level_handshake_id:
-      return fd_quic_encode_footprint_handshake( &pkt_hdr->quic_pkt.handshake );
-    case fd_quic_enc_level_appdata_id:
-      return fd_quic_encode_footprint_one_rtt( &pkt_hdr->quic_pkt.one_rtt );
-    default:
-      FD_LOG_ERR(( "%s - logic error: unexpected enc_level", __func__ ));
-  }
-}
-
 /* encode packet header into buffer */
 ulong
 fd_quic_pkt_hdr_encode( uchar * cur_ptr, ulong cur_sz, fd_quic_pkt_hdr_t * pkt_hdr, uint enc_level ) {
@@ -3168,19 +3023,6 @@ fd_quic_pkt_hdr_encode( uchar * cur_ptr, ulong cur_sz, fd_quic_pkt_hdr_t * pkt_h
       return fd_quic_encode_handshake( cur_ptr, cur_sz, &pkt_hdr->quic_pkt.handshake );
     case fd_quic_enc_level_appdata_id:
       return fd_quic_encode_one_rtt( cur_ptr, cur_sz, &pkt_hdr->quic_pkt.one_rtt );
-    default:
-      FD_LOG_ERR(( "%s - logic error: unexpected enc_level", __func__ ));
-  }
-}
-
-/* returns the packet number length */
-uint
-fd_quic_pkt_hdr_pkt_number_len( fd_quic_pkt_hdr_t * pkt_hdr,
-                                uint            enc_level ) {
-  switch( enc_level ) {
-    case fd_quic_enc_level_initial_id:   return pkt_hdr->quic_pkt.initial.pkt_number_len + 1u;
-    case fd_quic_enc_level_handshake_id: return pkt_hdr->quic_pkt.handshake.pkt_number_len + 1u;
-    case fd_quic_enc_level_appdata_id:   return pkt_hdr->quic_pkt.one_rtt.pkt_number_len + 1u;
     default:
       FD_LOG_ERR(( "%s - logic error: unexpected enc_level", __func__ ));
   }
@@ -3268,26 +3110,30 @@ fd_quic_gen_handshake_frames( fd_quic_conn_t *     conn,
     uchar const * cur_data    = hs_data->data    + hs_offset;
     ulong         cur_data_sz = hs_data->data_sz - hs_offset;
 
-    /* build crypto frame */
-    fd_quic_crypto_frame_t crypto = {
-      .offset      = offset,
-      .length      = cur_data_sz,
-      .crypto_data = cur_data
-    };
-    ulong frame_sz = fd_quic_encode_crypto_frame(
-        payload_ptr, (ulong)( payload_end - payload_ptr ), &crypto );
-    if( FD_UNLIKELY( frame_sz==FD_QUIC_ENCODE_FAIL ) ) break;
-    payload_ptr += frame_sz;
+    /* 9 bytes header + cur_data_sz */
+    if( payload_ptr + 9UL + cur_data_sz > payload_end ) break;
+    /* FIXME reduce cur_data_sz if it doesn't fit in frame
+       Practically don't need to, because fd_tls generates a small amount of data */
+
+    payload_ptr[0] = 0x06; /* CRYPTO frame */
+    uint offset_varint = 0x80U | ( fd_uint_bswap( (uint)offset      & 0x3fffffffU ) );
+    uint length_varint = 0x80U | ( fd_uint_bswap( (uint)cur_data_sz & 0x3fffffffU ) );
+    FD_STORE( uint, payload_ptr+1, offset_varint );
+    FD_STORE( uint, payload_ptr+5, length_varint );
+    payload_ptr += 9;
+
+    fd_memcpy( payload_ptr, cur_data, cur_data_sz );
+    payload_ptr += cur_data_sz;
 
     /* update pkt_meta values */
     offset_hi += cur_data_sz;
 
     /* move to next hs_data */
     offset     += cur_data_sz;
-    conn
+    conn->hs_sent_bytes[enc_level] += cur_data_sz;
 
     /* TODO load more hs_data into a crypto frame, if available
-       currently tricky, because encode_crypto_frame copies payload */->hs_sent_bytes[enc_level] += cur_data_sz;
+       currently tricky, because encode_crypto_frame copies payload */
   }
 
   /* update packet meta */
@@ -3604,8 +3450,6 @@ fd_quic_conn_tx( fd_quic_t *      quic,
   /* TODO probably should be called tx_max_udp_payload_sz */
   ulong tx_max_datagram_sz = conn->tx_max_datagram_sz;
 
-  fd_quic_pkt_hdr_t pkt_hdr = {0};
-
   fd_quic_pkt_meta_t * pkt_meta = NULL;
 
   if( conn->tx_ptr != conn->tx_buf ) {
@@ -3691,9 +3535,9 @@ fd_quic_conn_tx( fd_quic_t *      quic,
   if( enc_level == ~0u                       ) return;
   if( conn->state == FD_QUIC_CONN_STATE_DEAD ) return;
 
-  int key_phase_upd = (int)conn->key_phase_upd;
-  int key_phase     = (int)conn->key_phase;
-  int key_phase_tx  = (int)key_phase ^ key_phase_upd;
+  int key_phase_upd  = (int)conn->key_phase_upd;
+  uint key_phase     = conn->key_phase;
+  int key_phase_tx   = (int)key_phase ^ key_phase_upd;
 
   /* key phase flags to set on every relevant pkt_meta */
   uint key_phase_flags = fd_uint_if( enc_level == fd_quic_enc_level_appdata_id,
@@ -3757,16 +3601,101 @@ fd_quic_conn_tx( fd_quic_t *      quic,
     ulong hs_data_offset = conn->hs_sent_bytes[enc_level];
     initial_pkt = (uint)( hs_data_offset == 0 ) & (uint)( !conn->server ) & (uint)( enc_level == fd_quic_enc_level_initial_id );
 
-    /* populate the quic packet header */
-    fd_quic_pkt_hdr_populate( &pkt_hdr, enc_level, pkt_number, conn, (uchar)key_phase_tx, initial_pkt );
+    /* current peer endpoint */
+    fd_quic_conn_id_t const * peer_conn_id = &conn->peer_cids[0];
 
-    ulong initial_hdr_sz = fd_quic_pkt_hdr_footprint( &pkt_hdr, enc_level );
+    /* our current conn_id */
+    ulong conn_id = conn->our_conn_id;
+    uint  pkt_num_len = 3; /* indicates 4-byte packet number */
 
-    /* if we don't have space for an initial header plus
-       16 for sample, 16 for tag and 3 bytes for expansion,
-       try tx to free space */
-    ulong min_rqd = FD_QUIC_CRYPTO_TAG_SZ + FD_QUIC_CRYPTO_SAMPLE_SZ + 3;
-    if( initial_hdr_sz + min_rqd > cur_sz ) {
+    /* encode packet header (including packet number)
+       While encoding, remember where the 'length' field is, if one
+       exists.  We'll have to update it later. */
+    uchar * hdr_ptr = cur_ptr;
+    ulong   hdr_sz = 0UL;
+    uchar   _hdr_len_field[2]; /* if no len field exists, catch the write here */
+    uchar * hdr_len_field = _hdr_len_field;
+    switch( enc_level ) {
+      case fd_quic_enc_level_initial_id: {
+        fd_quic_initial_t initial = {0};
+        initial.h0               = fd_quic_initial_h0( pkt_num_len );
+        initial.pkt_num_bits     = 4 * 8;  /* actual number of bits to encode */
+        initial.version          = 1;
+        initial.dst_conn_id_len  = peer_conn_id->sz;
+        // .dst_conn_id
+        initial.src_conn_id_len  = FD_QUIC_CONN_ID_SZ;
+        // .src_conn_id
+        // .token - below
+        initial.len              = 0x3fff; /* use 2 byte varint encoding */
+        initial.pkt_num          = pkt_number;
+
+        fd_memcpy( initial.dst_conn_id, peer_conn_id->conn_id, peer_conn_id->sz   );
+        memcpy(    initial.src_conn_id, &conn_id,              FD_QUIC_CONN_ID_SZ );
+
+        /* Initial packets sent by the server MUST set the Token Length field to 0. */
+        if( conn->quic->config.role == FD_QUIC_ROLE_CLIENT && conn->token_len ) {
+          initial.token_len       = conn->token_len;
+          fd_memcpy( initial.token, &conn->token, conn->token_len );
+        } else {
+          initial.token_len       = 0;
+        }
+
+        hdr_sz = fd_quic_encode_initial( cur_ptr, cur_sz, &initial );
+        hdr_len_field = cur_ptr + hdr_sz - 6; /* 2 byte len, 4 byte packet number */
+        break;
+      }
+
+      case fd_quic_enc_level_handshake_id: {
+        fd_quic_handshake_t handshake = {0};
+        handshake.h0           = fd_quic_handshake_h0( pkt_num_len );
+        handshake.pkt_num_bits = 4 * 8;  /* actual number of bits to encode */
+        handshake.version      = 1;
+
+        /* destination */
+        fd_memcpy( handshake.dst_conn_id, peer_conn_id->conn_id, peer_conn_id->sz );
+        handshake.dst_conn_id_len = peer_conn_id->sz;
+
+        /* source */
+        FD_STORE( ulong, handshake.src_conn_id, conn_id );
+        handshake.src_conn_id_len = sizeof(ulong);
+
+        handshake.len             = 0x3fff; /* use 2 byte varint encoding */
+        handshake.pkt_num         = pkt_number;
+
+        hdr_sz = fd_quic_encode_handshake( cur_ptr, cur_sz, &handshake );
+        hdr_len_field = cur_ptr + hdr_sz - 6; /* 2 byte len, 4 byte packet number */
+        break;
+      }
+
+      case fd_quic_enc_level_appdata_id:
+      {
+        fd_quic_one_rtt_t one_rtt = {0};
+        /* use 1 bit of rand for spin bit */
+        uchar sb = conn->spin_bit;
+
+        /* one_rtt has a short header */
+        one_rtt.h0           = fd_quic_one_rtt_h0( sb, key_phase, pkt_num_len );
+        one_rtt.pkt_num_bits = 4 * 8;      /* actual number of bits to encode */
+
+        /* destination */
+        fd_memcpy( one_rtt.dst_conn_id, peer_conn_id->conn_id, peer_conn_id->sz );
+        one_rtt.dst_conn_id_len  = peer_conn_id->sz;
+
+        one_rtt.pkt_num          = pkt_number;
+
+        hdr_sz = fd_quic_encode_one_rtt( cur_ptr, cur_sz, &one_rtt );
+        break;
+      }
+
+      default:
+        FD_LOG_ERR(( "%s - logic error: unexpected enc_level", __func__ ));
+    }
+
+    /* if we don't have space for a header plus 16 for sample, 16 for
+       tag, try tx to free space
+       FIXME the min QUIC packet payload is 20 bytes, not 32 */
+    ulong min_rqd = FD_QUIC_CRYPTO_TAG_SZ + FD_QUIC_CRYPTO_SAMPLE_SZ;
+    if( FD_UNLIKELY( hdr_sz==FD_QUIC_ENCODE_FAIL || hdr_sz+min_rqd > cur_sz ) ) {
       /* try to free space */
       fd_quic_tx_buffered( quic, conn, 0 );
 
@@ -3783,23 +3712,19 @@ fd_quic_conn_tx( fd_quic_t *      quic,
       break;
     }
 
+    cur_ptr += hdr_sz;
+    cur_sz  -= hdr_sz;
+
     /* start writing payload, leaving room for header and expansion
-       due to varint coding, if the header ends up small, we can pad
-       1-3 bytes */
-    uchar * payload_ptr = cur_ptr + initial_hdr_sz + 3u;
-    ulong   payload_sz  = cur_sz  - initial_hdr_sz - 3u;
+       due to varint coding */
 
-    /* write padding bytes here
-       conveniently, padding is 0x00 */
-    for( ulong j = 0; j < 3; ++j ) {
-      cur_ptr[initial_hdr_sz + j] = 0x00u;
-    }
-
+    uchar * payload_ptr = cur_ptr;
+    ulong   payload_sz  = cur_sz;
     /* payload_end leaves room for TAG */
     uchar * payload_end = payload_ptr + payload_sz - FD_QUIC_CRYPTO_TAG_SZ;
 
     uchar * const frame_start = payload_ptr;
-    payload_ptr = fd_quic_gen_frames( conn, payload_ptr, payload_end, enc_level, pkt_meta, pkt_number, now );
+    payload_ptr = fd_quic_gen_frames( conn, frame_start, payload_end, enc_level, pkt_meta, pkt_number, now );
     if( FD_UNLIKELY( payload_ptr < frame_start ) ) FD_LOG_CRIT(( "fd_quic_gen_frames failed" ));
 
     /* did we add any frames? */
@@ -3828,8 +3753,7 @@ fd_quic_conn_tx( fd_quic_t *      quic,
     /* first initial frame is padded to FD_QUIC_MIN_INITIAL_PKT_SZ
        all short quic packets are padded so 16 bytes of sample are available */
     uint tot_frame_sz = (uint)( payload_ptr - frame_start );
-    uint base_pkt_len = (uint)tot_frame_sz + fd_quic_pkt_hdr_pkt_number_len( &pkt_hdr, enc_level ) +
-                            FD_QUIC_CRYPTO_TAG_SZ;
+    uint base_pkt_len = (uint)tot_frame_sz + 4 /* packet num len */ + FD_QUIC_CRYPTO_TAG_SZ;
     uint padding      = initial_pkt ? FD_QUIC_INITIAL_PAYLOAD_SZ_MIN - base_pkt_len : 0u;
 
     /* TODO possibly don't need both SAMPLE_SZ and TAG_SZ */
@@ -3842,56 +3766,32 @@ fd_quic_conn_tx( fd_quic_t *      quic,
     uint quic_pkt_len = base_pkt_len + padding;
 
     /* set the length on the packet header */
-    fd_quic_pkt_hdr_set_payload_sz( &pkt_hdr, enc_level, quic_pkt_len );
-
-    /* calc header size, so we can encode it into the space immediately prior to the
-       payload */
-    ulong act_hdr_sz = fd_quic_pkt_hdr_footprint( &pkt_hdr, enc_level );
-
-    /* encode packet header into buffer
-       allow `initial_hdr_sz + 3` space for the header... as the payload bytes
-       start there */
-    cur_ptr += initial_hdr_sz + 3u - act_hdr_sz;
-    ulong rc = fd_quic_pkt_hdr_encode( cur_ptr, act_hdr_sz, &pkt_hdr, enc_level );
-
-    if( FD_UNLIKELY( rc == FD_QUIC_PARSE_FAIL ) ) {
-      FD_LOG_WARNING(( "%s - fd_quic_pkt_hdr_encode failed, even though there should "
-            "have been enough space", __func__ ));
-
-      /* reschedule, since some data was unable to be sent */
-      fd_quic_svc_schedule( state, conn, FD_QUIC_SVC_INSTANT );
-
-      break;
-    }
+    uint quic_pkt_len_varint = 0x4000u | fd_uint_min( quic_pkt_len, 0x3fff );
+    FD_STORE( ushort, hdr_len_field, fd_ushort_bswap( (ushort)quic_pkt_len_varint ) );
 
     /* add padding */
-    if( FD_UNLIKELY( padding ) ) {
+    if( padding ) {
       fd_memset( payload_ptr, 0, padding );
       payload_ptr += padding;
     }
 
     /* everything successful up to here
        encrypt into tx_ptr,tx_ptr+tx_sz */
+    pkt_meta->flags |= key_phase_flags;
 
-    /* TODO encrypt */
 #if FD_QUIC_DISABLE_CRYPTO
-    ulong quic_pkt_sz = (ulong)( payload_ptr - cur_ptr );
-    fd_memcpy( conn->tx_ptr, cur_ptr, quic_pkt_sz );
-    fd_memset( conn->tx_ptr + quic_pkt_sz, 0, 16 );
+    ulong quic_pkt_sz = hdr_sz + tot_frame_sz + padding;
+    fd_memcpy( conn->tx_ptr, hdr_ptr, quic_pkt_sz );
+    conn->tx_ptr += quic_pkt_sz;
+    conn->tx_sz  -= quic_pkt_sz;
 
-    /* update tx_ptr and tx_sz */
-    conn->tx_ptr += quic_pkt_sz + 16;
-    conn->tx_sz  -= quic_pkt_sz + 16;
-
-    (void)key_phase_flags;
-    (void)act_hdr_sz;
+    /* append MAC tag */
+    memset( conn->tx_ptr, 0, FD_QUIC_CRYPTO_TAG_SZ );
+    conn->tx_ptr += FD_QUIC_CRYPTO_TAG_SZ;
+    conn->tx_sz  -= FD_QUIC_CRYPTO_TAG_SZ;
 #else
-    ulong   quic_pkt_sz    = (ulong)( payload_ptr - cur_ptr );
     ulong   cipher_text_sz = conn->tx_sz;
-    uchar * hdr            = cur_ptr;
-    ulong   hdr_sz         = act_hdr_sz;
-    uchar * pay            = hdr + hdr_sz;
-    ulong   pay_sz         = quic_pkt_sz - hdr_sz;
+    ulong   frames_sz      = (ulong)( payload_ptr - frame_start ); /* including padding */
 
     int server = conn->server;
 
@@ -3899,10 +3799,8 @@ fd_quic_conn_tx( fd_quic_t *      quic,
     fd_quic_crypto_keys_t * pkt_keys = key_phase_upd ? &conn->new_keys[server]
                                                      : &conn->keys[enc_level][server];
 
-    pkt_meta->flags |= key_phase_flags;
-
-    if( FD_UNLIKELY( fd_quic_crypto_encrypt( conn->tx_ptr, &cipher_text_sz, hdr, hdr_sz,
-          pay, pay_sz, pkt_keys, hp_keys, pkt_number ) != FD_QUIC_SUCCESS ) ) {
+    if( FD_UNLIKELY( fd_quic_crypto_encrypt( conn->tx_ptr, &cipher_text_sz, hdr_ptr, hdr_sz,
+          frame_start, frames_sz, pkt_keys, hp_keys, pkt_number ) != FD_QUIC_SUCCESS ) ) {
       FD_LOG_WARNING(( "fd_quic_crypto_encrypt failed" ));
 
       /* this situation is unlikely to improve, so kill the connection */
@@ -4313,13 +4211,6 @@ fd_quic_connect( fd_quic_t *  quic,
   tp->initial_source_connection_id_present = 1;
   tp->initial_source_connection_id_len     = FD_QUIC_CONN_ID_SZ;
 
-  /* validate transport parameters */
-
-  if( !fd_quic_transport_params_validate( tp ) ) {
-    FD_LOG_WARNING(( "fd_quic_transport_params_validate failed" ));
-    goto fail_conn;
-  }
-
   /* Create a TLS handshake */
 
   fd_quic_tls_hs_t * tls_hs = fd_quic_tls_hs_new(
@@ -4330,8 +4221,10 @@ fd_quic_connect( fd_quic_t *  quic,
       tp );
   if( FD_UNLIKELY( !tls_hs ) ) {
     FD_DEBUG( FD_LOG_DEBUG(( "fd_quic_tls_hs_new failed" )) );
+    quic->metrics.hs_err_alloc_fail_cnt++;
     goto fail_conn;
   }
+  quic->metrics.hs_created_cnt++;
 
   /* run process tls immediately */
   int process_rc = fd_quic_tls_process( tls_hs );
@@ -4361,6 +4254,7 @@ fail_tls_hs:
   fd_quic_tls_hs_delete( tls_hs );
 
 fail_conn:
+  quic->metrics.conn_aborted_cnt++;
   conn->state  = FD_QUIC_CONN_STATE_DEAD;
 
   return NULL;
@@ -5809,7 +5703,6 @@ fd_quic_frame_handle_new_conn_id_frame(
 
   /* ack-eliciting */
   context.pkt->ack_flag |= ACK_FLAG_RQD;
-  FD_DEBUG( FD_LOG_WARNING(( "NEW_CONNECTION_ID  conn_idx: %u   retire_prior_to %lu", conn->conn_idx, data->retire_prior_to )); )
 
   /* FIXME implement */
 
@@ -5905,7 +5798,7 @@ fd_quic_frame_handle_conn_close_0_frame(
     return FD_QUIC_PARSE_FAIL;
   }
 
-  /* the information here can be invaluble for debugging */
+  /* the information here can be invaluable for debugging */
   FD_DEBUG(
     char reason_buf[256] = {0};
     ulong reason_len = fd_ulong_min( sizeof(reason_buf)-1, reason_phrase_length );
@@ -5938,7 +5831,7 @@ fd_quic_frame_handle_conn_close_1_frame(
     return FD_QUIC_PARSE_FAIL;
   }
 
-  /* the information here can be invaluble for debugging */
+  /* the information here can be invaluable for debugging */
   FD_DEBUG(
     char reason_buf[256] = {0};
     ulong reason_len = fd_ulong_min( sizeof(reason_buf)-1, reason_phrase_length );

@@ -364,6 +364,7 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
     if( !_load_account( &borrowed_accts[j], acc_mgr, funk_txn, &test_ctx->accounts[j] ) ) {
       return 0;
     }
+
     if( borrowed_accts[j].const_meta ) {
       uchar * data = fd_spad_alloc( txn_ctx->spad, FD_SPAD_ALIGN, FD_ACC_TOT_SZ_MAX );
       ulong   dlen = borrowed_accts[j].const_meta->dlen;
@@ -548,23 +549,21 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
   //  FIXME: Specifically for CPI syscalls, flag guard this?
   fd_instr_info_sum_account_lamports( info, &info->starting_lamports_h, &info->starting_lamports_l );
 
-  /* This function is used to create context both for instructions and for syscalls,
-     however some of the remaining checks are only relevant for program instructions. */
-  if( !is_syscall ) {
-    /* The remaining checks enforce that the program is one of the accounts and
-      owned by native loader. */
-    bool found_program_id = false;
-    for( uint i = 0; i < test_ctx->accounts_count; i++ ) {
-      if( 0 == memcmp( test_ctx->accounts[i].address, test_ctx->program_id, sizeof(fd_pubkey_t) ) ) {
-        info->program_id = (uchar) i;
-        found_program_id = true;
-        break;
-      }
+  /* The remaining checks enforce that the program is one of the accounts and
+    owned by native loader. */
+  bool found_program_id = false;
+  for( uint i = 0; i < test_ctx->accounts_count; i++ ) {
+    if( 0 == memcmp( test_ctx->accounts[i].address, test_ctx->program_id, sizeof(fd_pubkey_t) ) ) {
+      info->program_id = (uchar) i;
+      found_program_id = true;
+      break;
     }
-    if( !found_program_id ) {
-      REPORT( NOTICE, " Unable to find program_id in accounts" );
-      return 0;
-    }
+  }
+
+  /* Aborting is only important for instr execution */
+  if( !is_syscall && !found_program_id ) {
+    FD_LOG_NOTICE(( " Unable to find program_id in accounts" ));
+    return 0;
   }
 
   ctx->epoch_ctx = epoch_ctx;
@@ -755,7 +754,8 @@ _txn_context_create_and_exec( fd_exec_instr_test_runner_t *      runner,
       FD_FEATURE_ACTIVE( slot_ctx, partitioned_epoch_rewards_superfeature )
       ) && !slot_ctx->sysvar_cache->has_epoch_rewards ) {
     fd_point_value_t point_value = {0};
-    fd_sysvar_epoch_rewards_init( slot_ctx, 0, 0, 0, 0, point_value, (fd_hash_t *) empty_bytes);
+    fd_hash_t const * last_hash = test_ctx->blockhash_queue_count > 0 ? (fd_hash_t const *)test_ctx->blockhash_queue[0]->bytes : (fd_hash_t const *)empty_bytes;
+    fd_sysvar_epoch_rewards_init( slot_ctx, 0UL, 0UL, 2UL, 1UL, point_value, last_hash);
   }
 
   /* Restore sysvar cache (again, since we may need to provide default sysvars) */
@@ -1164,7 +1164,7 @@ _diff_effects( fd_exec_instr_fixture_diff_t * check ) {
   else if( ( exec_result==FD_EXECUTOR_INSTR_ERR_CUSTOM_ERR    ) &
            ( expected->custom_err != ctx->txn_ctx->custom_err ) ) {
     check->has_diff = 1;
-    REPORTV( NOTICE, " expected custom error %d, got %d",
+    REPORTV( NOTICE, " expected custom error %u, got %u",
              expected->custom_err, ctx->txn_ctx->custom_err );
     return;
   }
@@ -1770,12 +1770,13 @@ fd_exec_vm_syscall_test_run( fd_exec_instr_test_runner_t * runner,
   if ( !vm ) {
     goto error;
   }
-  uchar is_deprecated = false; /* tl;dr: solfuzz-agave always checks alignemnt.
-    Agave does NOT check alignment if the owner of the program is deprecated BPF loader,
-    otherwise it defaults to checking alignement.
-    However, in most syscall tests we don't set transaction accounts at all, i.e. there's
-    no account corresponding to "the program", i.e. there's no owner, i.e. alignment is
-    always checked. We rely to txn harness to test non-alignment cases. */
+
+  /* If the program ID account owner is the v1 BPF loader, then alignment is disabled (controlled by
+     the `is_deprecated` flag) */
+  uchar program_id_idx = ctx->instr->program_id;
+  uchar is_deprecated = ( program_id_idx < ctx->txn_ctx->accounts_cnt ) && 
+                        ( !memcmp( ctx->txn_ctx->borrowed_accounts[program_id_idx].const_meta->info.owner, fd_solana_bpf_loader_deprecated_program_id.key, sizeof(fd_pubkey_t) ) );
+
   fd_vm_init(
     vm,
     ctx,
@@ -1842,7 +1843,17 @@ fd_exec_vm_syscall_test_run( fd_exec_instr_test_runner_t * runner,
   }
 
   /* Actually invoke the syscall */
+  int stack_push_err = fd_instr_stack_push( ctx->txn_ctx, (fd_instr_info_t *)ctx->instr );
+  if( FD_UNLIKELY( stack_push_err ) ) {
+      FD_LOG_WARNING(( "instr stack push err" ));
+      goto error;
+  }
   int syscall_err = syscall->func( vm, vm->reg[1], vm->reg[2], vm->reg[3], vm->reg[4], vm->reg[5], &vm->reg[0] );
+  int stack_pop_err = fd_instr_stack_pop( ctx->txn_ctx, ctx->instr );
+  if( FD_UNLIKELY( stack_pop_err ) ) {
+      FD_LOG_WARNING(( "instr stack pop err" ));
+      goto error;
+  }
   if( syscall_err ) {
     /*  In the CPI syscall, certain checks are performed out of order between Firedancer and Agave's
         implementation. Certain checks in FD (whose error codes mapped below)

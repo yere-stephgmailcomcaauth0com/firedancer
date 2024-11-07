@@ -2850,7 +2850,7 @@ fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
   for( fd_funk_txn_t * txn = slot_ctx->funk_txn; txn; txn = fd_funk_txn_parent(txn, txnmap) ) {
     /* TODO: tmp change */
     if (++depth == (FD_RUNTIME_NUM_ROOT_BLOCKS - 1) ) {
-      FD_LOG_DEBUG(("publishing %s (slot %ld)", FD_BASE58_ENC_32_ALLOCA( &txn->xid ), txn->xid.ul[0]));
+      FD_LOG_DEBUG(("publishing %s (slot %lu)", FD_BASE58_ENC_32_ALLOCA( &txn->xid ), txn->xid.ul[0]));
 
       fd_funk_start_write(funk);
       ulong publish_err = fd_funk_txn_publish(funk, txn, 1);
@@ -2862,12 +2862,10 @@ fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
         fd_txncache_register_root_slot( slot_ctx->status_cache, txn->xid.ul[0] );
       }
 
-      if( FD_UNLIKELY( FD_FEATURE_ACTIVE(slot_ctx, epoch_accounts_hash) ) ) {
-        fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
-        if( txn->xid.ul[0] >= epoch_bank->eah_start_slot ) {
-          fd_accounts_hash( slot_ctx, tpool, &slot_ctx->slot_bank.epoch_account_hash );
-          epoch_bank->eah_start_slot = ULONG_MAX;
-        }
+      fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
+      if( txn->xid.ul[0] >= epoch_bank->eah_start_slot ) {
+        fd_accounts_hash( slot_ctx, tpool, &slot_ctx->slot_bank.epoch_account_hash );
+        epoch_bank->eah_start_slot = ULONG_MAX;
       }
 
       if( capture_ctx != NULL ) {
@@ -3618,24 +3616,17 @@ void fd_runtime_distribute_rent_to_validators( fd_exec_slot_ctx_t * slot_ctx,
 
     sort_validator_stake_pair_inplace(validator_stakes, num_validator_stakes);
 
-    ulong enforce_fix = FD_FEATURE_ACTIVE(slot_ctx, no_overflow_rent_distribution);
-    ulong prevent_rent_fix = FD_FEATURE_ACTIVE(slot_ctx, prevent_rent_paying_rent_recipients);
     ulong validate_fee_collector_account = FD_FEATURE_ACTIVE(slot_ctx, validate_fee_collector_account);
 
     ulong rent_distributed_in_initial_round = 0;
 
     // We now do distribution, reusing the validator stakes array for the rent stares
-    if( enforce_fix ) {
-      for( i = 0; i < num_validator_stakes; i++ ) {
-        ulong staked = validator_stakes[i].stake;
-        ulong rent_share = (ulong)(((uint128)staked * (uint128)rent_to_be_distributed) / (uint128)total_staked);
+    for( i = 0; i < num_validator_stakes; i++ ) {
+      ulong staked = validator_stakes[i].stake;
+      ulong rent_share = (ulong)(((uint128)staked * (uint128)rent_to_be_distributed) / (uint128)total_staked);
 
-        validator_stakes[i].stake = rent_share;
-        rent_distributed_in_initial_round += rent_share;
-      }
-    } else {
-      // TODO: implement old functionality!
-      FD_LOG_ERR(( "unimplemented feature" ));
+      validator_stakes[i].stake = rent_share;
+      rent_distributed_in_initial_round += rent_share;
     }
 
     ulong leftover_lamports = rent_to_be_distributed - rent_distributed_in_initial_round;
@@ -3652,7 +3643,7 @@ void fd_runtime_distribute_rent_to_validators( fd_exec_slot_ctx_t * slot_ctx,
     for( i = 0; i < num_validator_stakes; i++ ) {
       ulong rent_to_be_paid = validator_stakes[i].stake;
 
-      if( !enforce_fix || rent_to_be_paid > 0 ) {
+      if( rent_to_be_paid > 0 ) {
         fd_pubkey_t pubkey = validator_stakes[i].pubkey;
 
         FD_BORROWED_ACCOUNT_DECL(rec);
@@ -3672,15 +3663,13 @@ void fd_runtime_distribute_rent_to_validators( fd_exec_slot_ctx_t * slot_ctx,
           }
         }
 
-        if( prevent_rent_fix | validate_fee_collector_account) {
-          // https://github.com/solana-labs/solana/blob/8c5b5f18be77737f0913355f17ddba81f14d5824/accounts-db/src/account_rent_state.rs#L39
+        // https://github.com/solana-labs/solana/blob/8c5b5f18be77737f0913355f17ddba81f14d5824/accounts-db/src/account_rent_state.rs#L39
 
-          ulong minbal = fd_rent_exempt_minimum_balance( fd_sysvar_cache_rent( slot_ctx->sysvar_cache ), rec->const_meta->dlen );
-          if( rec->const_meta->info.lamports + rent_to_be_paid < minbal ) {
-            FD_LOG_WARNING(("cannot pay a rent paying account (%s)", FD_BASE58_ENC_32_ALLOCA( &pubkey ) ));
-            leftover_lamports += rent_to_be_paid;
-            continue;
-          }
+        ulong minbal = fd_rent_exempt_minimum_balance( fd_sysvar_cache_rent( slot_ctx->sysvar_cache ), rec->const_meta->dlen );
+        if( rec->const_meta->info.lamports + rent_to_be_paid < minbal ) {
+          FD_LOG_WARNING(("cannot pay a rent paying account (%s)", FD_BASE58_ENC_32_ALLOCA( &pubkey ) ));
+          leftover_lamports += rent_to_be_paid;
+          continue;
         }
 
         err = fd_acc_mgr_modify( slot_ctx->acc_mgr, slot_ctx->funk_txn, &pubkey, 0, 0UL, rec );
@@ -3692,13 +3681,11 @@ void fd_runtime_distribute_rent_to_validators( fd_exec_slot_ctx_t * slot_ctx,
         rec->meta->info.lamports += rent_to_be_paid;
       }
     } // end of iteration over validator_stakes
-    if( enforce_fix && !prevent_rent_fix ) {
-      FD_TEST( leftover_lamports == 0 );
-    } else {
-      ulong old = slot_ctx->slot_bank.capitalization;
-      slot_ctx->slot_bank.capitalization = fd_ulong_sat_sub(slot_ctx->slot_bank.capitalization, leftover_lamports);
-      FD_LOG_DEBUG(( "fd_runtime_distribute_rent_to_validators: burn %lu, capitalization %ld->%ld ", leftover_lamports, old, slot_ctx->slot_bank.capitalization ));
-    }
+
+    ulong old = slot_ctx->slot_bank.capitalization;
+    slot_ctx->slot_bank.capitalization = fd_ulong_sat_sub(slot_ctx->slot_bank.capitalization, leftover_lamports);
+    FD_LOG_DEBUG(( "fd_runtime_distribute_rent_to_validators: burn %lu, capitalization %lu->%lu ", leftover_lamports, old, slot_ctx->slot_bank.capitalization ));
+
   } FD_SCRATCH_SCOPE_END;
 }
 
@@ -3809,7 +3796,7 @@ fd_runtime_freeze( fd_exec_slot_ctx_t * slot_ctx ) {
 
       ulong old = slot_ctx->slot_bank.capitalization;
       slot_ctx->slot_bank.capitalization = fd_ulong_sat_sub( slot_ctx->slot_bank.capitalization, burn);
-      FD_LOG_DEBUG(( "fd_runtime_freeze: burn %lu, capitalization %ld->%ld ", burn, old, slot_ctx->slot_bank.capitalization));
+      FD_LOG_DEBUG(( "fd_runtime_freeze: burn %lu, capitalization %lu->%lu ", burn, old, slot_ctx->slot_bank.capitalization));
     } while (false);
 
     slot_ctx->slot_bank.collected_execution_fees = 0;
@@ -3823,7 +3810,7 @@ fd_runtime_freeze( fd_exec_slot_ctx_t * slot_ctx ) {
   fd_runtime_distribute_rent( slot_ctx );
   fd_runtime_run_incinerator( slot_ctx );
 
-  FD_LOG_DEBUG(( "fd_runtime_freeze: capitalization %ld ", slot_ctx->slot_bank.capitalization));
+  FD_LOG_DEBUG(( "fd_runtime_freeze: capitalization %lu ", slot_ctx->slot_bank.capitalization));
   slot_ctx->slot_bank.collected_rent = 0;
 }
 

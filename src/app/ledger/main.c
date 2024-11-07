@@ -192,7 +192,7 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     ledger_args->slot_ctx->slot_bank.prev_slot = prev_slot;
     ledger_args->slot_ctx->slot_bank.slot      = slot;
 
-    FD_LOG_DEBUG(( "reading slot %ld", slot ));
+    FD_LOG_DEBUG(( "reading slot %lu", slot ));
 
     if( ledger_args->capture_ctx && ledger_args->capture_ctx->pruned_funk != NULL ) {
       fd_funk_start_write( ledger_args->capture_ctx->pruned_funk );

@@ -267,6 +267,7 @@ fd_http_server_fd( fd_http_server_t * http ) {
 
 fd_http_server_t *
 fd_http_server_listen( fd_http_server_t * http,
+                       uint               address,
                        ushort             port ) {
   int sockfd = socket( AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0 );
   if( FD_UNLIKELY( -1==sockfd ) ) FD_LOG_ERR(( "socket failed (%i-%s)", errno, strerror( errno ) ));
@@ -278,7 +279,7 @@ fd_http_server_listen( fd_http_server_t * http,
   struct sockaddr_in addr = {
     .sin_family      = AF_INET,
     .sin_port        = fd_ushort_bswap( port ),
-    .sin_addr.s_addr = INADDR_ANY,
+    .sin_addr.s_addr = address,
   };
 
   if( FD_UNLIKELY( -1==bind( sockfd, fd_type_pun( &addr ), sizeof( addr ) ) ) ) FD_LOG_ERR(( "bind failed (%i-%s)", errno, strerror( errno ) ));
@@ -654,7 +655,7 @@ again:
     len_bytes = 1UL;
   } else if( FD_LIKELY( payload_len==126 ) ) {
     if( FD_UNLIKELY( conn->recv_bytes_read<4UL ) ) return; /* Need at least 4 bytes to determine frame length */
-    payload_len = ((ulong)conn->recv_bytes[ conn->recv_bytes_parsed+2UL ]<<8UL) | (ulong)conn->recv_bytes[ 3 ];
+    payload_len = ((ulong)conn->recv_bytes[ conn->recv_bytes_parsed+2UL ]<<8UL) | (ulong)conn->recv_bytes[ conn->recv_bytes_parsed+3UL ];
     len_bytes = 3UL;
   } else if( FD_LIKELY( payload_len==127 ) ) {
     if( FD_UNLIKELY( conn->recv_bytes_read<10UL ) ) return; /* Need at least 10 bytes to determine frame length */
@@ -914,7 +915,7 @@ write_conn_http( fd_http_server_t * http,
           if( FD_UNLIKELY( !ws_conn_pool_free( http->ws_conns ) ) ) {
             ws_conn_treap_rev_iter_t it = ws_conn_treap_rev_iter_init( http->ws_conn_treap, http->ws_conns );
             if( FD_LIKELY( !ws_conn_treap_rev_iter_done( it ) ) ) {
-              ulong ws_conn_id = ws_conn_treap_rev_iter_idx( ws_conn_treap_rev_iter_next( it, http->ws_conns ) );
+              ulong ws_conn_id = ws_conn_treap_rev_iter_idx( it );
               close_conn( http, http->max_conns+ws_conn_id, FD_HTTP_SERVER_CONNECTION_CLOSE_EVICTED );
             } else {
               close_conn( http, http->max_conns+http->evict_ws_conn_id, FD_HTTP_SERVER_CONNECTION_CLOSE_EVICTED );

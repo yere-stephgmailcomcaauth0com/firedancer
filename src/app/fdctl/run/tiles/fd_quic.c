@@ -179,6 +179,7 @@ metrics_write( fd_quic_ctx_t * ctx ) {
   FD_MCNT_SET(   QUIC, CONNECTIONS_CREATED, ctx->quic->metrics.conn_created_cnt );
   FD_MCNT_SET(   QUIC, CONNECTIONS_CLOSED,  ctx->quic->metrics.conn_closed_cnt );
   FD_MCNT_SET(   QUIC, CONNECTIONS_ABORTED, ctx->quic->metrics.conn_aborted_cnt );
+  FD_MCNT_SET(   QUIC, CONNECTIONS_TIMED_OUT, ctx->quic->metrics.conn_timeout_cnt );
   FD_MCNT_SET(   QUIC, CONNECTIONS_RETRIED, ctx->quic->metrics.conn_retry_cnt );
 
   FD_MCNT_SET(   QUIC, CONNECTION_ERROR_NO_SLOTS,   ctx->quic->metrics.conn_err_no_slots_cnt );
@@ -523,9 +524,9 @@ unprivileged_init( fd_topo_t *      topo,
                    fd_topo_tile_t * tile ) {
   void * scratch = fd_topo_obj_laddr( topo, tile->tile_obj_id );
 
-  if( FD_UNLIKELY( tile->in_cnt!=2UL ||
+  if( FD_UNLIKELY( tile->in_cnt<2UL ||
                    strcmp( topo->links[ tile->in_link_id[ 0UL ] ].name, "net_quic" ) ||
-                   strcmp( topo->links[ tile->in_link_id[ 1UL ] ].name, "sign_quic" ) ) )
+                   strcmp( topo->links[ tile->in_link_id[ tile->in_cnt-1UL ] ].name, "sign_quic" ) ) )
     FD_LOG_ERR(( "quic tile has none or unexpected input links %lu %s %s",
                  tile->in_cnt, topo->links[ tile->in_link_id[ 0 ] ].name, topo->links[ tile->in_link_id[ 1 ] ].name ));
 
@@ -547,7 +548,7 @@ unprivileged_init( fd_topo_t *      topo,
 
   /* End privileged allocs */
 
-  fd_topo_link_t * sign_in = &topo->links[ tile->in_link_id[ 1UL ] ];
+  fd_topo_link_t * sign_in = &topo->links[ tile->in_link_id[ tile->in_cnt-1UL ] ];
   fd_topo_link_t * sign_out = &topo->links[ tile->out_link_id[ 2UL ] ];
   FD_TEST( fd_keyguard_client_join( fd_keyguard_client_new( ctx->keyguard_client,
                                                             sign_out->mcache,
@@ -597,10 +598,9 @@ unprivileged_init( fd_topo_t *      topo,
 
   /* Put a bound on chunks we read from the input, to make sure they
       are within in the data region of the workspace. */
-  if( FD_UNLIKELY( !tile->in_cnt ) ) FD_LOG_ERR(( "quic tile in link cnt is zero" ));
   fd_topo_link_t * link0 = &topo->links[ tile->in_link_id[ 0 ] ];
 
-  for( ulong i=1; i<tile->in_cnt; i++ ) {
+  for( ulong i=1UL; i<tile->in_cnt; i++ ) {
     fd_topo_link_t * link = &topo->links[ tile->in_link_id[ i ] ];
 
     if( FD_UNLIKELY( !tile->in_link_poll[ i ] ) ) continue;
@@ -623,9 +623,6 @@ unprivileged_init( fd_topo_t *      topo,
   ctx->net_out_mem    = topo->workspaces[ topo->objs[ net_out->dcache_obj_id ].wksp_id ].wksp;
   ctx->net_out_wmark  = fd_dcache_compact_wmark ( ctx->net_out_mem, net_out->dcache, net_out->mtu );
   ctx->net_out_chunk  = ctx->net_out_chunk0;
-
-  if( FD_UNLIKELY( !tile->out_cnt ) )
-    FD_LOG_ERR(( "quic tile has no primary output link" ));
 
   fd_topo_link_t * verify_out = &topo->links[ tile->out_link_id[ 0 ] ];
 

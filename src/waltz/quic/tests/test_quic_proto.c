@@ -4,6 +4,29 @@
 
 /* Test the varint parser generator */
 
+void
+test_varint_min_sz( void ) {
+  for( ulong j=0UL; j<0x40UL; j++ ) {
+    FD_TEST( fd_quic_varint_min_sz( j )==1UL );
+  }
+  for( ulong j=0x40UL; j<0x4000UL; j++ ) {
+    FD_TEST( fd_quic_varint_min_sz( j )==2UL );
+  }
+  for( ulong j=0x4000UL; j<0x40000000UL; j++ ) {
+    FD_TEST( fd_quic_varint_min_sz( j )==4UL );
+  }
+  for( ulong j=0x40000000UL; j<0x50000000UL; j++ ) {
+    FD_TEST( fd_quic_varint_min_sz( j )==8UL );
+  }
+  for( ulong j=0x3fffffff00000000UL; j<=0x3fffffffffffffffUL; j++ ) {
+    FD_TEST( fd_quic_varint_min_sz( j )==8UL );
+  }
+  /* out of bounds cases */
+  FD_TEST( fd_quic_varint_min_sz( 0x40000000000000UL )==8UL );
+  FD_TEST( fd_quic_varint_min_sz( 0x80000000000000UL )==8UL );
+  FD_TEST( fd_quic_varint_min_sz( 0xffffffffffffffUL )==8UL );
+}
+
 #define VARINT_TEST()                    \
   FD_TEMPL_DEF_STRUCT_BEGIN(varint_test) \
     FD_TEMPL_MBR_ELEM_VARINT( i, ulong ) \
@@ -25,73 +48,80 @@ VARINT_TEST()
 
 static void
 test_varint_encode( void ) {
-  uchar buf1[1];
-  uchar buf2[2];
-  uchar buf4[4];
-  uchar buf8[8];
+  uchar buf[8];
   fd_quic_varint_test_t v = {0};
-  FD_TEST( fd_quic_encode_varint_test( buf1, 0, &v )==FD_QUIC_ENCODE_FAIL );
+  for( ulong j=0; j<=7; j++ ) {
+    FD_TEST( fd_quic_encode_varint_test( buf, j, &v )==FD_QUIC_ENCODE_FAIL );
+  }
 
   v.i = 0UL;
-  FD_TEST( fd_quic_encode_varint_test( buf1, 1, &v )==1UL );
-  FD_TEST( buf1[0]==0x00 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==1UL );
+  FD_TEST( buf[0]==0x00 );
 
   v.i = 1UL;
-  FD_TEST( fd_quic_encode_varint_test( buf1, 1, &v )==1UL );
-  FD_TEST( buf1[0]==0x01 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==1UL );
+  FD_TEST( buf[0]==0x01 );
 
   v.i = 63UL;
-  FD_TEST( fd_quic_encode_varint_test( buf1, 1, &v )==1UL );
-  FD_TEST( buf1[0]==0x3f );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==1UL );
+  FD_TEST( buf[0]==0x3f );
 
   v.i = 64UL;
-  FD_TEST( fd_quic_encode_varint_test( buf1, 1, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf2, 2, &v )==2UL );
-  FD_TEST( buf2[0]==0x40 && buf2[1]==0x40 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==2UL );
+  FD_LOG_HEXDUMP_NOTICE(( "buf", buf, 2 ));
+  FD_TEST( buf[0]==0x40 && buf[1]==0x40 );
 
   v.i = 0x3fffUL;
-  FD_TEST( fd_quic_encode_varint_test( buf1, 1, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf2, 2, &v )==2UL );
-  FD_TEST( buf2[0]==0x7f && buf2[1]==0xff );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==2UL );
+  FD_TEST( buf[0]==0x7f && buf[1]==0xff );
 
   v.i = 0x4000UL;
-  FD_TEST( fd_quic_encode_varint_test( buf1, 1, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf2, 2, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf4, 3, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf4, 4, &v )==4UL );
-  FD_TEST( buf4[0]==0x80 && buf4[1]==0x00 && buf4[2]==0x40 && buf4[3]==0x00 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==4UL );
+  FD_TEST( buf[0]==0x80 && buf[1]==0x00 && buf[2]==0x40 && buf[3]==0x00 );
 
   v.i = 0x807060;
-  FD_TEST( fd_quic_encode_varint_test( buf4, 4, &v )==4UL );
-  FD_TEST( buf4[0]==0x80 && buf4[1]==0x80 && buf4[2]==0x70 && buf4[3]==0x60 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==4UL );
+  FD_TEST( buf[0]==0x80 && buf[1]==0x80 && buf[2]==0x70 && buf[3]==0x60 );
 
   v.i = 0x3fffffff;
-  FD_TEST( fd_quic_encode_varint_test( buf4, 4, &v )==4UL );
-  FD_TEST( buf4[0]==0xbf && buf4[1]==0xff && buf4[2]==0xff && buf4[3]==0xff );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==4UL );
+  FD_TEST( buf[0]==0xbf && buf[1]==0xff && buf[2]==0xff && buf[3]==0xff );
 
   v.i = 0x40000000;
-  FD_TEST( fd_quic_encode_varint_test( buf4, 4, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf8, 5, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf8, 6, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf8, 7, &v )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_encode_varint_test( buf8, 8, &v )==8UL );
-  FD_TEST( buf8[0]==0xc0 && buf8[1]==0x00 && buf8[2]==0x00 && buf8[3]==0x00 &&
-           buf8[4]==0x40 && buf8[5]==0x00 && buf8[6]==0x00 && buf8[7]==0x00 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xc0 && buf[1]==0x00 && buf[2]==0x00 && buf[3]==0x00 &&
+           buf[4]==0x40 && buf[5]==0x00 && buf[6]==0x00 && buf[7]==0x00 );
 
   v.i = 0x0001020304050607UL;
-  FD_TEST( fd_quic_encode_varint_test( buf8, 8, &v )==8UL );
-  FD_TEST( buf8[0]==0xc0 && buf8[1]==0x01 && buf8[2]==0x02 && buf8[3]==0x03 &&
-           buf8[4]==0x04 && buf8[5]==0x05 && buf8[6]==0x06 && buf8[7]==0x07 );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xc0 && buf[1]==0x01 && buf[2]==0x02 && buf[3]==0x03 &&
+           buf[4]==0x04 && buf[5]==0x05 && buf[6]==0x06 && buf[7]==0x07 );
 
   v.i = 0x2fffffffffffffffUL;
-  FD_TEST( fd_quic_encode_varint_test( buf8, 8, &v )==8UL );
-  FD_TEST( buf8[0]==0xef && buf8[1]==0xff && buf8[2]==0xff && buf8[3]==0xff &&
-           buf8[4]==0xff && buf8[5]==0xff && buf8[6]==0xff && buf8[7]==0xff );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xef && buf[1]==0xff && buf[2]==0xff && buf[3]==0xff &&
+           buf[4]==0xff && buf[5]==0xff && buf[6]==0xff && buf[7]==0xff );
 
   v.i = 0x3fffffffffffffffUL;
-  FD_TEST( fd_quic_encode_varint_test( buf8, 8, &v )==8UL );
-  FD_TEST( buf8[0]==0xff && buf8[1]==0xff && buf8[2]==0xff && buf8[3]==0xff &&
-           buf8[4]==0xff && buf8[5]==0xff && buf8[6]==0xff && buf8[7]==0xff );
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xff && buf[1]==0xff && buf[2]==0xff && buf[3]==0xff &&
+           buf[4]==0xff && buf[5]==0xff && buf[6]==0xff && buf[7]==0xff );
+
+  /* Truncate oversize numbers */
+  v.i = 0x4000000000000000UL;
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xc0 && buf[1]==0x00 && buf[2]==0x00 && buf[3]==0x00 &&
+           buf[4]==0x00 && buf[5]==0x00 && buf[6]==0x00 && buf[7]==0x00 );
+
+  v.i = 0x8000000000000000UL;
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xc0 && buf[1]==0x00 && buf[2]==0x00 && buf[3]==0x00 &&
+           buf[4]==0x00 && buf[5]==0x00 && buf[6]==0x00 && buf[7]==0x00 );
+
+  v.i = 0xffffffffffffffffUL;
+  FD_TEST( fd_quic_encode_varint_test( buf, sizeof(buf), &v )==8UL );
+  FD_TEST( buf[0]==0xff && buf[1]==0xff && buf[2]==0xff && buf[3]==0xff &&
+           buf[4]==0xff && buf[5]==0xff && buf[6]==0xff && buf[7]==0xff );
 }
 
 static void
@@ -207,86 +237,6 @@ test_pktnum_parse( void ) {
   FD_TEST( fd_quic_pktnum_decode( buf, 4UL )==0x01020304 );
 }
 
-/* Test the bit field parser generator */
-
-#define BITFIELD_TEST()                                \
-  FD_TEMPL_DEF_STRUCT_BEGIN(bitfield_test)             \
-    FD_TEMPL_MBR_BITS_BEGIN()                          \
-    FD_TEMPL_MBR_ELEM_BITS     ( b7, uchar,  1       ) \
-    FD_TEMPL_MBR_ELEM_BITS     ( b6, uchar,  1       ) \
-    FD_TEMPL_MBR_ELEM_BITS     ( b4, uchar,  2       ) \
-    FD_TEMPL_MBR_ELEM_BITS     ( b2, uchar,  2       ) \
-    FD_TEMPL_MBR_ELEM_BITS_TYPE( b0, uchar,  2, 0x01 ) \
-    FD_TEMPL_MBR_BITS_END()                            \
-  FD_TEMPL_DEF_STRUCT_END(bitfield_test)
-
-#include "../templ/fd_quic_defs.h"
-BITFIELD_TEST()
-#include "../templ/fd_quic_undefs.h"
-
-#include "../templ/fd_quic_encoders.h"
-BITFIELD_TEST()
-#include "../templ/fd_quic_undefs.h"
-
-#include "../templ/fd_quic_parsers.h"
-BITFIELD_TEST()
-#include "../templ/fd_quic_undefs.h"
-
-#undef BITFIELD_TEST
-
-static void
-test_bitfield_reencode( uchar * buf ) {
-  fd_quic_bitfield_test_t b = {0};
-  FD_TEST( fd_quic_decode_bitfield_test( &b, buf, 1UL )==1UL );
-  FD_TEST( b.b0==0x01 );
-  uchar out[1];
-  FD_TEST( fd_quic_encode_bitfield_test( out, 1UL, &b )==1UL );
-  FD_TEST( out[0]==buf[0] );
-}
-
-void
-test_bitfield_encode( void ) {
-  fd_quic_bitfield_test_t b = {0};
-  uchar buf[1];
-  FD_TEST( fd_quic_encode_bitfield_test( NULL, 0UL, &b )==FD_QUIC_ENCODE_FAIL );
-  FD_TEST( fd_quic_decode_bitfield_test( &b, NULL, 0UL )==FD_QUIC_PARSE_FAIL  );
-
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b )==1UL );
-  FD_TEST( buf[0]==0x01 );
-  test_bitfield_reencode( buf );
-
-  b.b7 = 1;
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b )==1UL );
-  FD_TEST( buf[0]==0x81 );
-  test_bitfield_reencode( buf );
-  b.b7 = 0;
-
-  b.b6 = 1;
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b )==1UL );
-  FD_TEST( buf[0]==0x41 );
-  test_bitfield_reencode( buf );
-  b.b6 = 0;
-
-  b.b4 = 1;
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b )==1UL );
-  FD_TEST( buf[0]==0x11 );
-  test_bitfield_reencode( buf );
-  b.b4 = 2;
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b )==1UL );
-  FD_TEST( buf[0]==0x21 );
-  test_bitfield_reencode( buf );
-  b.b4 = 3;
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b )==1UL );
-  FD_TEST( buf[0]==0x31 );
-  test_bitfield_reencode( buf );
-  b.b4 = 0;
-
-  fd_quic_bitfield_test_t b2 = { .b2=2, .b4=1, .b6=0, .b7=1 };
-  FD_TEST( fd_quic_encode_bitfield_test( buf, 1UL, &b2 )==1UL );
-  FD_TEST( buf[0]==0x99 );
-  test_bitfield_reencode( buf );
-}
-
 /* Test crypto frame parser */
 
 uchar raw_crypto_frame[] =
@@ -362,10 +312,10 @@ main( int     argc,
       char ** argv ) {
   fd_boot( &argc, &argv );
 
+  test_varint_min_sz();
   test_varint_encode();
   test_varint_parse();
   test_pktnum_parse();
-  test_bitfield_encode();
   test_crypto_frame();
 
   FD_LOG_NOTICE(( "pass" ));

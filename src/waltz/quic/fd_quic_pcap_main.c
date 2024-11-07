@@ -310,7 +310,7 @@ quic_pcap_iter_deliver_initial(
     return;
   }
 
-  uint  pkt_number_sz = ( (uint)data[0] & 0x03u ) + 1u;
+  uint  pkt_number_sz = fd_quic_h0_pkt_num_len( data[0] ) + 1u;
   ulong pkt_number    = fd_quic_pktnum_decode( data+pnoff, pkt_number_sz );
 
   if( FD_UNLIKELY(
@@ -330,13 +330,15 @@ quic_pcap_iter_deliver_initial(
   fd_quic_crypto_frame_t crypto[1];
   rc = fd_quic_decode_crypto_frame( crypto, data, data_sz );
   if( FD_UNLIKELY( rc==FD_QUIC_PARSE_FAIL ) ) return;
+  data    += rc;
+  data_sz -= rc;
+  ulong left = fd_ulong_min( crypto->length, data_sz );
 
   /* Expect first TLS message to be a ClientHello */
 
-  if( FD_UNLIKELY( crypto->length > data_sz ) ) return;
-  if( FD_UNLIKELY( crypto->length < 6+32    ) ) return;
-  if( crypto->crypto_data[0] != 0x01 ) return; /* ClientHello */
-  uchar const * client_random = crypto->crypto_data + 6;
+  if( FD_UNLIKELY( left < 6+32 ) ) return;
+  if( data[0] != 0x01 ) return; /* ClientHello */
+  uchar const * client_random = data + 6;
   FD_LOG_HEXDUMP_WARNING(( "ClientRandom", client_random, 32 ));
 
 }
@@ -380,10 +382,10 @@ quic_pcap_iter_deliver_datagram(
   //FD_LOG_HEXDUMP_NOTICE(( "datagram", data, data_sz ));
   while( data_sz ) {
 
-    int is_long = fd_quic_extract_hdr_form( data[0] );
+    int is_long = fd_quic_h0_hdr_form( data[0] );
     if( is_long ) {
 
-      int pkt_type = fd_quic_extract_long_packet_type( data[0] );
+      int pkt_type = fd_quic_h0_long_packet_type( data[0] );
       ulong out_pkt_sz = data_sz;
       switch( pkt_type ) {
       case FD_QUIC_PKT_TYPE_INITIAL:
