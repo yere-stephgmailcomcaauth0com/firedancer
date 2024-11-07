@@ -923,7 +923,8 @@ typedef struct accounts_hash accounts_hash_t;
 #include "../../util/tmpl/fd_map_dynamic.c"
 
 static fd_pubkey_hash_pair_t *
-fd_accounts_sorted_subrange( fd_funk_t         * funk, 
+fd_accounts_sorted_subrange( fd_exec_slot_ctx_t * slot_ctx,
+                             fd_funk_t         * funk, 
                              uint                range_idx,
                              uint                range_cnt, 
                              ulong             * num_pairs_out, 
@@ -1026,7 +1027,7 @@ fd_accounts_sorted_subrange_task( void *tpool,
                                   ulong n0, ulong n1 FD_PARAM_UNUSED) {
   fd_subrange_task_info_t * task_info = (fd_subrange_task_info_t *)tpool;
   fd_pubkey_hash_pair_list_t * list = task_info->lists + m0;
-  list->pairs = fd_accounts_sorted_subrange( task_info->slot_ctx->acc_mgr->funk, (uint)m0, (uint)task_info->num_lists, &list->pairs_len, task_info->lthash_values, n0, task_info->slot_ctx->valloc );
+  list->pairs = fd_accounts_sorted_subrange( task_info->slot_ctx, task_info->slot_ctx->acc_mgr->funk, (uint)m0, (uint)task_info->num_lists, &list->pairs_len, task_info->lthash_values, n0, task_info->slot_ctx->valloc );
 }
 
 int
@@ -1038,7 +1039,7 @@ fd_accounts_hash( fd_exec_slot_ctx_t * slot_ctx, fd_tpool_t * tpool, fd_hash_t *
     fd_lthash_value_t *lthash_values = fd_valloc_malloc( slot_ctx->valloc, FD_LTHASH_VALUE_ALIGN, FD_LTHASH_VALUE_FOOTPRINT );
     fd_lthash_zero(&lthash_values[0]);
 
-    fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx->acc_mgr->funk, 0, 1, &num_pairs, lthash_values, 0, slot_ctx->valloc );
+    fd_pubkey_hash_pair_t * pairs = fd_accounts_sorted_subrange( slot_ctx, slot_ctx->acc_mgr->funk, 0, 1, &num_pairs, lthash_values, 0, slot_ctx->valloc );
     FD_TEST(NULL != pairs);
     fd_pubkey_hash_pair_list_t list1 = { .pairs = pairs, .pairs_len = num_pairs };
     fd_hash_account_deltas( &list1, 1, accounts_hash, slot_ctx );
