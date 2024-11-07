@@ -229,8 +229,9 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     ulong   sz  = blk->data_sz;
     fd_blockstore_end_read( blockstore );
 
+    FD_LOG_WARNING(("ROOT SLOT %lu", ledger_args->slot_ctx->root_slot));
 
-    if( ledger_args->slot_ctx->slot_bank.slot==ledger_args->snapshot_slot+1UL ) {
+    if( ledger_args->slot_ctx->root_slot==ledger_args->snapshot_slot ) {
 
       uchar * mem = fd_valloc_malloc( fd_scratch_virtual(), FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT );
 
@@ -244,24 +245,26 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
       };
 
-      /* TODO:FIXME: START HACK Do a funk publish and whatnot */
-      fd_funk_t *     funk = ledger_args->slot_ctx->acc_mgr->funk;
-      fd_funk_txn_t * txn  = ledger_args->slot_ctx->funk_txn;
-      fd_funk_start_write( funk );
-      ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
-      if( !publish_err ) {
-        FD_LOG_ERR(( "publish err" ));
-        return -1;
-      }
-      fd_funk_end_write( funk );
-      /* TODO:FIXME: END HACK */
+      // /* TODO:FIXME: START HACK Do a funk publish and whatnot */
+      // fd_funk_t *     funk = ledger_args->slot_ctx->acc_mgr->funk;
+      // fd_funk_txn_t * txn  = ledger_args->slot_ctx->funk_txn;
+      // fd_funk_start_write( funk );
+      // ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
+      // if( !publish_err ) {
+      //   FD_LOG_ERR(( "publish err" ));
+      //   return -1;
+      // }
+      // fd_funk_end_write( funk );
+      // /* TODO:FIXME: END HACK */
 
       int err = fd_snapshot_create_new_snapshot( &snapshot_ctx );
       if( FD_UNLIKELY( err ) ) {
         FD_LOG_ERR(( "failed to create snapshot" ));
       }
       FD_LOG_NOTICE(("Successfully produced a snapshot at directory=%s", ledger_args->snapshot_dir ));
-      return 0;
+      //return 0;
+
+      ledger_args->slot_ctx->epoch_ctx->constipate_root = 0;
     }
   
     ulong blk_txn_cnt = 0;
@@ -478,6 +481,8 @@ fd_ledger_main_setup( fd_ledger_args_t * args ) {
   fd_calculate_epoch_accounts_hash_values( args->slot_ctx );
   fd_bpf_scan_and_create_bpf_program_cache_entry( args->slot_ctx, args->slot_ctx->funk_txn );
   fd_funk_end_write( funk );
+
+  args->slot_ctx->snapshot_slot = args->snapshot_slot;
 
   /* Allocate memory for the account scratch space. In live execution, each of
      the spad allocations should be tied to its respective execution thread.

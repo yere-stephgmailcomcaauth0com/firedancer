@@ -2849,17 +2849,39 @@ fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
   uint depth = 0;
   for( fd_funk_txn_t * txn = slot_ctx->funk_txn; txn; txn = fd_funk_txn_parent(txn, txnmap) ) {
     /* TODO: tmp change */
-    if (++depth == (FD_RUNTIME_NUM_ROOT_BLOCKS - 1) ) {
+    if( ++depth == (FD_RUNTIME_NUM_ROOT_BLOCKS - 1 ) ) {
       FD_LOG_DEBUG(("publishing %s (slot %lu)", FD_BASE58_ENC_32_ALLOCA( &txn->xid ), txn->xid.ul[0]));
 
-      fd_funk_start_write(funk);
-      ulong publish_err = fd_funk_txn_publish(funk, txn, 1);
+      if( slot_ctx->status_cache && slot_ctx->epoch_ctx->constipate_root==0 ) {
+        FD_LOG_WARNING(("REGISTERING ROOT %lu", txn->xid.ul[0] ));
+        fd_txncache_register_root_slot( slot_ctx->status_cache, txn->xid.ul[0] );
+      }
+
+      fd_funk_start_write( funk );
+      ulong publish_err = 0;
+      // todo: this publish_err thing is bs...
+      if( slot_ctx->epoch_ctx->constipate_root ) {
+        fd_funk_txn_t *p = fd_funk_txn_parent( txn, txnmap );
+        if( p != NULL ) {
+          slot_ctx->root_slot = txn->xid.ul[0];
+          if( fd_funk_txn_publish_into_parent(funk, txn, 1) == FD_FUNK_SUCCESS ) {
+            publish_err = 1;
+          }
+        } else {
+          publish_err = 1;
+        }
+      } else {
+        slot_ctx->root_slot = txn->xid.ul[0];
+        publish_err = fd_funk_txn_publish(funk, txn, 1);
+        if( slot_ctx->root_slot == slot_ctx->snapshot_slot ) {
+          FD_LOG_WARNING(("CONSTIPATING"));
+          slot_ctx->epoch_ctx->constipate_root = 1;
+        }
+        FD_LOG_WARNING(("PUBLISH for slot %lu", txn->xid.ul[0]));;
+      }
       if (publish_err == 0) {
         FD_LOG_ERR(("publish err"));
         return -1;
-      }
-      if( slot_ctx->status_cache ) {
-        fd_txncache_register_root_slot( slot_ctx->status_cache, txn->xid.ul[0] );
       }
 
       fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( slot_ctx->epoch_ctx );
@@ -2893,14 +2915,10 @@ fd_runtime_block_eval_tpool( fd_exec_slot_ctx_t * slot_ctx,
                              ulong                spad_cnt ) {
   (void)scheduler;
 
-  if( slot_ctx->status_cache ) {
-    fd_txncache_register_root_slot( slot_ctx->status_cache, slot_ctx->slot_bank.slot );
+  int err = fd_runtime_publish_old_txns( slot_ctx, capture_ctx, tpool );
+  if( err != 0 ) {
+    return err;
   }
-
-  // int err = fd_runtime_publish_old_txns( slot_ctx, capture_ctx, tpool );
-  // if( err != 0 ) {
-    // return err;
-  // }
 
   fd_funk_t * funk = slot_ctx->acc_mgr->funk;
 

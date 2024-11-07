@@ -82,6 +82,9 @@ struct __attribute__((aligned(8UL))) fd_exec_slot_ctx {
   int                         enable_exec_recording; /* Enable/disable execution metadata
                                                      recording, e.g. txn logs.  Analogue
                                                      of Agave's ExecutionRecordingConfig. */
+
+  ulong                       snapshot_slot;
+  ulong                       root_slot;
 };
 
 #define FD_EXEC_SLOT_CTX_ALIGN     (alignof(fd_exec_slot_ctx_t))

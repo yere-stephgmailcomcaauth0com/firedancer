@@ -1042,7 +1042,7 @@ fd_accounts_hash( fd_funk_t          * funk,
 
   // fd_accounts_check_lthash( slot_ctx );
 
-  FD_LOG_INFO(("accounts_hash %s", FD_BASE58_ENC_32_ALLOCA( accounts_hash->hash) ));
+  FD_LOG_NOTICE(("accounts_hash %s", FD_BASE58_ENC_32_ALLOCA( accounts_hash->hash ) ));
 
   return 0;
 }
@@ -1166,7 +1166,7 @@ fd_snapshot_service_hash( fd_hash_t       * accounts_hash,
     fd_sha256_fini( &h, accounts_hash );
 
   } else {
-    fd_accounts_hash( funk, slot_bank, valloc, NULL, &hash );
+    fd_accounts_hash( funk, slot_bank, valloc, NULL, accounts_hash );
   }
 
   return 0;

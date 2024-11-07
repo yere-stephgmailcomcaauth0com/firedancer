@@ -436,6 +436,8 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
   bank->epoch                                 = fd_slot_to_epoch( &epoch_bank->epoch_schedule, bank->slot, NULL );
   bank->block_height                          = slot_bank->block_height;
 
+  FD_LOG_WARNING(("bank slot %lu", bank->slot));
+
   /* Collector id can be left as null for both clients */
 
   fd_memset( &bank->collector_id, 0, sizeof(fd_pubkey_t) );
@@ -568,7 +570,8 @@ fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
     }
 
     if( FD_UNLIKELY( snapshot_ctx->snapshot_slot>snapshot_ctx->slot_bank.slot ) ) {
-      FD_LOG_WARNING(( "Snapshot slot is greater than the current slot" ));
+      FD_LOG_WARNING(( "Snapshot slot=%lu is greater than the current slot=%lu", 
+                       snapshot_ctx->snapshot_slot, snapshot_ctx->slot_bank.slot ));
       return -1;
     }
 
