@@ -426,8 +426,8 @@ quic_stream_notify( fd_quic_stream_t * stream,
 
   /* Publish message */
 
-  uint   ip_addr  = stream->conn->peer[stream->conn->cur_peer_idx].net.ip_addr;
-  ushort udp_port = stream->conn->peer[stream->conn->cur_peer_idx].net.udp_port;
+  uint   ip_addr  = stream->conn->peer[0].ip_addr;
+  ushort udp_port = stream->conn->peer[0].udp_port;
   ulong  sig      = fd_disco_tpu_sig( ip_addr, fd_ushort_bswap( udp_port ), DST_PROTO_TPU_QUIC );
 
   ulong  seq   = stem->seqs[0];
