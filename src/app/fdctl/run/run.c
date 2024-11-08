@@ -537,7 +537,7 @@ fdctl_obj_new( fd_topo_t const *     topo,
   } else if( FD_UNLIKELY( !strcmp( obj->name, "funk" ) ) ) {
     fd_funk_new( laddr, VAL("wksp_tag"), VAL("seed"), VAL("txn_max"), VAL("rec_max") );
   } else if( FD_UNLIKELY( !strcmp( obj->name, "txncache" ) ) ) {
-    fd_txncache_new( laddr, VAL("max_rooted_slots"), VAL("max_live_slots"), VAL("max_txn_per_slot") );
+    fd_txncache_new( laddr, VAL("max_rooted_slots"), VAL("max_live_slots"), VAL("max_txn_per_slot"), 0UL );
   } else {
     FD_LOG_ERR(( "unknown object `%s`", obj->name ));
   }

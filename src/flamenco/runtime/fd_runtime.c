@@ -6,6 +6,7 @@
 #include "fd_executor.h"
 #include "fd_account.h"
 #include "fd_hashes.h"
+#include "fd_txncache.h"
 #include "sysvar/fd_sysvar_cache.h"
 #include "sysvar/fd_sysvar_clock.h"
 #include "sysvar/fd_sysvar_epoch_schedule.h"
@@ -2855,6 +2856,9 @@ fd_runtime_publish_old_txns( fd_exec_slot_ctx_t * slot_ctx,
       if( slot_ctx->status_cache && slot_ctx->epoch_ctx->constipate_root==0 ) {
         FD_LOG_WARNING(("REGISTERING ROOT %lu", txn->xid.ul[0] ));
         fd_txncache_register_root_slot( slot_ctx->status_cache, txn->xid.ul[0] );
+      } else if( slot_ctx->status_cache ) {
+        FD_LOG_WARNING(("CONSTIPATING ROOT %lu", txn->xid.ul[0] ));
+        fd_txncache_register_constipated_slot( slot_ctx->status_cache, txn->xid.ul[0] );
       }
 
       fd_funk_start_write( funk );
