@@ -2401,7 +2401,7 @@ fd_quic_aio_cb_receive( void *                    context,
   fd_quic_t *       quic  = (fd_quic_t*)context;
   fd_quic_state_t * state = fd_quic_get_state( quic );
 
-  state->now = fd_quic_now( quic );
+  ulong now = state->now = fd_quic_now( quic );
 
   FD_DEBUG(
     static ulong t0 = 0;
@@ -2433,6 +2433,11 @@ fd_quic_aio_cb_receive( void *                    context,
       FD_LOG_WARNING(( "CALLBACK - took %lu  t0: %lu  t1: %lu  batch_cnt: %lu", delta, t0, t1, (ulong)batch_cnt ));
     }
   )
+
+  ulong after = fd_quic_now( quic );
+  ulong delta = after - now;
+
+  fd_histf_sample( quic->metrics.receive_duration, delta );
 
   return FD_AIO_SUCCESS;
 }
@@ -2828,6 +2833,12 @@ fd_quic_service( fd_quic_t * quic ) {
   cnt += fd_quic_svc_poll_tail( quic, FD_QUIC_SVC_INSTANT, now );
   cnt += fd_quic_svc_poll_head( quic, FD_QUIC_SVC_ACK_TX,  now );
   cnt += fd_quic_svc_poll_head( quic, FD_QUIC_SVC_WAIT,    now );
+
+  ulong after = fd_quic_now( quic );
+  ulong delta = after - now;
+
+  fd_histf_sample( quic->metrics.service_duration, delta );
+
   return cnt;
 }
 
