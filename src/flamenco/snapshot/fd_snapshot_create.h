@@ -39,8 +39,8 @@ FD_PROTOTYPES_BEGIN
   NOTE: The snapshot service will currently not correctly free memory that is
         allocated unless a bump allocator like fd_scratch or fd_spad are used. */
 struct fd_snapshot_ctx {
-  ulong             snapshot_slot;
-  char const *      snapshot_dir;
+  ulong             slot;
+  char const *      out_dir;
   uchar             is_incremental;
   fd_tar_writer_t * writer;
   fd_valloc_t       valloc;

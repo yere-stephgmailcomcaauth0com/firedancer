@@ -41,7 +41,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
                                                                   FD_SNAPSHOT_SLOT_ACC_VECS_ALIGN,
                                                                   sizeof(fd_snapshot_slot_acc_vecs_t) * accounts_db->storages_len );
   accounts_db->version                        = 1UL;
-  accounts_db->slot                           = snapshot_ctx->snapshot_slot;
+  accounts_db->slot                           = snapshot_ctx->slot;
   accounts_db->historical_roots_len           = 0UL;
   accounts_db->historical_roots               = NULL;
   accounts_db->historical_roots_with_hash_len = 0UL;
@@ -55,7 +55,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
                                                                        sizeof(fd_snapshot_acc_vec_t) * accounts_db->storages[0].account_vecs_len );
   accounts_db->storages[0].account_vecs[0].file_sz = 0UL;
   accounts_db->storages[0].account_vecs[0].id      = 1UL;
-  accounts_db->storages[0].slot                    = snapshot_ctx->snapshot_slot - 1UL;
+  accounts_db->storages[0].slot                    = snapshot_ctx->slot - 1UL;
 
   accounts_db->storages[1].account_vecs_len        = 1UL;
   accounts_db->storages[1].account_vecs            = fd_valloc_malloc( snapshot_ctx->valloc,
@@ -63,7 +63,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
                                                                        sizeof(fd_snapshot_acc_vec_t) * accounts_db->storages[1].account_vecs_len );
   accounts_db->storages[1].account_vecs[0].file_sz = 0UL;
   accounts_db->storages[1].account_vecs[0].id      = 2UL;
-  accounts_db->storages[1].slot                    = snapshot_ctx->snapshot_slot; /* All accounts in the snapshot slot */
+  accounts_db->storages[1].slot                    = snapshot_ctx->slot; /* All accounts in the snapshot slot */
 
   /* Populate the snapshot hash into the accounts db. */
 
@@ -88,7 +88,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
   ulong manifest_sz = fd_solana_manifest_serializable_size( manifest ); 
 
   char buffer[ FD_SNAPSHOT_DIR_MAX ];
-  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "snapshots/%lu/%lu", snapshot_ctx->snapshot_slot, snapshot_ctx->snapshot_slot );
+  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "snapshots/%lu/%lu", snapshot_ctx->slot, snapshot_ctx->slot );
   if( FD_UNLIKELY( err<0 ) ) {
     FD_LOG_WARNING(( "Unable to format manifest name string" ));
     return -1;
@@ -116,7 +116,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
   fd_funk_t *             funk      = snapshot_ctx->acc_mgr->funk;
   fd_snapshot_acc_vec_t * prev_accs = &accounts_db->storages[0].account_vecs[0];
 
-  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot - 1UL, prev_accs->id );
+  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->slot - 1UL, prev_accs->id );
   if( FD_UNLIKELY( err<0 ) ) {
     FD_LOG_WARNING(( "Unable to format previous accounts name string" ));
     return -1;
@@ -153,7 +153,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
        a different append vec so that Agave can calculate the snapshot slot's
        bank hash. */
 
-    if( metadata->slot==snapshot_ctx->snapshot_slot ) {
+    if( metadata->slot==snapshot_ctx->slot ) {
       snapshot_slot_keys[ snapshot_slot_key_cnt++ ] = (fd_pubkey_t *)pubkey;
       continue;
     }
@@ -197,7 +197,7 @@ fd_snapshot_create_populate_acc_vecs( fd_snapshot_ctx_t                 * snapsh
 
   /* Snapshot slot */
   fd_snapshot_acc_vec_t * curr_accs = &accounts_db->storages[1].account_vecs[0];
-  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->snapshot_slot, curr_accs->id );
+  err = snprintf( buffer, FD_SNAPSHOT_DIR_MAX, "accounts/%lu.%lu", snapshot_ctx->slot, curr_accs->id );
   if( FD_UNLIKELY( err<0 ) ) {
     FD_LOG_WARNING(( "Unable to format current accounts name string" ));
     return -1;
@@ -409,7 +409,7 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
      a slot finishes executing and the slot value is incremented. 
      TODO: This will not always be correct and should be fixed. */
 
-  bank->parent_slot                           = snapshot_ctx->snapshot_slot - 1UL;
+  bank->parent_slot                           = snapshot_ctx->slot - 1UL;
 
   /* Hard forks can be omitted as it is not needed to boot off of both clients */
 
@@ -432,7 +432,7 @@ fd_snapshot_create_populate_bank( fd_snapshot_ctx_t *                snapshot_ct
 
   bank->accounts_data_len                     = 0UL;
 
-  bank->slot                                  = snapshot_ctx->snapshot_slot;
+  bank->slot                                  = snapshot_ctx->slot;
   bank->epoch                                 = fd_slot_to_epoch( &epoch_bank->epoch_schedule, bank->slot, NULL );
   bank->block_height                          = slot_bank->block_height;
 
@@ -566,14 +566,14 @@ fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
 
   /* Validate that the snapshot context is setup correctly */
 
-  if( FD_UNLIKELY( !snapshot_ctx->snapshot_dir ) ) {
+  if( FD_UNLIKELY( !snapshot_ctx->out_dir ) ) {
     FD_LOG_WARNING(( "Snapshot directory is not set" ));
     return -1;
   }
 
-  if( FD_UNLIKELY( snapshot_ctx->snapshot_slot>snapshot_ctx->slot_bank.slot ) ) {
+  if( FD_UNLIKELY( snapshot_ctx->slot>snapshot_ctx->slot_bank.slot ) ) {
     FD_LOG_WARNING(( "Snapshot slot=%lu is greater than the current slot=%lu", 
-                      snapshot_ctx->snapshot_slot, snapshot_ctx->slot_bank.slot ));
+                      snapshot_ctx->slot, snapshot_ctx->slot_bank.slot ));
     return -1;
   }
 
@@ -589,7 +589,7 @@ fd_snapshot_create_setup_writer( fd_snapshot_ctx_t * snapshot_ctx ) {
      written to when the snapshot account hash is recalculated.
      TODO: This temporary file should be made harder to access by an operator. */
   char directory_buf[ FD_SNAPSHOT_DIR_MAX ];
-  int err = snprintf( directory_buf, FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir );
+  int err = snprintf( directory_buf, FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->out_dir );
   if( FD_UNLIKELY( err<0 ) ) {
     FD_LOG_WARNING(( "Failed to format directory string" ));
     return -1;
@@ -750,14 +750,14 @@ fd_snapshot_create_compress( fd_snapshot_ctx_t * snapshot_ctx ) {
 
   char directory_buf_og  [ FD_SNAPSHOT_DIR_MAX ];
   char directory_buf_zstd[ FD_SNAPSHOT_DIR_MAX ];
-  int err = snprintf( directory_buf_og,  FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->snapshot_dir);
+  int err = snprintf( directory_buf_og,  FD_SNAPSHOT_DIR_MAX, "%s/tmp.tar", snapshot_ctx->out_dir);
   if( FD_UNLIKELY( err<0 ) ) {
     FD_LOG_WARNING(( "Failed to format directory string" ));
     return -1;
   }
 
   err = snprintf( directory_buf_zstd, FD_SNAPSHOT_DIR_MAX, "%s/snapshot-%lu-%s.tar.zst", 
-                  snapshot_ctx->snapshot_dir, snapshot_ctx->snapshot_slot, FD_BASE58_ENC_32_ALLOCA(&snapshot_ctx->hash) );
+                  snapshot_ctx->out_dir, snapshot_ctx->slot, FD_BASE58_ENC_32_ALLOCA(&snapshot_ctx->hash) );
   if( FD_UNLIKELY( err<0 ) ) {
     FD_LOG_WARNING(( "Failed to format directory string" ));
     return -1;
@@ -895,7 +895,7 @@ fd_snapshot_create_new_snapshot( fd_snapshot_ctx_t * snapshot_ctx ) {
 
   FD_SCRATCH_SCOPE_BEGIN {
 
-  FD_LOG_NOTICE(( "Starting to produce a snapshot for slot=%lu in directory=%s", snapshot_ctx->snapshot_slot, snapshot_ctx->snapshot_dir ));
+  FD_LOG_NOTICE(( "Starting to produce a snapshot for slot=%lu in directory=%s", snapshot_ctx->slot, snapshot_ctx->out_dir ));
 
   int err = 0;
 

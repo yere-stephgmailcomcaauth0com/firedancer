@@ -96,8 +96,7 @@ struct fd_ledger_args {
   uint                  one_off_features_cnt;    /* Number of one off features */
   ulong                 snapshot_slot;           /* Slot to create a snapshot at */
   char const *          snapshot_dir;            /* Directory to create a snapshot in */
-  ulong                 snapshot_threads;        /* Number of threads to use for snapshot creation */
-
+  ulong                 snapshot_tcnt;           /* Number of threads to use for snapshot creation */
 
   /* These values are setup before replay */
   fd_capture_ctx_t *    capture_ctx;             /* capture_ctx is used in runtime_replay for various debugging tasks */
@@ -111,26 +110,25 @@ struct fd_ledger_args {
   ulong                 spad_cnt;                /* number of scratchpads, bounded by number of threads */
   fd_tpool_t *          snapshot_tpool;          /* thread pool for snapshot creation */
 
-
   char const *      lthash;
 };
 typedef struct fd_ledger_args fd_ledger_args_t;
 
 /* Snapshot *******************************************************************/
 
-static void FD_FN_UNUSED
-fd_exec_task( void FD_PARAM_UNUSED *tpool,
-              ulong t0 FD_PARAM_UNUSED, ulong t1 FD_PARAM_UNUSED,
-              void *args FD_PARAM_UNUSED,
-              void *reduce FD_PARAM_UNUSED, ulong stride FD_PARAM_UNUSED,
-              ulong l0 FD_PARAM_UNUSED, ulong l1 FD_PARAM_UNUSED,
-              ulong m0 FD_PARAM_UNUSED, ulong m1 FD_PARAM_UNUSED,
-              ulong n0 FD_PARAM_UNUSED, ulong n1 FD_PARAM_UNUSED ) {
-  
-  FD_LOG_WARNING(("TRYING TO CREATE A SNAPSHOT"));
+static void
+fd_create_snapshot_task( void FD_PARAM_UNUSED *tpool,
+                         ulong t0 FD_PARAM_UNUSED, ulong t1 FD_PARAM_UNUSED,
+                         void *args FD_PARAM_UNUSED,
+                         void *reduce FD_PARAM_UNUSED, ulong stride FD_PARAM_UNUSED,
+                         ulong l0 FD_PARAM_UNUSED, ulong l1 FD_PARAM_UNUSED,
+                         ulong m0 FD_PARAM_UNUSED, ulong m1 FD_PARAM_UNUSED,
+                         ulong n0 FD_PARAM_UNUSED, ulong n1 FD_PARAM_UNUSED ) {
 
   fd_snapshot_ctx_t * snapshot_ctx = (fd_snapshot_ctx_t *)t0;
   fd_ledger_args_t * ledger_args = (fd_ledger_args_t *)t1;
+
+  FD_LOG_WARNING(("Starting snapshot creation at slot=%lu", snapshot_ctx->slot));
 
   int err = fd_snapshot_create_new_snapshot( snapshot_ctx );
   if( FD_UNLIKELY( err ) ) {
@@ -148,7 +146,7 @@ fd_exec_task( void FD_PARAM_UNUSED *tpool,
 static int
 init_tpool( fd_ledger_args_t * ledger_args ) {
 
-  ulong snapshot_tcnt = ledger_args->snapshot_slot != ULONG_MAX ? ledger_args->snapshot_threads : 0UL;
+  ulong snapshot_tcnt = ledger_args->snapshot_slot != ULONG_MAX ? ledger_args->snapshot_tcnt : 0UL;
 
   ulong tcnt = fd_tile_cnt() - snapshot_tcnt;
   uchar * tpool_scr_mem = NULL;
@@ -173,8 +171,7 @@ init_tpool( fd_ledger_args_t * ledger_args ) {
     }
   }
 
-  FD_LOG_WARNING(("STUFF HERE"));
-
+  /* If a snapshot is being created, setup its own tpool. */
 
   if( !snapshot_tcnt ) {
     return 0;
@@ -184,12 +181,9 @@ init_tpool( fd_ledger_args_t * ledger_args ) {
   fd_tpool_t * snapshot_tpool = fd_tpool_init( ledger_args->tpool_mem_two, snapshot_tcnt );
   ulong        scratch_sz     = fd_scratch_smem_footprint( 256UL<<23UL );
   tpool_scr_mem               = fd_valloc_malloc( ledger_args->slot_ctx->valloc, FD_SCRATCH_SMEM_ALIGN, scratch_sz );
-  for( ulong i=1UL; i <snapshot_tcnt; ++i ) {
-    if( fd_tpool_worker_push( snapshot_tpool, fd_tile_cnt() - 1, tpool_scr_mem, scratch_sz ) == NULL ) {
+  for( ulong i=1UL; i<snapshot_tcnt; ++i ) {
+    if( FD_UNLIKELY( !fd_tpool_worker_push( snapshot_tpool, fd_tile_cnt() - 1, tpool_scr_mem, scratch_sz ) ) ) {
       FD_LOG_ERR(( "failed to launch worker" ));
-    }
-    else {
-      FD_LOG_NOTICE(( "launched snapshot worker" ));
     }
   }
 
@@ -288,30 +282,26 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
     ulong   sz  = blk->data_sz;
     fd_blockstore_end_read( blockstore );
 
-    FD_LOG_WARNING(("ROOT SLOT %lu", ledger_args->slot_ctx->root_slot));
-
     if( ledger_args->slot_ctx->root_slot==ledger_args->snapshot_slot && !is_snapshotting ) {
+
       uchar * mem = fd_valloc_malloc( fd_scratch_virtual(), FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT );
 
       is_snapshotting = 1;
 
       fd_snapshot_ctx_t snapshot_ctx = {
-        .snapshot_slot  = ledger_args->snapshot_slot,
-        .snapshot_dir   = ledger_args->snapshot_dir,
+        .slot           = ledger_args->snapshot_slot,
+        .out_dir        = ledger_args->snapshot_dir,
         .is_incremental = 0,
         .valloc         = fd_scratch_virtual(),
         .acc_mgr        = fd_acc_mgr_new( mem, ledger_args->slot_ctx->acc_mgr->funk ),
         .status_cache   = ledger_args->slot_ctx->status_cache,
-
       };
-
-      FD_LOG_WARNING(("TRYING TO EXEC TASK TRY 1"));
 
       /* TODO: currently the snapshot tpool isn't fully being utilized. Only
                the thread used to actually create the snapshto is used. Other
                threads could be used to speed up the hashing. */
 
-      fd_tpool_exec( ledger_args->snapshot_tpool, 1UL, fd_exec_task, NULL, 
+      fd_tpool_exec( ledger_args->snapshot_tpool, 1UL, fd_create_snapshot_task, NULL, 
                      (ulong)&snapshot_ctx, (ulong)ledger_args, 0UL, NULL, 
                      0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL );
 
@@ -1476,7 +1466,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   char const * lthash                  = fd_env_strip_cmdline_cstr ( &argc, &argv, "--lthash",                  NULL, "false"   );
   ulong        snapshot_slot           = fd_env_strip_cmdline_ulong( &argc, &argv, "--snapshot-slot",           NULL, ULONG_MAX );
   char const * snapshot_dir            = fd_env_strip_cmdline_cstr ( &argc, &argv, "--snapshot-dir",            NULL, NULL      );
-  ulong        snapshot_threads        = fd_env_strip_cmdline_ulong( &argc, &argv, "--snapshot-threads",        NULL, 2UL       );
+  ulong        snapshot_tcnt           = fd_env_strip_cmdline_ulong( &argc, &argv, "--snapshot-tcnt",           NULL, 2UL       );
 
   // TODO: Add argument validation. Make sure that we aren't including any arguments that aren't parsed for
 
@@ -1575,7 +1565,7 @@ initial_setup( int argc, char ** argv, fd_ledger_args_t * args ) {
   args->one_off_features_cnt    = 0UL;
   args->snapshot_slot           = snapshot_slot;
   args->snapshot_dir            = snapshot_dir;
-  args->snapshot_threads        = snapshot_threads;
+  args->snapshot_tcnt           = snapshot_tcnt;
   parse_one_off_features( args, one_off_features );
   parse_rocksdb_list( args, rocksdb_list, rocksdb_list_starts );
 
