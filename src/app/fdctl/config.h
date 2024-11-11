@@ -282,6 +282,7 @@ typedef struct {
       char  status_cache[ PATH_MAX ];
       ulong tpool_thread_count;
       char  cluster_version[ 32 ];
+      ulong snapshot_interval;
     } replay;
 
     struct {
@@ -290,6 +291,11 @@ typedef struct {
       char  shred_cap_archive[ PATH_MAX ];
       char  shred_cap_replay[ PATH_MAX ];
     } store_int;
+
+    struct {
+      ulong interval;
+      char  out_dir[ PATH_MAX ];
+    } snapshot;
 
   } tiles;
 } config_t;

@@ -107,6 +107,7 @@ fd_topo_initialize( config_t * config ) {
   fd_topob_wksp( topo, "store_replay" );
   fd_topob_wksp( topo, "replay_poh"   );
   fd_topob_wksp( topo, "replay_notif" );
+  fd_topob_wksp( topo, "replay_snaps" );
   fd_topob_wksp( topo, "bank_busy"    );
   fd_topob_wksp( topo, "root_slot"    );
   fd_topob_wksp( topo, "pack_replay"  );
@@ -136,6 +137,7 @@ fd_topo_initialize( config_t * config ) {
   fd_topob_wksp( topo, "voter"      );
   fd_topob_wksp( topo, "poh_slot"   );
   fd_topob_wksp( topo, "eqvoc"      );
+  fd_topob_wksp( topo, "snaps"      );
 
   if( enable_rpc ) fd_topob_wksp( topo, "rpcsrv" );
 
@@ -184,7 +186,7 @@ fd_topo_initialize( config_t * config ) {
   /**/                 fd_topob_link( topo, "pack_replay",  "pack_replay",  0,        65536UL,                                  USHORT_MAX,                    1UL   );
   /**/                 fd_topob_link( topo, "poh_pack",     "replay_poh",   0,        128UL,                                    sizeof(fd_became_leader_t) ,   1UL   );
   /**/                 fd_topob_link( topo, "poh_replay",   "poh_replay",   0,        128UL,                                    USHORT_MAX,                    1UL   ); /* TODO: not properly sized yet */
-
+  /**/                 fd_topob_link( topo, "replay_snaps", "replay_snaps", 0,        128UL,                                    2048UL,                        1UL   );
   /**/                 fd_topob_link( topo, "replay_voter", "replay_voter", 0,        128UL,                                    FD_TPU_DCACHE_MTU,             1UL   );
   /**/                 fd_topob_link( topo, "voter_gossip", "voter_gossip", 0,        128UL,                                    FD_TXN_MTU,                    1UL   );
   /**/                 fd_topob_link( topo, "voter_sign",   "voter_sign",   0,        128UL,                                    FD_TXN_MTU,                    1UL   );
@@ -231,6 +233,7 @@ fd_topo_initialize( config_t * config ) {
   /**/                             fd_topob_tile( topo, "bhole",   "bhole",   "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
   /**/                             fd_topob_tile( topo, "eqvoc",   "eqvoc",   "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
 
+  /**/                             fd_topob_tile( topo, "snaps",   "snaps",   "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
   /**/                             fd_topob_tile( topo, "replay",  "replay",  "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
   /* These thread tiles must be defined immediately after the replay tile.  We subtract one because the replay tile acts as a thread in the tpool as well. */
   FOR(replay_tpool_thread_count-1) fd_topob_tile( topo, "thread",  "thread",  "metric_in",  tile_to_cpu[ topo->tile_cnt ], 0 );
@@ -239,6 +242,7 @@ fd_topo_initialize( config_t * config ) {
   fd_topo_tile_t * store_tile  = &topo->tiles[ fd_topo_find_tile( topo, "storei", 0UL ) ];
   fd_topo_tile_t * replay_tile = &topo->tiles[ fd_topo_find_tile( topo, "replay", 0UL ) ];
   fd_topo_tile_t * repair_tile = &topo->tiles[ fd_topo_find_tile( topo, "repair", 0UL ) ];
+  fd_topo_tile_t * snaps_tile  = &topo->tiles[ fd_topo_find_tile( topo, "snaps",  0UL ) ];
 
   /* Create a shared blockstore to be used by store and replay. */
   fd_topo_obj_t * blockstore_obj = setup_topo_blockstore( topo, "bstore", FD_BUF_SHRED_MAP_MAX, FD_BLOCK_MAX, FD_TXN_MAP_LG_MAX, ( config->rpc.extended_tx_metadata_storage ? 128UL : 64UL ) * FD_SHMEM_GIGANTIC_PAGE_SZ );
@@ -250,11 +254,18 @@ fd_topo_initialize( config_t * config ) {
     fd_topob_tile_uses( topo, rpcserv_tile, blockstore_obj, FD_SHMEM_JOIN_MODE_READ_ONLY );
   }
 
+  /* Create a shared funk to be used by replay and snapshot. */
+  // TODO:FIXME: fd_tobo_obj_t * funk_obj = setup_topo_funk( topo, "funk", FD_FUNK_MAX, FD_FUNK_MAX )
+  fd_topo_obj_t * funk_obj = NULL;
+  fd_topob_tile_uses( topo, replay_tile, funk_obj, FD_SHMEM_JOIN_MODE_READ_WRITE );
+  fd_topob_tile_uses( topo, snaps_tile,  funk_obj, FD_SHMEM_JOIN_MODE_READ_ONLY );
+
   FD_TEST( fd_pod_insertf_ulong( topo->props, blockstore_obj->id, "blockstore" ) );
 
   /* Create a txncache to be used by replay. */
   fd_topo_obj_t * txncache_obj = setup_topo_txncache( topo, "tcache", FD_TXNCACHE_DEFAULT_MAX_ROOTED_SLOTS, FD_TXNCACHE_DEFAULT_MAX_LIVE_SLOTS, MAX_CACHE_TXNS_PER_SLOT );
   fd_topob_tile_uses( topo, replay_tile, txncache_obj, FD_SHMEM_JOIN_MODE_READ_WRITE );
+  fd_topob_tile_uses( topo, snaps_tile, txncache_obj, FD_SHMEM_JOIN_MODE_READ_WRITE );
 
   FD_TEST( fd_pod_insertf_ulong( topo->props, txncache_obj->id, "txncache" ) );
 
@@ -273,11 +284,12 @@ fd_topo_initialize( config_t * config ) {
   fd_topob_tile_uses( topo, poh_tile, poh_shred_obj, FD_SHMEM_JOIN_MODE_READ_WRITE );
   fd_topob_tile_uses( topo, store_tile, poh_shred_obj, FD_SHMEM_JOIN_MODE_READ_ONLY );
 
-  /* This fseq maintains the node's currernt root slot for the purposes of
+  /* This fseq maintains the node's current root slot for the purposes of
      syncing across tiles and shared data structures. */
   fd_topo_obj_t * root_slot_obj = fd_topob_obj( topo, "fseq", "root_slot" );
   fd_topob_tile_uses( topo, replay_tile, root_slot_obj, FD_SHMEM_JOIN_MODE_READ_WRITE );
   fd_topob_tile_uses( topo, store_tile,  root_slot_obj, FD_SHMEM_JOIN_MODE_READ_ONLY  );
+  fd_topob_tile_uses( topo, snaps_tile,  root_slot_obj, FD_SHMEM_JOIN_MODE_READ_ONLY  );
   FD_TEST( fd_pod_insertf_ulong( topo->props, root_slot_obj->id, "root_slot" ) );
 
   for( ulong i=0UL; i<shred_tile_cnt; i++ ) {

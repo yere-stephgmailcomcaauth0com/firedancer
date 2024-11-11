@@ -333,6 +333,11 @@ typedef struct {
       uint    tpu_ip_addr;
       char    identity_key_path[ PATH_MAX ];
     } rpcserv;
+
+    struct {
+      ulong slot;
+      char  out_dir[ PATH_MAX ];
+    } snaps;
   };
 } fd_topo_tile_t;
 

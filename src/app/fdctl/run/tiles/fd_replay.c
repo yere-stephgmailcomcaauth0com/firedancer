@@ -545,7 +545,8 @@ funk_publish( fd_replay_tile_ctx_t * ctx, ulong smr ) {
 
   fd_epoch_bank_t * epoch_bank = fd_exec_epoch_ctx_epoch_bank( ctx->slot_ctx->epoch_ctx );
   if( smr >= epoch_bank->eah_start_slot ) {
-    fd_accounts_hash( ctx->slot_ctx, ctx->tpool, &ctx->slot_ctx->slot_bank.epoch_account_hash );
+    fd_accounts_hash( ctx->slot_ctx->acc_mgr->funk, &ctx->slot_ctx->slot_bank,
+                      ctx->slot_ctx->valloc, ctx->tpool, &ctx->slot_ctx->slot_bank.epoch_account_hash );
     epoch_bank->eah_start_slot = FD_SLOT_NULL;
   }
 
@@ -1613,7 +1614,9 @@ unprivileged_init( fd_topo_t *      topo,
     if (status_cache_mem == NULL) {
       FD_LOG_ERR(( "failed to allocate status cache" ));
     }
-    ctx->status_cache = fd_txncache_join( fd_txncache_new( status_cache_mem, FD_TXNCACHE_DEFAULT_MAX_ROOTED_SLOTS, FD_TXNCACHE_DEFAULT_MAX_LIVE_SLOTS, MAX_CACHE_TXNS_PER_SLOT ) );
+    ctx->status_cache = fd_txncache_join( fd_txncache_new( status_cache_mem, FD_TXNCACHE_DEFAULT_MAX_ROOTED_SLOTS,
+                                                           FD_TXNCACHE_DEFAULT_MAX_LIVE_SLOTS, MAX_CACHE_TXNS_PER_SLOT,
+                                                           FD_TXNCACHE_DEFAULT_MAX_CONSTIPATED_SLOTS ) );
     if (ctx->status_cache == NULL) {
       fd_wksp_free_laddr(status_cache_mem);
       FD_LOG_ERR(( "failed to join + new status cache" ));
