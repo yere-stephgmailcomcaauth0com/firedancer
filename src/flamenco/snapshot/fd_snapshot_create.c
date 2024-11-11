@@ -497,7 +497,7 @@ fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
   /* First the epoch bank. */
 
   fd_funk_rec_key_t     epoch_id  = fd_runtime_epoch_bank_key();
-  fd_funk_rec_t const * epoch_rec = fd_funk_rec_query_global( funk, NULL, &epoch_id, NULL );
+  fd_funk_rec_t const * epoch_rec = fd_funk_rec_query( funk, NULL, &epoch_id );
   if( FD_UNLIKELY( !epoch_rec ) ) {
     FD_LOG_WARNING(( "Failed to read epoch bank record: missing record" ));
     return -1;
@@ -508,6 +508,8 @@ fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
     FD_LOG_WARNING(( "Failed to read epoch bank record: empty record" ));
     return -1;
   }
+
+  FD_LOG_WARNING(("EPOCH BANK SIZE %lu", fd_funk_val_sz( epoch_rec )));
 
   uint epoch_magic = *(uint*)epoch_val;
 
@@ -528,7 +530,7 @@ fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
     return -1;
   }
 
-  /* Now the slot bank/ */
+  /* Now the slot bank */
 
   fd_funk_rec_key_t     slot_id  = fd_runtime_slot_bank_key();
   fd_funk_rec_t const * slot_rec = fd_funk_rec_query_global( funk, NULL, &slot_id, NULL );
@@ -561,23 +563,23 @@ fd_snapshot_create_setup_and_validate_ctx( fd_snapshot_ctx_t * snapshot_ctx ) {
     FD_LOG_WARNING(( "Failed to decode slot bank" ));
     return -1;
   }
-  
-    /* Validate that the snapshot context is setup correctly */
-  
-    if( FD_UNLIKELY( !snapshot_ctx->snapshot_dir ) ) {
-      FD_LOG_WARNING(( "Snapshot directory is not set" ));
-      return -1;
-    }
 
-    if( FD_UNLIKELY( snapshot_ctx->snapshot_slot>snapshot_ctx->slot_bank.slot ) ) {
-      FD_LOG_WARNING(( "Snapshot slot=%lu is greater than the current slot=%lu", 
-                       snapshot_ctx->snapshot_slot, snapshot_ctx->slot_bank.slot ));
-      return -1;
-    }
+  /* Validate that the snapshot context is setup correctly */
 
-    /* TODO: Fill out other things to validate here. */
-  
-    return 0;
+  if( FD_UNLIKELY( !snapshot_ctx->snapshot_dir ) ) {
+    FD_LOG_WARNING(( "Snapshot directory is not set" ));
+    return -1;
+  }
+
+  if( FD_UNLIKELY( snapshot_ctx->snapshot_slot>snapshot_ctx->slot_bank.slot ) ) {
+    FD_LOG_WARNING(( "Snapshot slot=%lu is greater than the current slot=%lu", 
+                      snapshot_ctx->snapshot_slot, snapshot_ctx->slot_bank.slot ));
+    return -1;
+  }
+
+  /* TODO: Fill out other things to validate here. */
+
+  return 0;
 }
 
 static inline int

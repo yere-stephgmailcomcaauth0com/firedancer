@@ -105,17 +105,47 @@ struct fd_ledger_args {
   fd_exec_epoch_ctx_t * epoch_ctx;               /* epoch_ctx */
   fd_tpool_t *          tpool;                   /* thread pool for execution */
   uchar                 tpool_mem[FD_TPOOL_FOOTPRINT( FD_TILE_MAX )] __attribute__( ( aligned( FD_TPOOL_ALIGN ) ) );
+  uchar                 tpool_mem_two[FD_TPOOL_FOOTPRINT( FD_TILE_MAX )] __attribute__( ( aligned( FD_TPOOL_ALIGN ) ) );
   fd_spad_t *           spads[ 128UL ];          /* scratchpad allocators that are eventually assigned to each txn_ctx */
   ulong                 spad_cnt;                /* number of scratchpads, bounded by number of threads */
+  fd_tpool_t *          snapshot_tpool;          /* thread pool for snapshot creation */
 
   char const *      lthash;
 };
 typedef struct fd_ledger_args fd_ledger_args_t;
 
+/* Snapshot *******************************************************************/
+
+static void FD_FN_UNUSED
+fd_exec_task( void FD_PARAM_UNUSED *tpool,
+              ulong t0 FD_PARAM_UNUSED, ulong t1 FD_PARAM_UNUSED,
+              void *args FD_PARAM_UNUSED,
+              void *reduce FD_PARAM_UNUSED, ulong stride FD_PARAM_UNUSED,
+              ulong l0 FD_PARAM_UNUSED, ulong l1 FD_PARAM_UNUSED,
+              ulong m0 FD_PARAM_UNUSED, ulong m1 FD_PARAM_UNUSED,
+              ulong n0 FD_PARAM_UNUSED, ulong n1 FD_PARAM_UNUSED ) {
+  
+  FD_LOG_WARNING(("TRYING TO CREATE A SNAPSHOT"));
+
+  fd_snapshot_ctx_t * snapshot_ctx = (fd_snapshot_ctx_t *)t0;
+  fd_ledger_args_t * ledger_args = (fd_ledger_args_t *)t1;
+
+  int err = fd_snapshot_create_new_snapshot( snapshot_ctx );
+  if( FD_UNLIKELY( err ) ) {
+    FD_LOG_ERR(( "failed to create snapshot" ));
+  }
+  FD_LOG_NOTICE(("Successfully produced a snapshot at directory=%s", ledger_args->snapshot_dir ));
+  //return 0;
+
+  ledger_args->slot_ctx->epoch_ctx->constipate_root = 0;
+  fd_txncache_flush_constipated_slots( ledger_args->slot_ctx->status_cache );
+
+}
+
 /* Runtime Replay *************************************************************/
 static int
 init_tpool( fd_ledger_args_t * ledger_args ) {
-  ulong tcnt = fd_tile_cnt();
+  ulong tcnt = fd_tile_cnt() - 2;
   uchar * tpool_scr_mem = NULL;
   fd_tpool_t * tpool = NULL;
   if( tcnt>=1UL ) {
@@ -137,7 +167,18 @@ init_tpool( fd_ledger_args_t * ledger_args ) {
       }
     }
   }
+
+  FD_LOG_WARNING(("STUFF HERE"));
+
+  ulong snapshot_tcnt = 2UL;
+
+  fd_tpool_t * snapshot_tpool = fd_tpool_init( ledger_args->tpool_mem_two, snapshot_tcnt );
+  ulong scratch_sz = fd_scratch_smem_footprint( 256UL<<23UL );
+  tpool_scr_mem = fd_valloc_malloc( ledger_args->slot_ctx->valloc, FD_SCRATCH_SMEM_ALIGN, scratch_sz );
+  FD_TEST(fd_tpool_worker_push( snapshot_tpool, fd_tile_cnt() - 1, tpool_scr_mem, scratch_sz ));
+
   ledger_args->tpool = tpool;
+  ledger_args->snapshot_tpool = snapshot_tpool;
   return 0;
 }
 
@@ -188,6 +229,8 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
   uchar trash_hash_buf[32];
   memset( trash_hash_buf, 0xFE, sizeof(trash_hash_buf) );
 
+  int is_snapshotting = 0;
+
   for( ulong slot = start_slot; slot <= ledger_args->end_slot; ++slot ) {
     ledger_args->slot_ctx->slot_bank.prev_slot = prev_slot;
     ledger_args->slot_ctx->slot_bank.slot      = slot;
@@ -231,9 +274,10 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
     FD_LOG_WARNING(("ROOT SLOT %lu", ledger_args->slot_ctx->root_slot));
 
-    if( ledger_args->slot_ctx->root_slot==ledger_args->snapshot_slot ) {
-
+    if( ledger_args->slot_ctx->root_slot==ledger_args->snapshot_slot && !is_snapshotting ) {
       uchar * mem = fd_valloc_malloc( fd_scratch_virtual(), FD_ACC_MGR_ALIGN, FD_ACC_MGR_FOOTPRINT );
+
+      is_snapshotting = 1;
 
       fd_snapshot_ctx_t snapshot_ctx = {
         .snapshot_slot  = ledger_args->snapshot_slot,
@@ -245,27 +289,10 @@ runtime_replay( fd_ledger_args_t * ledger_args ) {
 
       };
 
-      // /* TODO:FIXME: START HACK Do a funk publish and whatnot */
-      // fd_funk_t *     funk = ledger_args->slot_ctx->acc_mgr->funk;
-      // fd_funk_txn_t * txn  = ledger_args->slot_ctx->funk_txn;
-      // fd_funk_start_write( funk );
-      // ulong publish_err = fd_funk_txn_publish( funk, txn, 1 );
-      // if( !publish_err ) {
-      //   FD_LOG_ERR(( "publish err" ));
-      //   return -1;
-      // }
-      // fd_funk_end_write( funk );
-      // /* TODO:FIXME: END HACK */
+      FD_LOG_WARNING(("TRYING TO EXEC TASK TRY 1"));
 
-      int err = fd_snapshot_create_new_snapshot( &snapshot_ctx );
-      if( FD_UNLIKELY( err ) ) {
-        FD_LOG_ERR(( "failed to create snapshot" ));
-      }
-      FD_LOG_NOTICE(("Successfully produced a snapshot at directory=%s", ledger_args->snapshot_dir ));
-      //return 0;
+      fd_tpool_exec( ledger_args->snapshot_tpool, fd_tpool_worker_cnt( ledger_args->snapshot_tpool ) - 1, fd_exec_task, NULL, (ulong)&snapshot_ctx, (ulong)ledger_args, 0, NULL, 0, 0, 0, 0, 0, 0, 0 );
 
-      ledger_args->slot_ctx->epoch_ctx->constipate_root = 0;
-      fd_txncache_flush_constipated_slots( ledger_args->slot_ctx->status_cache );
     }
   
     ulong blk_txn_cnt = 0;

@@ -1107,7 +1107,7 @@ fd_runtime_verify_txn_signatures_tpool( fd_execute_txn_task_info_t * task_info,
                                         ulong txn_cnt,
                                         fd_tpool_t * tpool ) {
   int res = 0;
-  fd_tpool_exec_all_rrobin( tpool, 0, fd_tpool_worker_cnt( tpool ), fd_txn_sigverify_task, task_info, NULL, NULL, 1, 0, txn_cnt );
+  fd_tpool_exec_all_rrobin( tpool, 0, fd_tpool_worker_cnt( tpool ) - 1, fd_txn_sigverify_task, task_info, NULL, NULL, 1, 0, txn_cnt );
   for( ulong txn_idx = 0; txn_idx < txn_cnt; txn_idx++ ) {
     if( FD_UNLIKELY(!( task_info[txn_idx].txn->flags & FD_TXN_P_FLAGS_SANITIZE_SUCCESS )) ) {
       task_info->exec_res = FD_RUNTIME_TXN_ERR_SIGNATURE_FAILURE;
