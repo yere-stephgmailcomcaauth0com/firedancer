@@ -129,6 +129,8 @@ FD_PROTOTYPES_BEGIN
 #define FD_VM_CU_MEM_OP_UPDATE( vm, sz ) \
   FD_VM_CU_UPDATE( vm, fd_ulong_max( FD_VM_MEM_OP_BASE_COST, sz / FD_VM_CPI_BYTES_PER_UNIT ) )
 
+#define FD_VADDR_TO_REGION( _vaddr ) fd_ulong_min( (_vaddr) >> 32, 5UL )
+
 /* fd_vm_instr APIs ***************************************************/
 
 /* FIXME: MIGRATE FD_SBPF_INSTR_T STUFF TO THIS API */
@@ -309,9 +311,8 @@ fd_vm_mem_haddr( fd_vm_t const *    vm,
                  uchar              write,           /* 1 if the access is a write, 0 if it is a read */
                  ulong              sentinel,
                  uchar *            is_multi_region ) {
-  ulong vaddr_hi  = vaddr >> 32;
-  ulong region    = fd_ulong_min( vaddr_hi, 5UL );
-  ulong offset    = vaddr & 0xffffffffUL;
+  ulong region = FD_VADDR_TO_REGION( vaddr );
+  ulong offset = vaddr & 0xffffffffUL;
 
   /* Stack memory regions have 4kB unmapped "gaps" in-between each frame (only if direct mapping is disabled).
     https://github.com/solana-labs/rbpf/blob/b503a1867a9cfa13f93b4d99679a17fe219831de/src/memory_region.rs#L141
@@ -351,7 +352,7 @@ fd_vm_mem_haddr_fast( fd_vm_t const * vm,
                       ulong           vaddr,
                       ulong   const * vm_region_haddr ) { /* indexed [0,6) */
   uchar is_multi = 0;
-  ulong region   = vaddr >> 32;
+  ulong region   = FD_VADDR_TO_REGION( vaddr );
   ulong offset   = vaddr & 0xffffffffUL;
   if( FD_UNLIKELY( region==4UL ) ) {
     return fd_vm_find_input_mem_region( vm, offset, 1UL, 0, 0UL, &is_multi );
@@ -509,7 +510,7 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
    of translate_slice{_mut}. However, this check does not allow for 
    multi region accesses. So if there is an attempt at a multi region
    translation, an error will be returned. 
-   
+
    FD_VM_MEM_HADDR_ST_UNCHECKED has all of the checks of a load or a 
    store, but intentionally omits the is_writable checks for the 
    input region that are done during memory translation. */
@@ -564,11 +565,19 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
     (void *)_haddr;                                                                                         \
   }))
 
+#define FD_VM_MEM_HADDR_ST_UNCHECKED( vm, vaddr, align, sz ) (__extension__({                               \
+    fd_vm_t const * _vm       = (vm);                                                                       \
+    uchar           _is_multi = 0;                                                                          \
+    ulong           _vaddr    = (vaddr);                                                                    \
+    ulong           _haddr    = fd_vm_mem_haddr( vm, _vaddr, (sz), _vm->region_haddr, _vm->region_st_sz, 1, 0UL, &_is_multi ); \
+    (void const *)_haddr;                                                                                   \
+  }))
+
 #define FD_VM_MEM_HADDR_ST_WRITE_UNCHECKED( vm, vaddr, align, sz ) (__extension__({                         \
     fd_vm_t const * _vm       = (vm);                                                                       \
     uchar           _is_multi = 0;                                                                          \
     ulong           _vaddr    = (vaddr);                                                                    \
-    ulong           _haddr    = fd_vm_mem_haddr( vm, _vaddr, (sz), _vm->region_haddr, _vm->region_ld_sz, 0, 0UL, &_is_multi ); \
+    ulong           _haddr    = fd_vm_mem_haddr( vm, _vaddr, (sz), _vm->region_haddr, _vm->region_st_sz, 0, 0UL, &_is_multi ); \
     int             _sigbus   = fd_vm_is_check_align_enabled( vm ) & (!fd_ulong_is_aligned( _haddr, (align) )); \
     if ( FD_UNLIKELY( sz > LONG_MAX ) ) {                                                                   \
       FD_VM_ERR_FOR_LOG_SYSCALL( _vm, FD_VM_ERR_SYSCALL_INVALID_LENGTH );                                   \
@@ -589,14 +598,31 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
 #define FD_VM_MEM_HADDR_LD_FAST( vm, vaddr ) ((void const *)fd_vm_mem_haddr_fast( (vm), (vaddr), (vm)->region_haddr ))
 #define FD_VM_MEM_HADDR_ST_FAST( vm, vaddr ) ((void       *)fd_vm_mem_haddr_fast( (vm), (vaddr), (vm)->region_haddr ))
 
+/* FD_VM_MEM_HADDR_AND_REGION_IDX_FROM_INPUT_REGION_UNCHECKED simply converts a vaddr within the input memory region
+   into an haddr. The macro assumes that the caller already checked that the vaddr exists within the
+   input region (region==4UL) and sets the region_idx and haddr. */
+#define FD_VM_MEM_HADDR_AND_REGION_IDX_FROM_INPUT_REGION_UNCHECKED( _vm, _offset, _out_region_idx, _out_haddr ) (__extension__({                \
+  _out_region_idx = fd_vm_get_input_mem_region_idx( _vm, _offset );                                                                             \
+  _out_haddr      = (uchar*)_vm->input_mem_regions[ _out_region_idx ].haddr + _offset - _vm->input_mem_regions[ _out_region_idx ].vaddr_offset; \
+}))
+
 /* FD_VM_MEM_SLICE_HADDR_[LD, ST] macros return an arbitrary value if sz == 0. This is because
    Agave's translate_slice function returns an empty array if the sz == 0.
-   
+
    Users of this macro should be aware that they should never access the returned value if sz==0.
-   
+
    https://github.com/solana-labs/solana/blob/767d24e5c10123c079e656cdcf9aeb8a5dae17db/programs/bpf_loader/src/syscalls/mod.rs#L560 
-   
-   LONG_MAX check: https://github.com/anza-xyz/agave/blob/dc4b9dcbbf859ff48f40d00db824bde063fdafcc/programs/bpf_loader/src/syscalls/mod.rs#L580 */
+
+   LONG_MAX check: https://github.com/anza-xyz/agave/blob/dc4b9dcbbf859ff48f40d00db824bde063fdafcc/programs/bpf_loader/src/syscalls/mod.rs#L580
+   Technically, the check in Agave is against
+   "pointer-sized signed integer type ... The size of this primitive is
+    how many bytes it takes to reference any location in memory. For
+    example, on a 32 bit target, this is 4 bytes and on a 64 bit target,
+    this is 8 bytes."
+   Realistically, given the amount of memory that a validator consumes,
+   no one is going to be running on a 32 bit target. So, we don't bother
+   with conditionally compiling in an INT_MAX check. We just assume
+   LONG_MAX. */
 #define FD_VM_MEM_SLICE_HADDR_LD( vm, vaddr, align, sz ) (__extension__({                                       \
     if ( FD_UNLIKELY( sz > LONG_MAX ) ) {                                                                       \
       FD_VM_ERR_FOR_LOG_SYSCALL( vm, FD_VM_ERR_SYSCALL_INVALID_LENGTH );                                        \
@@ -636,7 +662,7 @@ static inline void fd_vm_mem_st_8( fd_vm_t const * vm,
     haddr;                                                                                                      \
 }))
 
-
+/* FIXME: use overlap logic from runtime? */
 #define FD_VM_MEM_CHECK_NON_OVERLAPPING( vm, vaddr0, sz0, vaddr1, sz1 ) do {                                    \
   if( FD_UNLIKELY( ((vaddr0> vaddr1) && ((vaddr0-vaddr1)<sz1)) ||                                               \
                    ((vaddr1>=vaddr0) && ((vaddr1-vaddr0)<sz0)) ) ) {                                            \
