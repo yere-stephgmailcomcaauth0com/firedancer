@@ -2,6 +2,15 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Attach to Chrome",
+      "port": 9222,
+      "request": "attach",
+      "type": "chrome",
+      "webRoot": "${workspaceFolder}"
+    },
+
+    /home/runner/90020241112081857824921000000000000001223372036861251674/package.json
+    {
       "name": "Launch Edge",
       "request": "launch",
       "type": "msedge",
