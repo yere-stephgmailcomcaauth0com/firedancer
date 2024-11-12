@@ -127,6 +127,9 @@ struct __attribute__((aligned(8UL))) fd_exec_txn_ctx {
   int exec_err_kind;
 
   fd_spad_t * spad;
+
+  /* Used to track whether the transaction has program indices or not */
+  uint empty_program_indices;
 };
 
 #define FD_EXEC_TXN_CTX_ALIGN     (alignof(fd_exec_txn_ctx_t))

@@ -309,6 +309,7 @@ fd_exec_test_instr_context_create( fd_exec_instr_test_runner_t *        runner,
   txn_ctx->instr_trace_length      = 0;
   txn_ctx->exec_err                = 0;
   txn_ctx->exec_err_kind           = FD_EXECUTOR_ERR_KIND_EBPF;
+  txn_ctx->empty_program_indices   = 0;
 
   memset( txn_ctx->_txn_raw, 0, sizeof(fd_rawtxn_b_t) );
   memset( txn_ctx->return_data.program_id.key, 0, sizeof(fd_pubkey_t) );

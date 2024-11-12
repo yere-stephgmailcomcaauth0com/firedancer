@@ -399,14 +399,24 @@ fd_executor_load_transaction_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
 
     /* https://github.com/anza-xyz/agave/blob/v2.0.9/svm/src/account_loader.rs#L304-306 */
     fd_borrowed_account_t * program_account = NULL;
-    int err = fd_txn_borrowed_account_view_idx( txn_ctx, instr->program_id, &program_account );
+    int err = fd_txn_borrowed_account_view_idx_allow_dead( txn_ctx, instr->program_id, &program_account );
     if( FD_UNLIKELY( err!=FD_ACC_MGR_SUCCESS ) ) {
       return FD_RUNTIME_TXN_ERR_PROGRAM_ACCOUNT_NOT_FOUND;
     }
 
     /* https://github.com/anza-xyz/agave/blob/v2.0.9/svm/src/account_loader.rs#L307-309 */
     if( FD_UNLIKELY( !memcmp( program_account->pubkey->key, fd_solana_native_loader_id.key, sizeof(fd_pubkey_t) ) ) ) {
-      continue;
+      /* When program account pubkey is the native loader, Agave sets the program_indices of the LoadedTransaction to [] with
+         no errors until trying to push the specific instruction onto the instruction stack */
+      txn_ctx->empty_program_indices = 1;
+      return FD_RUNTIME_EXECUTE_SUCCESS;
+    }
+
+    int account_exists = fd_acc_exists( program_account->const_meta );
+    int account_found = account_exists || !memcmp( program_account->pubkey->key, fd_sysvar_instructions_id.key, sizeof(fd_pubkey_t) );
+    /* https://github.com/anza-xyz/agave/blob/ced98f1ebe73f7e9691308afa757323003ff744f/svm/src/account_loader.rs#L311-L314 */
+    if( FD_UNLIKELY( !account_found ) ) {
+      return FD_RUNTIME_TXN_ERR_PROGRAM_ACCOUNT_NOT_FOUND;
     }
 
     /* https://github.com/anza-xyz/agave/blob/v2.0.9/svm/src/account_loader.rs#L317-320 */
@@ -504,6 +514,7 @@ fd_executor_load_transaction_accounts( fd_exec_txn_ctx_t * txn_ctx ) {
     fd_memcpy( &program_owners[ program_owners_cnt++ ], owner_account->pubkey, sizeof(fd_pubkey_t) );
   }
 
+  txn_ctx->empty_program_indices = 0;
   return FD_RUNTIME_EXECUTE_SUCCESS;
 }
 
@@ -1023,6 +1034,10 @@ fd_txn_ctx_push( fd_exec_txn_ctx_t * txn_ctx,
 int
 fd_instr_stack_push( fd_exec_txn_ctx_t *     txn_ctx,
                      fd_instr_info_t *       instr ) {
+  /* https://github.com/anza-xyz/agave/blob/c4b42ab045860d7b13b3912eafb30e6d2f4e593f/program-runtime/src/invoke_context.rs#L253-L255 */
+  if( FD_UNLIKELY( txn_ctx->empty_program_indices ) ) {
+    return FD_EXECUTOR_INSTR_ERR_UNSUPPORTED_PROGRAM_ID;
+  }
   /* https://github.com/anza-xyz/agave/blob/c4b42ab045860d7b13b3912eafb30e6d2f4e593f/program-runtime/src/invoke_context.rs#L256-L286 */
   if( txn_ctx->instr_stack_sz ) {
     /* https://github.com/anza-xyz/agave/blob/c4b42ab045860d7b13b3912eafb30e6d2f4e593f/program-runtime/src/invoke_context.rs#L261-L285 */

@@ -3221,7 +3221,8 @@ fd_runtime_get_rent_due( fd_exec_slot_ctx_t const * slot_ctx,
     }
     slots_elapsed += fd_ulong_sat_sub( epoch+1UL, schedule->first_normal_epoch ) * schedule->slots_per_epoch;
   }
-  else {
+  // slots_elapsed should remain 0 if epoch is greater than rent_epoch
+  else if ( info->rent_epoch <= epoch ) {
     slots_elapsed = (epoch - info->rent_epoch + 1UL) * schedule->slots_per_epoch;
   }
   /* Consensus-critical use of doubles :( */
